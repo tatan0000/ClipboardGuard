@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 查询其他应用包名（显示应用名称、图标） -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- 请求悬浮窗权限，用于在后台弹出权限询问窗口 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <application
+        android:name=".ClipboardGuardApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ClipboardGuard">
+
+        <!-- 主界面 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            权限弹窗Activity
+            主题透明，模拟iOS弹窗浮层
+            excludeFromRecents：不出现在最近任务列表
+            taskAffinity=""：独立任务栈，不抢占前台应用
+            launchMode="singleInstance"：确保每次都创建新实例
+        -->
+        <activity
+            android:name=".PermissionDialogActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Dialog.Transparent"
+            android:launchMode="singleInstance" />
+
+        <!--
+            权限数据ContentProvider
+            用于Hook代码（运行在目标应用进程）跨进程读取本模块存储的权限数据
+            android:exported="true" 必须为true以允许跨进程访问
+            android:grantUriPermissions="true" 允许授予临时URI权限
+            android:multiprocess="true" 让Provider在每个进程都有实例，避免跨进程调用失败
+        -->
+        <provider
+            android:name=".PermissionProvider"
+            android:authorities="com.android.clipboardguard.provider"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
+        <!-- 广播接收器：App自己启动弹窗 -->
+        <receiver
+            android:name=".DialogLaunchReceiver"
+            android:exported="true"
+            android:priority="2147483647"
+            android:directBootAware="false">
+            <intent-filter android:priority="2147483647">
+                <action android:name="com.android.clipboardguard.ACTION_SHOW_DIALOG" />
+            </intent-filter>
+        </receiver>
+
+
+        <!-- ======= Xposed 模块声明 ======= -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+
+        <meta-data
+            android:name="xposeddescription"
+            android:value="剪贴板写入权限管理 - 应用向剪贴板写入时询问用户是否拦截" />
+
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
+
+        <!--
+            LSPosed 推荐作用域：
+            Hook 目标是 system_server 进程（android 包），
+            同时需要作用域包含本模块进程，用于激活状态检测和弹窗启动
+            使用 @array/xposed_scope 引用 arrays.xml 中的配置
+        -->
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope" />
+
+    </application>
+
+</manifest>

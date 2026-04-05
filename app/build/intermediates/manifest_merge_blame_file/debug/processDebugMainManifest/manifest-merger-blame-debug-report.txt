@@ -1,0 +1,243 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.android.clipboardguard"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+7-->INJECTED
+8        android:minSdkVersion="30"
+8-->INJECTED
+9        android:targetSdkVersion="36" />
+9-->INJECTED
+10
+11    <!-- 查询其他应用包名（显示应用名称、图标） -->
+12    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+12-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:6:5-7:53
+12-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:6:22-74
+13
+14    <!-- 请求悬浮窗权限，用于在后台弹出权限询问窗口 -->
+15    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+15-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:10:5-78
+15-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:10:22-75
+16
+17    <permission
+17-->[androidx.core:core:1.13.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\82e7abe509bf3b60cd55fae3ed291252\workspace\transformed\core-1.13.0\AndroidManifest.xml:22:5-24:47
+18        android:name="com.android.clipboardguard.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+18-->[androidx.core:core:1.13.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\82e7abe509bf3b60cd55fae3ed291252\workspace\transformed\core-1.13.0\AndroidManifest.xml:23:9-81
+19        android:protectionLevel="signature" />
+19-->[androidx.core:core:1.13.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\82e7abe509bf3b60cd55fae3ed291252\workspace\transformed\core-1.13.0\AndroidManifest.xml:24:9-44
+20
+21    <uses-permission android:name="com.android.clipboardguard.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+21-->[androidx.core:core:1.13.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\82e7abe509bf3b60cd55fae3ed291252\workspace\transformed\core-1.13.0\AndroidManifest.xml:26:5-97
+21-->[androidx.core:core:1.13.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\82e7abe509bf3b60cd55fae3ed291252\workspace\transformed\core-1.13.0\AndroidManifest.xml:26:22-94
+22
+23    <application
+23-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:12:5-97:19
+24        android:name="com.android.clipboardguard.ClipboardGuardApp"
+24-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:13:9-42
+25        android:allowBackup="true"
+25-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:14:9-35
+26        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+26-->[androidx.core:core:1.13.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\82e7abe509bf3b60cd55fae3ed291252\workspace\transformed\core-1.13.0\AndroidManifest.xml:28:18-86
+27        android:dataExtractionRules="@xml/data_extraction_rules"
+27-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:15:9-65
+28        android:debuggable="true"
+29        android:extractNativeLibs="false"
+29-->INJECTED
+30        android:fullBackupContent="@xml/backup_rules"
+30-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:16:9-54
+31        android:icon="@mipmap/ic_launcher"
+31-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:17:9-43
+32        android:label="@string/app_name"
+32-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:18:9-41
+33        android:roundIcon="@mipmap/ic_launcher_round"
+33-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:19:9-54
+34        android:supportsRtl="true"
+34-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:20:9-35
+35        android:testOnly="true"
+36        android:theme="@style/Theme.ClipboardGuard" >
+36-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:21:9-52
+37
+38        <!-- 主界面 -->
+39        <activity
+39-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:24:9-32:20
+40            android:name="com.android.clipboardguard.MainActivity"
+40-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:25:13-41
+41            android:exported="true"
+41-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:26:13-36
+42            android:label="@string/app_name" >
+42-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:27:13-45
+43            <intent-filter>
+43-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:28:13-31:29
+44                <action android:name="android.intent.action.MAIN" />
+44-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:29:17-69
+44-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:29:25-66
+45
+46                <category android:name="android.intent.category.LAUNCHER" />
+46-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:30:17-77
+46-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:30:27-74
+47            </intent-filter>
+48        </activity>
+49
+50        <!--
+51            权限弹窗Activity
+52            主题透明，模拟iOS弹窗浮层
+53            excludeFromRecents：不出现在最近任务列表
+54            taskAffinity=""：独立任务栈，不抢占前台应用
+55            launchMode="singleInstance"：确保每次都创建新实例
+56        -->
+57        <activity
+57-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:41:9-47:51
+58            android:name="com.android.clipboardguard.PermissionDialogActivity"
+58-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:42:13-53
+59            android:excludeFromRecents="true"
+59-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:44:13-46
+60            android:exported="false"
+60-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:43:13-37
+61            android:launchMode="singleInstance"
+61-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:47:13-48
+62            android:taskAffinity=""
+62-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:45:13-36
+63            android:theme="@style/Theme.Dialog.Transparent" />
+63-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:46:13-60
+64
+65        <!--
+66            权限数据ContentProvider
+67            用于Hook代码（运行在目标应用进程）跨进程读取本模块存储的权限数据
+68            android:exported="true" 必须为true以允许跨进程访问
+69            android:grantUriPermissions="true" 允许授予临时URI权限
+70            android:multiprocess="true" 让Provider在每个进程都有实例，避免跨进程调用失败
+71        -->
+72        <provider
+72-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:56:9-60:50
+73            android:name="com.android.clipboardguard.PermissionProvider"
+73-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:57:13-47
+74            android:authorities="com.android.clipboardguard.provider"
+74-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:58:13-70
+75            android:exported="true"
+75-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:59:13-36
+76            android:grantUriPermissions="true" />
+76-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:60:13-47
+77
+78        <!-- 广播接收器：App自己启动弹窗 -->
+79        <receiver
+79-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:63:9-71:20
+80            android:name="com.android.clipboardguard.DialogLaunchReceiver"
+80-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:64:13-49
+81            android:directBootAware="false"
+81-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:67:13-44
+82            android:exported="true"
+82-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:65:13-36
+83            android:priority="2147483647" >
+83-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:66:13-42
+84            <intent-filter android:priority="2147483647" >
+84-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:68:13-70:29
+84-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:68:28-57
+85                <action android:name="com.android.clipboardguard.ACTION_SHOW_DIALOG" />
+85-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:69:17-88
+85-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:69:25-85
+86            </intent-filter>
+87        </receiver>
+88
+89        <!-- ======= Xposed 模块声明 ======= -->
+90        <meta-data
+90-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:75:9-77:36
+91            android:name="xposedmodule"
+91-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:76:13-40
+92            android:value="true" />
+92-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:77:13-33
+93        <meta-data
+93-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:79:9-81:61
+94            android:name="xposeddescription"
+94-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:80:13-45
+95            android:value="剪贴板写入权限管理 - 应用向剪贴板写入时询问用户是否拦截" />
+95-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:81:13-58
+96        <meta-data
+96-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:83:9-85:34
+97            android:name="xposedminversion"
+97-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:84:13-44
+98            android:value="82" />
+98-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:85:13-31
+99
+100        <!--
+101            LSPosed 推荐作用域：
+102            Hook 目标是 system_server 进程（android 包），
+103            同时需要作用域包含本模块进程，用于激活状态检测和弹窗启动
+104            使用 @array/xposed_scope 引用 arrays.xml 中的配置
+105        -->
+106        <meta-data
+106-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:93:9-95:54
+107            android:name="xposedscope"
+107-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:94:13-39
+108            android:resource="@array/xposed_scope" />
+108-->E:\AndroidStudioProjects\ClipboardGuard\app\src\main\AndroidManifest.xml:95:13-51
+109
+110        <provider
+110-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+111            android:name="androidx.startup.InitializationProvider"
+111-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
+112            android:authorities="com.android.clipboardguard.androidx-startup"
+112-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
+113            android:exported="false" >
+113-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
+114            <meta-data
+114-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+115                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+115-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
+116                android:value="androidx.startup" />
+116-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\9dcfacd97473354acf8aeadd351bc8b9\workspace\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
+117            <meta-data
+117-->[androidx.lifecycle:lifecycle-process:2.6.2] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\d50d73077dd2905df62f394ac97ff49f\workspace\transformed\lifecycle-process-2.6.2\AndroidManifest.xml:29:13-31:52
+118                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+118-->[androidx.lifecycle:lifecycle-process:2.6.2] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\d50d73077dd2905df62f394ac97ff49f\workspace\transformed\lifecycle-process-2.6.2\AndroidManifest.xml:30:17-78
+119                android:value="androidx.startup" />
+119-->[androidx.lifecycle:lifecycle-process:2.6.2] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\d50d73077dd2905df62f394ac97ff49f\workspace\transformed\lifecycle-process-2.6.2\AndroidManifest.xml:31:17-49
+120            <meta-data
+120-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+121                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+121-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+122                android:value="androidx.startup" />
+122-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+123        </provider>
+124
+125        <receiver
+125-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+126            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+126-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+127            android:directBootAware="false"
+127-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+128            android:enabled="true"
+128-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+129            android:exported="true"
+129-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+130            android:permission="android.permission.DUMP" >
+130-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+131            <intent-filter>
+131-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+132                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+132-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+132-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+133            </intent-filter>
+134            <intent-filter>
+134-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+135                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+135-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+135-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+136            </intent-filter>
+137            <intent-filter>
+137-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+138                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+138-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+138-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+139            </intent-filter>
+140            <intent-filter>
+140-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+141                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+141-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+141-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.1\transforms\dadc4a791684f7636230043664ac396e\workspace\transformed\profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+142            </intent-filter>
+143        </receiver>
+144    </application>
+145
+146</manifest>

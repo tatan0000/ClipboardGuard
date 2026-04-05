@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 浅色模式颜色（默认） -->
+    <!-- 主色（iOS蓝） -->
+    <color name="color_primary">#007AFF</color>
+    <color name="color_primary_dark">#0056CC</color>
+    <color name="color_primary_light">#5AC8FA</color>
+
+    <!-- 文字颜色 -->
+    <color name="text_primary">#1C1C1E</color>
+    <color name="text_secondary">#636366</color>
+    <color name="text_hint">#AEAEB2</color>
+
+    <!-- 按钮 -->
+    <color name="btn_allow_text">#007AFF</color>
+    <color name="btn_deny_text">#8E8E93</color>
+    <color name="btn_pressed_bg">#F2F2F7</color>
+
+    <!-- 背景 -->
+    <color name="dialog_bg">#FFFFFF</color>
+    <color name="main_bg">#F2F2F7</color>
+    <color name="preview_bg">#F2F2F7</color>
+    <color name="tip_bg">#E8F4FF</color>
+
+    <!-- 分隔线 -->
+    <color name="divider_color">#C6C6C8</color>
+
+    <!-- 卡片阴影 -->
+    <color name="card_shadow">#1A000000</color>
+
+    <!-- 分组头背景 -->
+    <color name="group_header_bg">#EEF2F7</color>
+
+    <!-- 模块状态颜色 -->
+    <color name="status_active">#34C759</color>
+    <color name="status_inactive">#8E8E93</color>
+
+    <!-- 底部导航 -->
+    <color name="bottom_nav_selected">@color/color_primary</color>
+
+    <!-- 标准颜色 -->
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

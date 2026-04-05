@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AndroidLayouts">
+    <shared>
+      <config>
+        <device id="pixel_8a" />
+        <pickBest>false</pickBest>
+        <target>android-35</target>
+      </config>
+    </shared>
+    <layouts>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/bg_card.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/bg_content_preview.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/bg_dialog_card.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/bg_search_box.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/bg_search_box2.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/btn_allow_bg.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/btn_deny_bg.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/btn_reset_bg.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_app_default.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_launcher_background.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_launcher_foreground.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_nav_apps.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_nav_home.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_save.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_shield_off.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_shield_on.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/layout/activity_main.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/layout/activity_permission_dialog.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/layout/item_app_permission.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/layout/item_group_header.xml">
+        <config>
+          <theme>@style/Theme.ClipboardGuard</theme>
+        </config>
+      </layout>
+    </layouts>
+  </component>
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="58bb57b4-0fa3-476b-b743-cb2718cfce2c" name="更改" comment="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/.gitignore" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[LocalEmulator::path=C:\Users\Administrator\.android\avd\Pixel_5.avd]" />
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <projects_view>
+          <tree_state>
+            <expand>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="ClipboardGuard" type="f1a62948:ProjectNode" />
+              </path>
+            </expand>
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Class" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="PUSH_TAGS">
+      <GitPushTagMode>
+        <option name="argument" value="--tags" />
+        <option name="title" value="All" />
+      </GitPushTagMode>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;tatan0000&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "git@github.com:tatan0000/ClipboardGuard.git",
+    "accountId": "6bfb4477-f386-47fe-859c-4ff202e4c285"
+  }
+}]]></component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$USER_HOME$/AppData/Local/Google/AndroidStudio2025.3.2/device-explorer/Pixel 5/_/sdcard/verbose_2026-04-05T17_21_26.764.log" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/app/src/main/AndroidManifest.xml" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/MainActivity.java" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionDialogActivity.java" root0="FORCE_HIGHLIGHTING" />
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3
+}</component>
+  <component name="ProjectId" id="3Bi1IhANAhidcoVFTb5tWLx1ukD" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Android App.app.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "com.android.tools.idea.streaming.emulator.frame.visible": "false",
+    "com.google.services.firebase.aqiPopupShown": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "E:/AndroidStudioProjects/ClipboardGuard/app/libs",
+    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="E:\AndroidStudioProjects\ClipboardGuard\app\libs" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="app" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
+      <module name="ClipboardGuard.app" />
+      <option name="ANDROID_RUN_CONFIGURATION_SCHEMA_VERSION" value="1" />
+      <option name="DEPLOY" value="true" />
+      <option name="DEPLOY_APK_FROM_BUNDLE" value="false" />
+      <option name="DEPLOY_AS_INSTANT" value="false" />
+      <option name="ARTIFACT_NAME" value="" />
+      <option name="PM_INSTALL_OPTIONS" value="" />
+      <option name="ALL_USERS" value="false" />
+      <option name="ALWAYS_INSTALL_WITH_PM" value="true" />
+      <option name="ALLOW_ASSUME_VERIFIED" value="false" />
+      <option name="CLEAR_APP_STORAGE" value="false" />
+      <option name="DYNAMIC_FEATURES_DISABLED_LIST" value="" />
+      <option name="ACTIVITY_EXTRA_FLAGS" value="" />
+      <option name="MODE" value="default_activity" />
+      <option name="RESTORE_ENABLED" value="false" />
+      <option name="RESTORE_FILE" value="" />
+      <option name="RESTORE_FRESH_INSTALL_ONLY" value="false" />
+      <option name="CLEAR_LOGCAT" value="false" />
+      <option name="SHOW_LOGCAT_AUTOMATICALLY" value="false" />
+      <option name="TARGET_SELECTION_MODE" value="DEVICE_AND_SNAPSHOT_COMBO_BOX" />
+      <option name="SELECTED_CLOUD_MATRIX_CONFIGURATION_ID" value="-1" />
+      <option name="SELECTED_CLOUD_MATRIX_PROJECT_ID" value="" />
+      <option name="DEBUGGER_TYPE" value="Auto" />
+      <Auto>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Auto>
+      <Hybrid>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Hybrid>
+      <Java>
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Java>
+      <Native>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Native>
+      <Profilers>
+        <option name="ADVANCED_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_CPU_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_CPU_PROFILING_CONFIGURATION_NAME" value="Java/Kotlin Method Sample (legacy)" />
+        <option name="STARTUP_NATIVE_MEMORY_PROFILING_ENABLED" value="false" />
+        <option name="NATIVE_MEMORY_SAMPLE_RATE_BYTES" value="2048" />
+      </Profilers>
+      <option name="DEEP_LINK" value="" />
+      <option name="ACTIVITY" value="" />
+      <option name="ACTIVITY_CLASS" value="" />
+      <option name="SEARCH_ACTIVITY_IN_GLOBAL_SCOPE" value="false" />
+      <option name="SKIP_ACTIVITY_VALIDATION" value="false" />
+      <method v="2">
+        <option name="Android.Gradle.BeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="58bb57b4-0fa3-476b-b743-cb2718cfce2c" name="更改" comment="" />
+      <created>1774783705218</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1774783705218</updated>
+    </task>
+    <task id="LOCAL-00001" summary="1.勾选 = 拦截&#10;2.FAB 保存按钮&#10;3.双页面 + 底部导航栏&#10;4.模块激活检测">
+      <option name="closed" value="true" />
+      <created>1775357861300</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1775357861300</updated>
+    </task>
+    <task id="LOCAL-00002" summary="1.勾选 = 拦截&#10;2.FAB 保存按钮&#10;3.双页面 + 底部导航栏&#10;4.模块激活检测">
+      <option name="closed" value="true" />
+      <created>1775357990440</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1775357990440</updated>
+    </task>
+    <task id="LOCAL-00003" summary="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题">
+      <option name="closed" value="true" />
+      <created>1775446126395</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1775446126395</updated>
+    </task>
+    <task id="LOCAL-00004" summary="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题">
+      <option name="closed" value="true" />
+      <created>1775447066880</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1775447066881</updated>
+    </task>
+    <task id="LOCAL-00005" summary="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题">
+      <option name="closed" value="true" />
+      <created>1775448173783</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1775448173783</updated>
+    </task>
+    <task id="LOCAL-00006" summary="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题">
+      <option name="closed" value="true" />
+      <created>1775448825690</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1775448825690</updated>
+    </task>
+    <task id="LOCAL-00007" summary="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题">
+      <option name="closed" value="true" />
+      <created>1775449040826</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1775449040826</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="CUSTOM_BOOLEAN_PROPERTIES">
+                <map>
+                  <entry key="Show.Git.Branches" value="false" />
+                </map>
+              </option>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="HEAD" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Initial commit" />
+    <MESSAGE value="1.勾选 = 拦截&#10;2.FAB 保存按钮&#10;3.双页面 + 底部导航栏&#10;4.模块激活检测" />
+    <MESSAGE value="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题" />
+    <option name="LAST_COMMIT_MESSAGE" value="PERMISSION_BLOCK = 0：拦截，每次写剪贴板弹窗询问（默认）&#10;PERMISSION_IGNORE = 1：放行，直接忽略不拦截&#10;旧常量 PERMISSION_ASK/ALLOW/DENY 保留为别名&#10;不再有永久允许/拒绝&#10;倒计时5秒改为4秒（避免弹窗ANR）&#10;防抖倒计时为1s，期间重复复制不再弹窗，按第一次选择结果执行&#10;主题还有一些问题" />
+  </component>
+  <component name="play_dynamic_filters_status">
+    <option name="appIdToCheckInfo">
+      <map>
+        <entry key="com.android.clipboardguard">
+          <value>
+            <CheckInfo lastCheckTimestamp="1775446088346" />
+          </value>
+        </entry>
+        <entry />
+        <entry key="com.android.clipboardguard.test">
+          <value>
+            <CheckInfo lastCheckTimestamp="1775446088345" />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
