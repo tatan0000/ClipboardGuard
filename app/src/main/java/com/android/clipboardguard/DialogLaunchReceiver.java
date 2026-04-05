@@ -1,5 +1,6 @@
 package com.android.clipboardguard;
 
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -37,10 +38,21 @@ public class DialogLaunchReceiver extends BroadcastReceiver {
 
         Log.i(TAG, "收到广播: " + packageName + ", 内容: " + preview);
 
+        // 检查本模块进程是否存活
+        if (!isProcessRunning(context)) {
+            Log.w(TAG, "模块进程已死亡，丢弃弹窗请求");
+            return;
+        }
+
         // 使用 Handler 延迟启动，确保进程完全初始化
         // 同时使用 applicationContext 避免 Binder 问题
         Context appCtx = context.getApplicationContext();
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            // 二次检查：延迟后再次验证进程状态
+            if (!isProcessRunning(context)) {
+                Log.w(TAG, "模块进程已死亡，跳过启动");
+                return;
+            }
             try {
                 // 明确指定启动本模块的 Activity（不是目标 App 的）
                 Intent dialogIntent = new Intent();
@@ -52,8 +64,25 @@ public class DialogLaunchReceiver extends BroadcastReceiver {
                 appCtx.startActivity(dialogIntent);
                 Log.i(TAG, "弹窗已启动: " + packageName);
             } catch (Throwable e) {
-                Log.e(TAG, "启动弹窗失败: " + e.getMessage(), e);
+                Log.e(TAG, "启动弹窗失败: " + e.getMessage());
             }
         }, 300); // 延迟 300ms 启动，确保 ActivityManager 就绪
+    }
+
+    /**
+     * 检查本模块进程是否存活
+     */
+    private boolean isProcessRunning(Context context) {
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            for (ActivityManager.RunningAppProcessInfo info : am.getRunningAppProcesses()) {
+                if (MODULE_PKG.equals(info.processName)) {
+                    return true;
+                }
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "检查进程状态失败: " + e.getMessage());
+        }
+        return false;
     }
 }

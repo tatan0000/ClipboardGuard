@@ -31,10 +31,10 @@ public class Hook implements IXposedHookLoadPackage {
 
     private static final String TAG = "ClipboardGuard";
     private static final String MODULE_PKG = "com.android.clipboardguard";
-    private static final long DEBOUNCE_MS = 1_000;  // 防抖1秒
-    // 默认权限：未配置的应用默认拦截（弹窗询问，安全优先）
+    private static final long DEBOUNCE_MS = 1_500;  // 防抖1.5秒
     private static final int DEFAULT_PERMISSION = PermissionStorage.PERMISSION_IGNORE;
     private static final Map<String, Long> sLastPopupTime = new HashMap<>();
+    private static final Map<String, Long> sLastDecisionTime = new HashMap<>();  // 用户选择完成时间
     private static final Map<String, Integer> sLastUserDecision = new HashMap<>();
     private static final Object sLock = new Object();
     // 标记：防止 afterHookedMethod 中清空剪贴板时递归触发 hook
@@ -194,23 +194,28 @@ public class Hook implements IXposedHookLoadPackage {
                 return;
             }
 
-            // 防抖：8秒内对同一应用只弹窗一次（避免连续复制时频繁弹窗）
+            // 防抖：用户选择完成后3秒内对同一应用不弹窗
             // 防抖期间保持上一次用户的选择
             boolean shouldPopup;
             int decision;
+            boolean isDebounce = false;
             synchronized (sLock) {
                 long now = System.currentTimeMillis();
-                Long lastTime = sLastPopupTime.get(pkgName);
-                if (lastTime != null && now - lastTime < DEBOUNCE_MS) {
+                Long lastDecision = sLastDecisionTime.get(pkgName);
+                if (lastDecision != null && now - lastDecision < DEBOUNCE_MS) {
+                    isDebounce = true;
                     // 防抖期间：应用上次的用户选择
                     Log.i(TAG, "防抖期间保持上次选择: " + pkgName);
-                    Integer lastDecision = sLastUserDecision.get(pkgName);
-                    decision = (lastDecision != null) ? lastDecision : PermissionStorage.PERMISSION_BLOCK;
+                    Integer lastUserDecision = sLastUserDecision.get(pkgName);
+                    decision = (lastUserDecision != null) ? lastUserDecision : PermissionStorage.PERMISSION_BLOCK;
                     shouldPopup = false;
                 } else {
-                    sLastPopupTime.put(pkgName, now);
                     shouldPopup = true;
                     decision = PermissionStorage.PERMISSION_BLOCK; // 默认值，等待弹窗返回
+                }
+                // 提前保存决策，避免防抖期间决策未保存
+                if (shouldPopup) {
+                    sLastUserDecision.put(pkgName, decision);
                 }
             }
 
@@ -222,8 +227,10 @@ public class Hook implements IXposedHookLoadPackage {
                 Log.i(TAG, "请求权限: " + pkgName);
                 decision = askUser(systemContext, pkgName, preview);
                 // 保存用户决定用于防抖期间
+                long now = System.currentTimeMillis();
                 synchronized (sLock) {
                     sLastUserDecision.put(pkgName, decision);
+                    sLastDecisionTime.put(pkgName, now);  // 记录用户选择完成时间
                 }
             }
 
@@ -396,6 +403,39 @@ public class Hook implements IXposedHookLoadPackage {
         }
 
         /**
+         * 查询 pending 表获取最新的弹窗结果（通过 ContentProvider 跨进程读取）
+         */
+        private int queryPendingResult(Context systemContext, String pkgName) {
+            try {
+                // 使用 ContentResolver.query 跨进程查询 pending 表
+                android.content.ContentResolver resolver = systemContext.getContentResolver();
+                android.net.Uri uri = android.net.Uri.parse("content://" + PermissionProvider.AUTHORITY + "/pending/" + pkgName);
+                // 直接 query，selection 已在 URI 中
+                android.database.Cursor cursor = resolver.query(uri, null, null, null, null);
+                if (cursor != null) {
+                    try {
+                        if (cursor.moveToFirst()) {
+                            int decisionIdx = cursor.getColumnIndex("decision");
+                            if (decisionIdx >= 0) {
+                                int decision = cursor.getInt(decisionIdx);
+                                Log.d(TAG, "读取pending结果: " + pkgName + " = " + decision);
+                                // 读取后删除 pending 记录
+                                resolver.delete(uri, null, null);
+                                cursor.close();
+                                return decision;
+                            }
+                        }
+                    } finally {
+                        cursor.close();
+                    }
+                }
+            } catch (Throwable e) {
+                Log.w(TAG, "查询pending结果失败: " + e.getMessage());
+            }
+            return -1;
+        }
+
+        /**
          * 获取 system_server 进程的 Context
          */
         private Context getSystemServerContext() {
@@ -489,6 +529,8 @@ public class Hook implements IXposedHookLoadPackage {
             }
 
             try {
+                // 弹窗超时4秒 + 3秒通信余量 = 7秒
+                // 防抖1.5秒内不再弹窗
                 latch.await(7, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

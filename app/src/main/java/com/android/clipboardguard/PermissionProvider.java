@@ -67,9 +67,11 @@ public class PermissionProvider extends ContentProvider {
     // call() 方法用到的 key
     public static final String CALL_METHOD_GET    = "getPermission";
     public static final String CALL_METHOD_SET    = "setPermission";
+    public static final String CALL_METHOD_GET_PENDING = "getPending";
     public static final String CALL_KEY_PACKAGE   = "pkg";
     public static final String CALL_KEY_PERMISSION = "perm";
     public static final String CALL_KEY_RESULT    = "result";
+    public static final String CALL_KEY_DECISION   = "decision";
 
     public static int queryPermission(Context context, String packageName) {
         // 优先用 call() 方式（不经过 Binder 包名校验）
@@ -283,6 +285,21 @@ public class PermissionProvider extends ContentProvider {
                                 cursor.getInt(cursor.getColumnIndexOrThrow("permission")));
                     } else {
                         result.putInt(CALL_KEY_RESULT, -1); // 未设置
+                    }
+                    return result;
+                }
+            } else if (CALL_METHOD_GET_PENDING.equals(method)) {
+                SQLiteDatabase db = mDbHelper.getReadableDatabase();
+                try (Cursor cursor = db.query("pending", null,
+                        "package_name = ?", new String[]{packageName},
+                        null, null, null)) {
+                    Bundle result = new Bundle();
+                    if (cursor != null && cursor.moveToFirst()) {
+                        result.putInt(CALL_KEY_DECISION,
+                                cursor.getInt(cursor.getColumnIndexOrThrow("decision")));
+                        result.putInt(CALL_KEY_RESULT, 1);
+                    } else {
+                        result.putInt(CALL_KEY_RESULT, -1); // 没有 pending
                     }
                     return result;
                 }
