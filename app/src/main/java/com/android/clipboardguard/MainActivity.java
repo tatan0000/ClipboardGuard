@@ -1,10 +1,5 @@
 package com.android.clipboardguard;
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
@@ -28,21 +23,19 @@ import android.widget.ExpandableListView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
-import com.google.android.material.button.MaterialButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.appbar.MaterialToolbar;
-import com.android.clipboardguard.R;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -484,43 +477,19 @@ public class MainActivity extends AppCompatActivity {
 
     /** 应用主题设置（包括状态栏颜色） */
     private void applyTheme() {
-        // 直接从 SharedPreferences 读取
         int theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
+        boolean isDark = (theme == THEME_DARK)
+                || (theme == THEME_SYSTEM && (getResources().getConfiguration().uiMode
+                        & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                        == android.content.res.Configuration.UI_MODE_NIGHT_YES);
 
-        // 状态栏颜色
-        int statusBarColor = getColor(R.color.color_primary);
-        int nightMode = AppCompatDelegate.getDefaultNightMode();
-        
-        // 根据主题模式设置状态栏
-        if (theme == THEME_LIGHT) {
-            // 亮色模式：白色状态栏 + 黑色文字
-            statusBarColor = Color.WHITE;
-        } else if (theme == THEME_DARK) {
-            // 深色模式：黑色状态栏 + 白色文字
-            statusBarColor = Color.BLACK;
-        } else {
-            // 跟随系统
-            int currentNightMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
-            if (currentNightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES) {
-                statusBarColor = Color.BLACK;
-            } else {
-                statusBarColor = Color.WHITE;
-            }
-        }
-        
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(statusBarColor);
-        
-        // 根据主题设置状态栏文字颜色
+        window.setStatusBarColor(isDark ? Color.BLACK : Color.WHITE);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            boolean isLightStatusBar = (theme == THEME_LIGHT) || 
-                (theme == THEME_SYSTEM && (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) != android.content.res.Configuration.UI_MODE_NIGHT_YES);
-            if (isLightStatusBar) {
-                window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            } else {
-                window.getDecorView().setSystemUiVisibility(0);
-            }
+            window.getDecorView().setSystemUiVisibility(
+                    isDark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         }
     }
 
@@ -580,19 +549,6 @@ public class MainActivity extends AppCompatActivity {
             theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
         }
         updateThemeRadioButtons(theme);
-    }
-
-    /** 获取主题选项文本 */
-    private String getThemeText(int theme) {
-        switch (theme) {
-            case THEME_LIGHT:
-                return getString(R.string.theme_light);
-            case THEME_DARK:
-                return getString(R.string.theme_dark);
-            case THEME_SYSTEM:
-            default:
-                return getString(R.string.theme_follow_system);
-        }
     }
 
     /** 获取模块版本号 */
