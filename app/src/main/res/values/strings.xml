@@ -31,7 +31,7 @@
     <string name="status_active">模块已激活</string>
     <string name="status_not_active">模块未激活</string>
     <string name="status_active_desc">剪贴板写入保护正在运行</string>
-    <string name="status_not_active_desc">请在 LSPosed 中启用本模块并重启系统</string>
+    <string name="status_not_active_desc">请激活本模块并重启系统</string>
 
     <!-- 首页 - 信息卡片 -->
     <string name="info_card_title">模块信息</string>

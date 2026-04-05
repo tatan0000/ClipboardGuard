@@ -1,49 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/main_bg">
+    android:background="?attr/colorSurfaceVariant">
 
-    <!-- 顶部标题栏 -->
-    <LinearLayout
-        android:id="@+id/toolbar"
+    <!-- 应用栏布局 -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="56dp"
-        android:background="@color/color_primary"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
-        android:paddingTop="0dp"
-        android:paddingBottom="0dp"
-        android:elevation="4dp">
+        android:background="?attr/colorSurface"
+        app:elevation="0dp">
 
-        <TextView
-            android:id="@+id/tv_toolbar_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@android:color/white"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            app:title="@string/app_name"
+            app:titleTextColor="?attr/colorOnSurface"
+            app:titleCentered="false"
+            app:titleTextAppearance="@style/TextAppearance.ClipboardGuard.Toolbar" />
 
-    </LinearLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- 内容区域（所有页面） -->
+    <!-- 内容区域 -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <!-- ===== 第一页：状态页 ===== -->
-        <ScrollView
+        <androidx.core.widget.NestedScrollView
             android:id="@+id/page_home"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="visible">
+            android:visibility="visible"
+            android:fillViewport="true"
+            android:paddingBottom="80dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -51,27 +45,41 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <!-- 模块激活状态卡片 -->
-                <LinearLayout
+                <!-- 模块激活状态卡片 - Material3 风格 -->
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:background="@drawable/bg_card"
-                    android:padding="20dp"
-                    android:elevation="2dp">
+                    app:cardBackgroundColor="?attr/colorSurface"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="?attr/colorOutlineVariant">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:gravity="center_vertical"
+                        android:padding="20dp">
 
-                        <ImageView
-                            android:id="@+id/iv_status_icon"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:src="@drawable/ic_shield_off" />
+                        <!-- 状态图标 -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            app:cardCornerRadius="28dp"
+                            app:cardBackgroundColor="?attr/colorSurfaceVariant"
+                            app:cardElevation="0dp">
+
+                            <ImageView
+                                android:id="@+id/iv_status_icon"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_shield_off"
+                                app:tint="?attr/colorOnSurfaceVariant" />
+
+                        </com.google.android.material.card.MaterialCardView>
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -85,9 +93,9 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="@string/status_not_active"
-                                android:textSize="18sp"
+                                android:textSize="17sp"
                                 android:textStyle="bold"
-                                android:textColor="@color/status_inactive" />
+                                android:textColor="?attr/colorOnSurface" />
 
                             <TextView
                                 android:id="@+id/tv_status_desc"
@@ -95,368 +103,370 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
                                 android:text="@string/status_not_active_desc"
-                                android:textSize="13sp"
-                                android:textColor="@color/text_secondary" />
+                                android:textSize="14sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
 
                         </LinearLayout>
+
                     </LinearLayout>
 
-                </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                <!-- 信息卡片 -->
-                <LinearLayout
+                <!-- 信息卡片 - Material3 风格 -->
+                <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:background="@drawable/bg_card"
-                    android:layout_marginTop="12dp"
-                    android:elevation="2dp">
+                    android:layout_marginTop="16dp"
+                    app:cardBackgroundColor="?attr/colorSurface"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="?attr/colorOutlineVariant">
 
-                    <!-- 标题行 -->
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp"
-                        android:paddingTop="14dp"
-                        android:paddingBottom="10dp"
-                        android:text="@string/info_card_title"
-                        android:textSize="13sp"
-                        android:textColor="@color/text_hint"
-                        android:textStyle="bold" />
+                        android:orientation="vertical">
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color" />
-
-                    <!-- Xposed API 版本 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
+                        <!-- 卡片标题 -->
                         <TextView
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_xposed_api"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
+                            android:paddingHorizontal="16dp"
+                            android:paddingTop="16dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/info_card_title"
+                            android:textSize="13sp"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textStyle="bold" />
 
-                        <TextView
-                            android:id="@+id/tv_xposed_sdk"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_value"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
+                        <!-- Xposed API 版本 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_xposed_api"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/tv_xposed_sdk"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/default_value"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="?attr/colorOutlineVariant" />
+
+                        <!-- 模块版本 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_module_version"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/tv_module_version"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/default_value"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="?attr/colorOutlineVariant" />
+
+                        <!-- Hook 目标 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_hook_target"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/info_hook_target_value"
+                                android:textSize="13sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="?attr/colorOutlineVariant" />
+
+                        <!-- 作用域 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_scope"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/info_scope_value"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="?attr/colorOutlineVariant" />
+
+                        <!-- Android 版本 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_android_version"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/tv_android_version"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/default_value"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="?attr/colorOutlineVariant" />
+
+                        <!-- 设备厂商 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_manufacturer"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/tv_manufacturer"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/default_value"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="?attr/colorOutlineVariant" />
+
+                        <!-- 设备型号 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp"
+                            android:paddingBottom="4dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/info_model"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/tv_model"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/default_value"
+                                android:textSize="15sp"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
                     </LinearLayout>
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color"
-                        android:layout_marginStart="16dp" />
-
-                    <!-- 模块版本 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_module_version"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-
-                        <TextView
-                            android:id="@+id/tv_module_version"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_value"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color"
-                        android:layout_marginStart="16dp" />
-
-                    <!-- Hook 目标 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_hook_target"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/info_hook_target_value"
-                            android:textSize="12sp"
-                            android:textColor="@color/text_secondary" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color"
-                        android:layout_marginStart="16dp" />
-
-                    <!-- 作用域 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_scope"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/info_scope_value"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color"
-                        android:layout_marginStart="16dp" />
-
-                    <!-- Android 版本 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_android_version"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-
-                        <TextView
-                            android:id="@+id/tv_android_version"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_value"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color"
-                        android:layout_marginStart="16dp" />
-
-                    <!-- 设备厂商 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_manufacturer"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-
-                        <TextView
-                            android:id="@+id/tv_manufacturer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_value"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1px"
-                        android:background="@color/divider_color"
-                        android:layout_marginStart="16dp" />
-
-                    <!-- 设备型号 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/info_model"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_primary" />
-
-                        <TextView
-                            android:id="@+id/tv_model"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_value"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
-                    </LinearLayout>
-
-                </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
                 <!-- 使用说明卡片 -->
-                <LinearLayout
+                <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:background="@drawable/bg_card"
-                    android:layout_marginTop="12dp"
-                    android:padding="16dp"
-                    android:elevation="2dp">
+                    android:layout_marginTop="16dp"
+                    app:cardBackgroundColor="?attr/colorPrimaryContainer"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/usage_title"
-                        android:textSize="13sp"
-                        android:textColor="@color/text_hint"
-                        android:textStyle="bold"
-                        android:paddingBottom="10dp" />
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/usage_content"
-                        android:textSize="13sp"
-                        android:textColor="@color/text_secondary"
-                        android:lineSpacingMultiplier="1.5" />
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/usage_title"
+                            android:textSize="13sp"
+                            android:textColor="?attr/colorOnPrimaryContainer"
+                            android:textStyle="bold"
+                            android:paddingBottom="8dp" />
 
-                </LinearLayout>
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/usage_content"
+                            android:textSize="14sp"
+                            android:textColor="?attr/colorOnPrimaryContainer"
+                            android:lineSpacingMultiplier="1.4" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
 
             </LinearLayout>
-        </ScrollView>
+        </androidx.core.widget.NestedScrollView>
 
         <!-- ===== 第二页：应用选择页 ===== -->
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/page_apps"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:orientation="vertical"
             android:visibility="gone">
 
-            <!-- 搜索框 -->
-            <LinearLayout
-                android:id="@+id/search_bar"
+            <!-- 搜索框 - Material3 风格 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@android:color/white"
-                android:paddingLeft="12dp"
-                android:paddingRight="12dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:elevation="2dp">
+                android:layout_margin="16dp"
+                app:cardBackgroundColor="?attr/colorSurface"
+                app:cardCornerRadius="28dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="?attr/colorOutlineVariant">
 
-                <EditText
-                    android:id="@+id/et_search"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:background="@drawable/bg_search_box2"
-                    android:hint="@string/search_hint"
-                    android:paddingLeft="14dp"
-                    android:paddingRight="14dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint"
-                    android:textSize="14sp"
-                    android:singleLine="true"
-                    android:imeOptions="actionSearch"
-                    android:inputType="text" />
+                    android:layout_height="48dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp">
 
-            </LinearLayout>
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_search"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                    <EditText
+                        android:id="@+id/et_search"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:background="@android:color/transparent"
+                        android:hint="@string/search_hint"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant"
+                        android:textSize="15sp"
+                        android:singleLine="true"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
 
             <!-- 提示条 -->
             <TextView
                 android:id="@+id/tv_tip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="56dp"
-                android:background="@color/tip_bg"
-                android:paddingLeft="16dp"
-                android:paddingTop="8dp"
-                android:paddingRight="16dp"
-                android:paddingBottom="8dp"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="10dp"
                 android:text="@string/apps_tip"
-                android:textColor="@color/color_primary"
-                android:textSize="12sp" />
+                android:textColor="?attr/colorPrimary"
+                android:textSize="13sp"
+                android:background="?attr/colorPrimaryContainer" />
 
             <!-- 应用列表 -->
             <ExpandableListView
                 android:id="@+id/expandable_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_marginTop="100dp"
-                android:divider="@color/divider_color"
-                android:dividerHeight="1px"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="0dp"
                 android:groupIndicator="@null"
-                android:childDivider="@color/divider_color" />
+                android:childDivider="@android:color/transparent" />
 
-            <!-- FAB 保存按钮 -->
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fab_save"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|end"
-                android:layout_margin="24dp"
-                android:contentDescription="@string/fab_save_desc"
-                app:srcCompat="@drawable/ic_save"
-                app:backgroundTint="@color/color_primary"
-                app:tint="@android:color/white"
-                app:fabSize="normal"
-                app:elevation="6dp" />
-
-        </FrameLayout>
+        </LinearLayout>
 
         <!-- ===== 第三页：日志页 ===== -->
         <include
@@ -476,15 +486,31 @@
 
     </FrameLayout>
 
-    <!-- 底部导航栏 -->
+    <!-- FAB 保存按钮 - 简洁圆形图标 -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_save"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="96dp"
+        android:contentDescription="@string/fab_save_desc"
+        android:src="@drawable/ic_check"
+        app:fabSize="normal"
+        app:backgroundTint="?attr/colorPrimary"
+        app:tint="?attr/colorOnPrimary" />
+
+    <!-- 底部导航栏 - Material3 风格 -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@android:color/white"
+        android:layout_gravity="bottom"
+        android:background="?attr/colorSurface"
         app:menu="@menu/bottom_nav_menu"
-        app:itemIconTint="@color/bottom_nav_color"
-        app:itemTextColor="@color/bottom_nav_color"
-        app:labelVisibilityMode="labeled" />
+        app:labelVisibilityMode="labeled"
+        app:itemIconTint="?attr/colorOnSurfaceVariant"
+        app:itemTextColor="?attr/colorOnSurfaceVariant"
+        app:itemActiveIndicatorStyle="@style/Widget.ClipboardGuard.BottomNav.ActiveIndicator" />
 
-</LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

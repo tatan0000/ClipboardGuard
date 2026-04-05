@@ -1,6 +1,10 @@
 package com.android.clipboardguard;
 
-import android.app.Activity;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
@@ -22,6 +26,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ExpandableListView;
 import android.widget.ImageView;
+import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -31,6 +36,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.appbar.MaterialToolbar;
 import com.android.clipboardguard.R;
 
 import java.util.ArrayList;
@@ -50,12 +56,12 @@ import java.util.Map;
  *   勾选(checked)  = BLOCK  = 每次写剪贴板弹窗询问
  *   未勾选         = IGNORE = 放行，不拦截
  */
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
 
     // 单例
     private static MainActivity sInstance;
-    // 保存当前选择的主题值（用于 recreate 后恢复，初始化为 2 = THEME_SYSTEM）
-    private static int sCurrentTheme = 2;
+    // 保存当前选择的主题值（用于 recreate 后恢复，-1 = 未初始化）
+    private static int sCurrentTheme = -1;
     // 保存当前页面索引（用于 recreate 后恢复，初始化为 0 = PAGE_HOME）
     private static int sCurrentPage = 0;
 
@@ -108,7 +114,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // 必须在 super.onCreate() 之前应用主题，否则对当前 Activity 不生效
+        // 在 super.onCreate() 前应用主题样式（使用官方推荐的方式）
         applyThemeNoView();
 
         super.onCreate(savedInstanceState);
@@ -116,25 +122,40 @@ public class MainActivity extends Activity {
         // 单例
         sInstance = this;
 
+        // 启用边缘到边缘显示
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+
         setContentView(R.layout.activity_main);
 
         // 初始化主题显示
-        initThemeDisplay();
+        initThemeRadioButtons();
 
         // 应用状态栏颜色（必须在 setContentView 后调用）
         applyTheme();
 
         // 状态栏高度适配（Toolbar）
         View toolbarView = findViewById(R.id.toolbar);
-        final int padL = toolbarView.getPaddingLeft();
-        final int padR = toolbarView.getPaddingRight();
-        final int padB = toolbarView.getPaddingBottom();
+        MaterialToolbar toolbar = (MaterialToolbar) toolbarView;
+        final int padL = toolbar.getPaddingLeft();
+        final int padR = toolbar.getPaddingRight();
+        final int padB = toolbar.getPaddingBottom();
         ViewCompat.setOnApplyWindowInsetsListener(toolbarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             v.setPadding(padL, statusH, padR, padB);
             return insets;
         });
         ViewCompat.requestApplyInsets(toolbarView);
+
+        // 底部导航栏避让导航栏
+        View bottomNav = findViewById(R.id.bottom_nav);
+        if (bottomNav != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(bottomNav, (v, insets) -> {
+                int navH = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+                v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), navH);
+                return insets;
+            });
+            ViewCompat.requestApplyInsets(bottomNav);
+        }
 
         // 找 View
         mPageHome     = findViewById(R.id.page_home);
@@ -235,11 +256,38 @@ public class MainActivity extends Activity {
         loadAppsAsync();
 
         // ──────────────────────────── 设置页交互 ────────────────────────────
-        // 主题选择点击
-        View itemTheme = findViewById(R.id.item_theme);
-        if (itemTheme != null) {
-            itemTheme.setOnClickListener(v -> showThemeDialog());
+        // 主题选择 - 亮色
+        View itemThemeLight = findViewById(R.id.item_theme_light);
+        if (itemThemeLight != null) {
+            itemThemeLight.setOnClickListener(v -> {
+                switchTheme(THEME_LIGHT);
+                updateThemeRadioButtons(THEME_LIGHT);
+                // switchTheme 已调用 AppCompatDelegate，会自动重建 Activity
+            });
         }
+
+        // 主题选择 - 暗色
+        View itemThemeDark = findViewById(R.id.item_theme_dark);
+        if (itemThemeDark != null) {
+            itemThemeDark.setOnClickListener(v -> {
+                switchTheme(THEME_DARK);
+                updateThemeRadioButtons(THEME_DARK);
+                // switchTheme 已调用 AppCompatDelegate，会自动重建 Activity
+            });
+        }
+
+        // 主题选择 - 跟随系统
+        View itemThemeSystem = findViewById(R.id.item_theme_system);
+        if (itemThemeSystem != null) {
+            itemThemeSystem.setOnClickListener(v -> {
+                switchTheme(THEME_SYSTEM);
+                updateThemeRadioButtons(THEME_SYSTEM);
+                // switchTheme 已调用 AppCompatDelegate，会自动重建 Activity
+            });
+        }
+
+        // 初始化主题RadioButton状态
+        initThemeRadioButtons();
 
         // 关于模块点击
         View itemAbout = findViewById(R.id.item_about);
@@ -295,19 +343,19 @@ public class MainActivity extends Activity {
         }
 
         // 标题栏
-        TextView tvTitle = findViewById(R.id.tv_toolbar_title);
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
         switch (page) {
             case PAGE_HOME:
-                tvTitle.setText(R.string.app_name);
+                toolbar.setTitle(R.string.app_name);
                 break;
             case PAGE_APPS:
-                tvTitle.setText(R.string.nav_apps);
+                toolbar.setTitle(R.string.nav_apps);
                 break;
             case PAGE_LOG:
-                tvTitle.setText(R.string.nav_log);
+                toolbar.setTitle(R.string.nav_log);
                 break;
             case PAGE_SETTINGS:
-                tvTitle.setText(R.string.nav_settings);
+                toolbar.setTitle(R.string.nav_settings);
                 break;
         }
     }
@@ -371,12 +419,19 @@ public class MainActivity extends Activity {
 
     /** 在 super.onCreate() 前应用主题（仅设置 AppCompatDelegate） */
     private void applyThemeNoView() {
-        // 始终从 SharedPreferences 读取主题设置
-        int theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
+        int theme;
 
-        // 如果静态变量已被设置（用户主动切换过），优先使用
-        if (sCurrentTheme != 2) {  // 2 = 初始值，说明已手动切换过
+        // 优先使用静态变量（switchTheme 已同步更新），避免异步写入 SharedPreferences 未完成
+        if (sCurrentTheme >= 0) {
             theme = sCurrentTheme;
+        } else {
+            // 静态变量未初始化，从 SharedPreferences 读取
+            Context appCtx = getApplicationContext();
+            if (appCtx == null) appCtx = this;
+            theme = appCtx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                    .getInt(KEY_THEME, THEME_SYSTEM);
+            // 同时更新静态变量，避免后续重复读取
+            sCurrentTheme = theme;
         }
 
         // 设置 AppCompatDelegate（必须在 super.onCreate() 前调用）
@@ -396,46 +451,54 @@ public class MainActivity extends Activity {
 
     /** 应用主题设置（包括状态栏颜色） */
     private void applyTheme() {
-        // 此时 AppCompatDelegate 已在 applyThemeNoView() 中设置
-        // 这里只设置状态栏颜色即可
-        int theme = sCurrentTheme != 2 ? sCurrentTheme 
-                : getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
+        // 直接从 SharedPreferences 读取
+        int theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
 
-        // 状态栏颜色（浅色#007AFF，深色#000000）
-        int statusBarColor = (theme == THEME_DARK) ? Color.BLACK : Color.parseColor("#007AFF");
+        // 状态栏颜色
+        int statusBarColor = getColor(R.color.color_primary);
+        int nightMode = AppCompatDelegate.getDefaultNightMode();
         
-        // 跟随系统模式时，根据系统当前模式判断
-        if (theme == THEME_SYSTEM) {
+        // 根据主题模式设置状态栏
+        if (theme == THEME_LIGHT) {
+            // 亮色模式：白色状态栏 + 黑色文字
+            statusBarColor = Color.WHITE;
+        } else if (theme == THEME_DARK) {
+            // 深色模式：黑色状态栏 + 白色文字
+            statusBarColor = Color.BLACK;
+        } else {
+            // 跟随系统
             int currentNightMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
-            statusBarColor = (currentNightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES) ? Color.BLACK : Color.parseColor("#007AFF");
+            if (currentNightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES) {
+                statusBarColor = Color.BLACK;
+            } else {
+                statusBarColor = Color.WHITE;
+            }
         }
         
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         window.setStatusBarColor(statusBarColor);
+        
+        // 根据主题设置状态栏文字颜色
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            window.getDecorView().setSystemUiVisibility(
-                    window.getDecorView().getSystemUiVisibility()
-                            & (~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR));
+            boolean isLightStatusBar = (theme == THEME_LIGHT) || 
+                (theme == THEME_SYSTEM && (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) != android.content.res.Configuration.UI_MODE_NIGHT_YES);
+            if (isLightStatusBar) {
+                window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+            } else {
+                window.getDecorView().setSystemUiVisibility(0);
+            }
         }
     }
 
-    /** 切换主题 */
+    /** 切换主题 - 保存设置并立即应用（官方推荐方式） */
     public static void switchTheme(int theme) {
         if (theme < THEME_LIGHT || theme > THEME_SYSTEM) return;
 
-        // 保存到静态变量（确保一定可用）
+        // 立即更新静态变量，避免 Activity 重建时从 SharedPreferences 读取失败
         sCurrentTheme = theme;
 
-        // 保存到 SharedPreferences（优先使用 Application Context）
-        if (sInstance != null) {
-            Context appCtx = sInstance.getApplicationContext();
-            if (appCtx != null) {
-                appCtx.getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit().putInt(KEY_THEME, theme).apply();
-            }
-        }
-
-        // 应用主题
+        // 立即设置 AppCompatDelegate（官方推荐方式，会自动重建Activity）
         switch (theme) {
             case THEME_LIGHT:
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
@@ -444,20 +507,46 @@ public class MainActivity extends Activity {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
                 break;
             case THEME_SYSTEM:
+            default:
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
                 break;
         }
+
+        // 保存到 SharedPreferences（使用同步写入确保立即生效）
+        try {
+            Context ctx = sInstance;
+            if (ctx != null) {
+                Context appCtx = ctx.getApplicationContext();
+                if (appCtx == null) appCtx = ctx;
+                SharedPreferences sp = appCtx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+                sp.edit().putInt(KEY_THEME, theme).commit(); // 使用 commit() 同步写入
+            }
+        } catch (Exception e) {
+            // 忽略错误，避免崩溃
+        }
     }
 
-    /** 初始化主题显示文本 */
-    private void initThemeDisplay() {
-        TextView tvTheme = findViewById(R.id.tv_theme);
-        if (tvTheme != null) {
-            // 优先使用静态变量（用户主动选择的主题）
-            int theme = sCurrentTheme != 2 ? sCurrentTheme 
-                    : getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
-            tvTheme.setText(getThemeText(theme));
+    /** 更新主题RadioButton状态 */
+    private void updateThemeRadioButtons(int theme) {
+        RadioButton rbLight = findViewById(R.id.rb_theme_light);
+        RadioButton rbDark = findViewById(R.id.rb_theme_dark);
+        RadioButton rbSystem = findViewById(R.id.rb_theme_system);
+        if (rbLight == null || rbDark == null || rbSystem == null) return;
+
+        rbLight.setChecked(theme == THEME_LIGHT);
+        rbDark.setChecked(theme == THEME_DARK);
+        rbSystem.setChecked(theme == THEME_SYSTEM);
+    }
+
+    /** 初始化主题RadioButton状态 */
+    private void initThemeRadioButtons() {
+        int theme;
+        if (sCurrentTheme >= 0) {
+            theme = sCurrentTheme;
+        } else {
+            theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
         }
+        updateThemeRadioButtons(theme);
     }
 
     /** 获取主题选项文本 */
@@ -471,28 +560,6 @@ public class MainActivity extends Activity {
             default:
                 return getString(R.string.theme_follow_system);
         }
-    }
-
-    /** 显示主题选择对话框 */
-    private void showThemeDialog() {
-        // 优先使用静态变量
-        int currentTheme = sCurrentTheme != 2 ? sCurrentTheme 
-                : getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
-        
-        String[] themes = {
-                getString(R.string.theme_light),
-                getString(R.string.theme_dark),
-                getString(R.string.theme_follow_system)
-        };
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(R.string.settings_theme)
-                .setSingleChoiceItems(themes, currentTheme, (dialog, which) -> {
-                    switchTheme(which);
-                    // 重建 Activity 以实时应用主题
-                    recreate();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
     }
 
     /** 获取模块版本号 */

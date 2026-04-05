@@ -1,44 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 浅色模式颜色（默认） -->
-    <!-- 主色（iOS蓝） -->
+    <!-- ===== Material3 完整颜色系统 ===== -->
+    <!-- 主色系统（iOS 蓝） -->
     <color name="color_primary">#007AFF</color>
     <color name="color_primary_dark">#0056CC</color>
     <color name="color_primary_light">#5AC8FA</color>
+    <color name="color_on_primary">#FFFFFF</color>
+    <color name="color_primary_container">#D4E3FF</color>
+    <color name="color_on_primary_container">#001C3A</color>
+
+    <!-- 次色 -->
+    <color name="color_secondary">#5856D6</color>
+    <color name="color_on_secondary">#FFFFFF</color>
+    <color name="color_secondary_container">#E4E4FF</color>
+    <color name="color_on_secondary_container">#0400A5</color>
+
+    <!-- 第三色（强调） -->
+    <color name="color_tertiary">#FF375F</color>
+    <color name="color_on_tertiary">#FFFFFF</color>
+    <color name="color_tertiary_container">#FFD9E0</color>
+    <color name="color_on_tertiary_container">#390011</color>
+
+    <!-- 错误色 -->
+    <color name="color_error">#FF3B30</color>
+    <color name="color_on_error">#FFFFFF</color>
+    <color name="color_error_container">#FFD9E0</color>
+    <color name="color_on_error_container">#410002</color>
+
+    <!-- 背景与表面 - 浅色模式 -->
+    <color name="color_background">#F2F2F7</color>
+    <color name="color_on_background">#1C1C1E</color>
+    <color name="color_surface">#FFFFFF</color>
+    <color name="color_on_surface">#1C1C1E</color>
+    <color name="color_surface_variant">#F2F2F7</color>
+    <color name="color_on_surface_variant">#49454F</color>
+
+    <!-- 对话框背景 -->
+    <color name="dialog_bg">#FFFFFF</color>
+    <color name="main_bg">#F2F2F7</color>
+    <color name="preview_bg">#F2F2F7</color>
+    <color name="tip_bg">#E8F4FF</color>
+
+    <!-- 轮廓与分割线 -->
+    <color name="color_outline">#C6C6C8</color>
+    <color name="color_outline_variant">#CAC4D0</color>
+    <color name="divider_color">#C6C6C8</color>
+
+    <!-- 卡片 -->
+    <color name="color_surface_container">#FFFFFF</color>
+    <color name="color_surface_container_high">#F5F5F5</color>
+    <color name="color_surface_container_highest">#EBEBEB</color>
+    <color name="card_shadow">#1A000000</color>
 
     <!-- 文字颜色 -->
     <color name="text_primary">#1C1C1E</color>
     <color name="text_secondary">#636366</color>
     <color name="text_hint">#AEAEB2</color>
 
+    <!-- 分组头 -->
+    <color name="group_header_bg">#EEF2F7</color>
+
     <!-- 按钮 -->
     <color name="btn_allow_text">#007AFF</color>
     <color name="btn_deny_text">#8E8E93</color>
     <color name="btn_pressed_bg">#F2F2F7</color>
 
-    <!-- 背景 -->
-    <color name="dialog_bg">#FFFFFF</color>
-    <color name="main_bg">#F2F2F7</color>
-    <color name="preview_bg">#F2F2F7</color>
-    <color name="tip_bg">#E8F4FF</color>
-
-    <!-- 分隔线 -->
-    <color name="divider_color">#C6C6C8</color>
-
-    <!-- 卡片阴影 -->
-    <color name="card_shadow">#1A000000</color>
-
-    <!-- 分组头背景 -->
-    <color name="group_header_bg">#EEF2F7</color>
-
-    <!-- 模块状态颜色 -->
+    <!-- 状态 -->
     <color name="status_active">#34C759</color>
     <color name="status_inactive">#8E8E93</color>
 
     <!-- 底部导航 -->
     <color name="bottom_nav_selected">@color/color_primary</color>
 
-    <!-- 标准颜色 -->
+    <!-- Material 标准色 -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>

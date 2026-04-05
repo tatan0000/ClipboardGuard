@@ -1,8 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- 夜间模式主题 -->
-    <style name="Theme.ClipboardGuard" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+    <!-- ===== Material3 主应用主题 - 深色模式 ===== -->
+    <style name="Theme.ClipboardGuard" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 主色 -->
         <item name="colorPrimary">@color/color_primary</item>
-        <item name="colorPrimaryVariant">@color/color_primary_dark</item>
-        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorOnPrimary">@color/color_on_primary</item>
+        <item name="colorPrimaryContainer">@color/color_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/color_on_primary_container</item>
+
+        <!-- 次色 -->
+        <item name="colorSecondary">@color/color_secondary</item>
+        <item name="colorOnSecondary">@color/color_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/color_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/color_on_secondary_container</item>
+
+        <!-- 第三色 -->
+        <item name="colorTertiary">@color/color_tertiary</item>
+        <item name="colorOnTertiary">@color/color_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/color_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/color_on_tertiary_container</item>
+
+        <!-- 错误色 -->
+        <item name="colorError">@color/color_error</item>
+        <item name="colorOnError">@color/color_on_error</item>
+        <item name="colorErrorContainer">@color/color_error_container</item>
+        <item name="colorOnErrorContainer">@color/color_on_error_container</item>
+
+        <!-- 背景与表面 -->
+        <item name="android:colorBackground">@color/color_background</item>
+        <item name="colorOnBackground">@color/color_on_background</item>
+        <item name="colorSurface">@color/color_surface</item>
+        <item name="colorOnSurface">@color/color_on_surface</item>
+        <item name="colorSurfaceVariant">@color/color_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/color_on_surface_variant</item>
+
+        <!-- 轮廓 -->
+        <item name="colorOutline">@color/color_outline</item>
+        <item name="colorOutlineVariant">@color/color_outline_variant</item>
+
+        <!-- 状态栏 - 深色模式使用深色 -->
+        <item name="android:statusBarColor">#FF000000</item>
+        <item name="android:navigationBarColor">@color/color_surface</item>
+
+        <!-- Window -->
+        <item name="android:windowBackground">@color/color_background</item>
+
+        <!-- 兼容旧属性 -->
+        <item name="colorPrimaryDark">@color/color_primary_dark</item>
+        <item name="colorAccent">@color/color_primary</item>
+    </style>
+
+    <!-- ===== Material3 对话框主题 - 透明背景 ===== -->
+    <style name="Theme.Dialog.Transparent" parent="Theme.Material3.DayNight.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.5</item>
+    </style>
+
+    <!-- ===== Material3 底部弹窗主题 ===== -->
+    <style name="Theme.Dialog.BottomSheet" parent="Theme.Material3.DayNight.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.ClipboardGuard.BottomSheet</item>
+    </style>
+
+    <style name="Widget.ClipboardGuard.BottomSheet" parent="Widget.Material3.BottomSheet">
+        <item name="backgroundTint">@color/color_surface</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.ClipboardGuard.LargeComponent</item>
+    </style>
+
+    <!-- ===== Shape Appearances ===== -->
+    <style name="ShapeAppearance.ClipboardGuard.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">8dp</item>
+    </style>
+
+    <style name="ShapeAppearance.ClipboardGuard.MediumComponent" parent="ShapeAppearance.Material3.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <style name="ShapeAppearance.ClipboardGuard.LargeComponent" parent="ShapeAppearance.Material3.LargeComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
     </style>
 </resources>

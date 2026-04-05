@@ -12,6 +12,22 @@ Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`�
   - `clearCallingIdentity()` 后 uid 重置为 system_server 自身(1000)，与 callingPackage "android" 匹配，校验通过
   - fallback：直接 `openDatabase()` 读 SQLite 文件
 
+## UI 美化（2026-04-06）
+- 使用 Material Design 3 组件重写了主布局和设置页
+- 使用 MaterialToolbar 替代旧 Toolbar
+- 使用 MaterialCardView 替代旧卡片背景
+- 使用 FloatingActionButton 替代 ExtendedFloatingActionButton（更简洁的圆形图标）
+- 使用 NestedScrollView 替代 ScrollView
+- 添加了箭头图标、搜索图标、勾选图标
+- 底部导航使用 Material3 风格
+- 代码适配：更新了导入、变量类型、标题栏逻辑
+- **首页增加 paddingBottom="80dp"** 防止被底部导航遮挡
+- **FAB 改为圆形图标，位置靠上**（marginBottom=96dp），不再遮挡底部导航
+
+## 用户偏好（更新）
+- FAB 保存按钮改为简单圆形图标（ic_check.xml），位置靠上不挡底栏
+- 首页底部增加 padding 避免被底部导航遮挡
+
 
 
 ## 用户偏好
@@ -25,7 +41,7 @@ Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`�
 - **不再有永久允许/拒绝**，由主界面统一管理放行列表
 
 ## 超时机制
-- Dialog 倒计时：5 秒
+- Dialog 倒计时：3 秒
 - Hook latch 等待：7 秒（留 2s 余量避免竞态）
 - 超时/弹窗失败 → 默认 BLOCK（安全优先）
 
@@ -46,9 +62,15 @@ Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`�
 - 作用域只勾选系统框架（android），不勾选本模块
 - 主题选择需要实时切换
 
-## 2026-04-05 下午更新
-- 修复未勾选应用仍弹窗问题：Hook 中使用 moduleContext 查询 PermissionStorage.getPermission() 替代 queryPermission()
-- 作用域推荐使用 arrays.xml 配置，推荐 android（系统框架）
-- 主界面显示"系统框架"而非"系统框架 + 本模块"
-- 主题实时切换：使用 recreate() 重建 Activity，applyTheme() 中动态设置状态栏颜色
-- 应用界面美化：调整 item 高度/图标/字号，添加圆角背景 bg_item_app.xml
+## 防抖功能（2026-04-06）
+- 防抖时间：1.5秒
+- 逻辑：用户选择完成后1.5秒内对同一应用不弹窗，保持上次选择
+- 变量：`sLastDecisionTime` Map 记录每个应用的用户决策完成时间
+
+## 深色模式修复（2026-04-06）
+- 修改 `values-night/themes.xml`，使用与浅色模式一致的 Material3 主题
+- drawable 文件使用 `?android:attr/windowBackground` 动态颜色
+- 布局文件中的硬编码白色 `#FFFFFF` 改为动态颜色
+- 参考 ReVanced Manager 的主题实现方案
+- **主题切换方案**：用户选择主题 → `switchTheme()` 保存设置 → `recreate()` 重建 Activity → `onCreate()` 中通过 `applyThemeNoView()` 调用 `AppCompatDelegate.setDefaultNightMode()` 应用主题
+- **状态栏颜色**：使用 `colorPrimary` 资源（自动适配深浅色），深色模式/跟随系统深色时用黑色

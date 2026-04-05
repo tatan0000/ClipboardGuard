@@ -4,7 +4,7 @@
             "outputFile": "com.android.clipboardguard.app-mergeDebugResources-28:/values-h480dp-land-v13/values-h480dp-land-v13.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\9e7ae965005f68265aed5a5b673f0c85\\workspace\\transformed\\material-1.10.0\\res\\values-h480dp-land-v13\\values-h480dp-land-v13.xml",
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\bb09dbf6be71711d60ed68d766fc71b6\\workspace\\transformed\\material-1.10.0\\res\\values-h480dp-land-v13\\values-h480dp-land-v13.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10",
                         "startColumns": "4,4,4,4,4,4,4,4,4",

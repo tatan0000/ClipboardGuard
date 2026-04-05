@@ -4,7 +4,7 @@
             "outputFile": "com.android.clipboardguard.app-mergeDebugResources-28:/values-kk/values-kk.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\82e7abe509bf3b60cd55fae3ed291252\\workspace\\transformed\\core-1.13.0\\res\\values-kk\\values-kk.xml",
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\cca04e8ff85dd1d7a6ddebf741c35995\\workspace\\transformed\\core-1.13.0\\res\\values-kk\\values-kk.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -21,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\9e7ae965005f68265aed5a5b673f0c85\\workspace\\transformed\\material-1.10.0\\res\\values-kk\\values-kk.xml",
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\bb09dbf6be71711d60ed68d766fc71b6\\workspace\\transformed\\material-1.10.0\\res\\values-kk\\values-kk.xml",
                     "from": {
                         "startLines": "2,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -40,7 +40,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\3ae38a0208efce7ec56ef41c82845b92\\workspace\\transformed\\appcompat-1.7.1\\res\\values-kk\\values-kk.xml",
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\8c72597709a479796f62d9069564ba77\\workspace\\transformed\\appcompat-1.7.1\\res\\values-kk\\values-kk.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
