@@ -1,11 +1,7 @@
 package com.android.clipboardguard;
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -15,6 +11,10 @@ import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.net.Uri;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -28,21 +28,21 @@ import android.widget.ExpandableListView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
-import com.google.android.material.button.MaterialButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.appbar.MaterialToolbar;
-import com.android.clipboardguard.R;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -75,10 +75,11 @@ public class MainActivity extends AppCompatActivity {
     private static final int GROUP_CORE   = 2;
 
     // 页面索引
-    public static final int PAGE_HOME     = 0;
-    public static final int PAGE_APPS    = 1;
-    public static final int PAGE_LOG     = 2;
-    public static final int PAGE_SETTINGS = 3;
+    public static final int PAGE_HOME              = 0;
+    public static final int PAGE_APPS             = 1;
+    public static final int PAGE_LOG               = 2;
+    public static final int PAGE_SETTINGS          = 3;
+    public static final int PAGE_PERMISSION_DETAIL = 4;
 
     // 主题选项
     public static final String PREF_NAME = "settings";
@@ -87,11 +88,15 @@ public class MainActivity extends AppCompatActivity {
     public static final int THEME_DARK   = 1;
     public static final int THEME_SYSTEM = 2;
 
+    // 首次使用引导
+    private static final String KEY_FIRST_LAUNCH = "first_launch";
+
     // ── Views ──
     private View mPageHome;
     private View mPageApps;
     private View mPageLog;
     private View mPageSettings;
+    private View mPagePermissionDetail;
     private FloatingActionButton mFab;
     // 底部导航
     private LinearLayout mBottomNav;
@@ -120,6 +125,9 @@ public class MainActivity extends AppCompatActivity {
     private final List<AppItem> mFilteredSystem = new ArrayList<>();
     private final List<AppItem> mFilteredCore    = new ArrayList<>();
     private String mCurrentQuery = "";
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private androidx.appcompat.app.AlertDialog mGuideDialog; // 当前显示的引导弹窗
+    private boolean mGuideDialogShown = false; // 标记本次已显示过弹窗
 
     // 用于记录「本次操作里修改过的项」（包名→新状态），FAB 保存时批量写入
     private final Map<String, Integer> mPendingChanges = new HashMap<>();
@@ -142,24 +150,40 @@ public class MainActivity extends AppCompatActivity {
         // 应用状态栏颜色（必须在 setContentView 后调用）
         applyTheme();
 
-        // 状态栏高度适配（Toolbar）
-        View toolbarView = findViewById(R.id.toolbar);
-        MaterialToolbar toolbar = (MaterialToolbar) toolbarView;
-        final int padL = toolbar.getPaddingLeft();
-        final int padR = toolbar.getPaddingRight();
-        final int padB = toolbar.getPaddingBottom();
-        ViewCompat.setOnApplyWindowInsetsListener(toolbarView, (v, insets) -> {
+        // 状态栏间距适配（留 4dp 空隙）
+        View appBarView = findViewById(R.id.app_bar);
+        ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
-            v.setPadding(padL, statusH, padR, padB);
+            v.setPadding(v.getPaddingLeft(), Math.min(statusH, 20), v.getPaddingRight(), v.getPaddingBottom());
             return insets;
         });
-        ViewCompat.requestApplyInsets(toolbarView);
+        ViewCompat.requestApplyInsets(appBarView);
+
+        // 状态栏高度适配（让 AppBarLayout 处理 insets）
+        ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
+            int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            v.setPadding(v.getPaddingLeft(), Math.max(statusH - 8, 0), v.getPaddingRight(), v.getPaddingBottom());
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(appBarView);
+
+        // Toolbar 引用
+        View toolbarView = findViewById(R.id.toolbar);
+        MaterialToolbar toolbar = (MaterialToolbar) toolbarView;
+
+        // Toolbar 返回按钮点击事件
+        toolbar.setNavigationOnClickListener(v -> {
+            if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
+                showPage(PAGE_SETTINGS);
+            }
+        });
 
         // 找 View
         mPageHome     = findViewById(R.id.page_home);
         mPageApps    = findViewById(R.id.page_apps);
         mPageLog    = findViewById(R.id.page_log);
         mPageSettings = findViewById(R.id.page_settings);
+        mPagePermissionDetail = findViewById(R.id.page_permission_detail);
         mFab       = findViewById(R.id.fab_save);
         mBottomNav = findViewById(R.id.bottom_nav);
         mNavHome   = findViewById(R.id.nav_home);
@@ -269,6 +293,9 @@ public class MainActivity extends AppCompatActivity {
         // 加载应用列表（后台）
         loadAppsAsync();
 
+        // ──────────────────────────── 首次使用引导 ────────────────────────────
+        checkAndShowFirstLaunchGuide();
+
         // ──────────────────────────── 设置页交互 ────────────────────────────
         // 主题选择 - 亮色
         View itemThemeLight = findViewById(R.id.item_theme_light);
@@ -300,6 +327,12 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        // 权限管理入口点击
+        View itemPermission = findViewById(R.id.item_permission);
+        if (itemPermission != null) {
+            itemPermission.setOnClickListener(v -> showPage(PAGE_PERMISSION_DETAIL));
+        }
+
         // 关于模块点击
         View itemAbout = findViewById(R.id.item_about);
         if (itemAbout != null) {
@@ -311,9 +344,32 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onBackPressed() {
+        // 权限详情页按返回键返回设置页
+        if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
+            showPage(PAGE_SETTINGS);
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
-        // 如果已加载过，刷新权限（防止外部改动）
+        // 延迟刷新首页状态（确保 Activity 完全恢复焦点后再检测权限）
+        mHandler.postDelayed(() -> {
+            // 刷新首页状态
+            initHomePage();
+            // 刷新权限详情页状态（如果当前在权限详情页）
+            if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
+                initPermissionDetailPage();
+            }
+            // 检查引导弹窗（用户可能刚开启了权限）
+            if (!getSharedPreferences(PREF_NAME, MODE_PRIVATE).getBoolean(KEY_FIRST_LAUNCH, false)) {
+                showPermissionGuideDialog();
+            }
+        }, 100);
+        // 如果已加载过应用列表，刷新权限（防止外部改动）
         if (!mUserApps.isEmpty() || !mSystemApps.isEmpty() || !mCoreApps.isEmpty()) {
             refreshPermissions();
         }
@@ -338,6 +394,7 @@ public class MainActivity extends AppCompatActivity {
         mPageApps.setVisibility(View.GONE);
         mPageLog.setVisibility(View.GONE);
         mPageSettings.setVisibility(View.GONE);
+        mPagePermissionDetail.setVisibility(View.GONE);
 
         // 显示选中页
         switch (page) {
@@ -359,6 +416,12 @@ public class MainActivity extends AppCompatActivity {
                 mPageSettings.setVisibility(View.VISIBLE);
                 mFab.setVisibility(View.GONE);
                 break;
+            case PAGE_PERMISSION_DETAIL:
+                mPagePermissionDetail.setVisibility(View.VISIBLE);
+                mFab.setVisibility(View.GONE);
+                // 刷新权限详情页
+                initPermissionDetailPage();
+                break;
         }
 
         // 标题栏
@@ -366,15 +429,23 @@ public class MainActivity extends AppCompatActivity {
         switch (page) {
             case PAGE_HOME:
                 toolbar.setTitle(R.string.app_name);
+                toolbar.setNavigationIcon(null); // 隐藏返回按钮
                 break;
             case PAGE_APPS:
                 toolbar.setTitle(R.string.nav_apps);
+                toolbar.setNavigationIcon(null);
                 break;
             case PAGE_LOG:
                 toolbar.setTitle(R.string.nav_log);
+                toolbar.setNavigationIcon(null);
                 break;
             case PAGE_SETTINGS:
                 toolbar.setTitle(R.string.nav_settings);
+                toolbar.setNavigationIcon(null);
+                break;
+            case PAGE_PERMISSION_DETAIL:
+                toolbar.setTitle(R.string.settings_permission);
+                toolbar.setNavigationIcon(R.drawable.ic_back); // 显示返回按钮
                 break;
         }
 
@@ -391,6 +462,9 @@ public class MainActivity extends AppCompatActivity {
         ((TextView) mNavApps.getChildAt(1)).setTextColor(page == PAGE_APPS ? selectedColor : unselectedColor);
         ((TextView) mNavLog.getChildAt(1)).setTextColor(page == PAGE_LOG ? selectedColor : unselectedColor);
         ((TextView) mNavSettings.getChildAt(1)).setTextColor(page == PAGE_SETTINGS ? selectedColor : unselectedColor);
+
+        // 权限详情页是二级页面，隐藏底部导航
+        mBottomNav.setVisibility(page == PAGE_PERMISSION_DETAIL ? View.GONE : View.VISIBLE);
     }
 
     // ──────────────────────────── 首页初始化 ────────────────────────────
@@ -429,6 +503,34 @@ public class MainActivity extends AppCompatActivity {
         mTvAndroidVersion.setText(Build.VERSION.RELEASE);
         mTvManufacturer.setText(Build.MANUFACTURER);
         mTvModel.setText(Build.MODEL);
+    }
+
+    /** 初始化权限详情页 */
+    private void initPermissionDetailPage() {
+        // 悬浮窗权限状态
+        TextView tvFloatStatus = findViewById(R.id.tv_float_status);
+        boolean hasFloatPerm = Settings.canDrawOverlays(this);
+        if (tvFloatStatus != null) {
+            if (hasFloatPerm) {
+                tvFloatStatus.setText(R.string.guide_float_granted);
+                tvFloatStatus.setTextColor(getColor(R.color.status_active));
+            } else {
+                tvFloatStatus.setText(R.string.guide_float_not_granted);
+                tvFloatStatus.setTextColor(getColor(R.color.status_inactive));
+            }
+        }
+
+        // 悬浮窗设置按钮（始终显示，可重复点击）
+        MaterialButton btnFloatSettings = findViewById(R.id.btn_float_settings);
+        if (btnFloatSettings != null) {
+            btnFloatSettings.setVisibility(View.VISIBLE);
+            btnFloatSettings.setText(hasFloatPerm ? R.string.guide_btn_open_float : R.string.guide_btn_go_settings);
+            btnFloatSettings.setOnClickListener(v -> {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            });
+        }
     }
 
     /**
@@ -484,43 +586,19 @@ public class MainActivity extends AppCompatActivity {
 
     /** 应用主题设置（包括状态栏颜色） */
     private void applyTheme() {
-        // 直接从 SharedPreferences 读取
         int theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
+        boolean isDark = (theme == THEME_DARK)
+                || (theme == THEME_SYSTEM && (getResources().getConfiguration().uiMode
+                        & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                        == android.content.res.Configuration.UI_MODE_NIGHT_YES);
 
-        // 状态栏颜色
-        int statusBarColor = getColor(R.color.color_primary);
-        int nightMode = AppCompatDelegate.getDefaultNightMode();
-        
-        // 根据主题模式设置状态栏
-        if (theme == THEME_LIGHT) {
-            // 亮色模式：白色状态栏 + 黑色文字
-            statusBarColor = Color.WHITE;
-        } else if (theme == THEME_DARK) {
-            // 深色模式：黑色状态栏 + 白色文字
-            statusBarColor = Color.BLACK;
-        } else {
-            // 跟随系统
-            int currentNightMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
-            if (currentNightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES) {
-                statusBarColor = Color.BLACK;
-            } else {
-                statusBarColor = Color.WHITE;
-            }
-        }
-        
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(statusBarColor);
-        
-        // 根据主题设置状态栏文字颜色
+        window.setStatusBarColor(isDark ? Color.BLACK : Color.WHITE);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            boolean isLightStatusBar = (theme == THEME_LIGHT) || 
-                (theme == THEME_SYSTEM && (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) != android.content.res.Configuration.UI_MODE_NIGHT_YES);
-            if (isLightStatusBar) {
-                window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            } else {
-                window.getDecorView().setSystemUiVisibility(0);
-            }
+            window.getDecorView().setSystemUiVisibility(
+                    isDark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         }
     }
 
@@ -582,19 +660,6 @@ public class MainActivity extends AppCompatActivity {
         updateThemeRadioButtons(theme);
     }
 
-    /** 获取主题选项文本 */
-    private String getThemeText(int theme) {
-        switch (theme) {
-            case THEME_LIGHT:
-                return getString(R.string.theme_light);
-            case THEME_DARK:
-                return getString(R.string.theme_dark);
-            case THEME_SYSTEM:
-            default:
-                return getString(R.string.theme_follow_system);
-        }
-    }
-
     /** 获取模块版本号 */
     private String getModuleVersion() {
         try {
@@ -602,6 +667,107 @@ public class MainActivity extends AppCompatActivity {
             return pi.versionName + " (" + pi.versionCode + ")";
         } catch (PackageManager.NameNotFoundException e) {
             return "--";
+        }
+    }
+
+    // ──────────────────────────── 首次使用引导 ────────────────────────────
+
+    private static final int REQUEST_CODE_FLOAT_WINDOW = 1001;
+
+    /**
+     * 检测是否首次启动，如果是则弹出权限引导 Dialog
+     */
+    private void checkAndShowFirstLaunchGuide() {
+        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        // 只有明确点过"稍后再说"才不再弹窗（默认 true = 未确认过）
+        if (!sp.getBoolean(KEY_FIRST_LAUNCH, false)) {
+            showPermissionGuideDialog();
+        }
+    }
+
+    /**
+     * 显示首次使用权限引导弹窗
+     */
+    private void showPermissionGuideDialog() {
+        // 防止重复显示
+        if (mGuideDialogShown && mGuideDialog != null && mGuideDialog.isShowing()) {
+            return;
+        }
+        mGuideDialogShown = true;
+
+        View view = getLayoutInflater().inflate(R.layout.dialog_first_launch_guide, null);
+
+        // 标记为已完成（任意按钮点击都会调用）
+        Runnable markDone = () -> getSharedPreferences(PREF_NAME, MODE_PRIVATE)
+                .edit().putBoolean(KEY_FIRST_LAUNCH, true).apply();
+
+        // ── 悬浮窗权限 ──
+        TextView tvFloatTitle = view.findViewById(R.id.tv_float_perm_title);
+        TextView tvFloatDesc  = view.findViewById(R.id.tv_float_perm_desc);
+        TextView tvFloatStatus = view.findViewById(R.id.tv_float_perm_status);
+        TextView btnGoSettings = view.findViewById(R.id.btn_go_settings);
+
+        boolean hasFloatPerm = Settings.canDrawOverlays(this);
+        tvFloatTitle.setText(R.string.guide_float_perm);
+        tvFloatDesc.setText(R.string.guide_float_perm_desc);
+
+        if (hasFloatPerm) {
+            tvFloatStatus.setText(R.string.guide_float_perm_granted);
+            tvFloatStatus.setTextColor(getColor(R.color.status_active));
+            // 隐藏行内按钮，只保留底部"已完成"
+            btnGoSettings.setVisibility(View.GONE);
+        } else {
+            tvFloatStatus.setText(R.string.guide_float_perm_not_granted);
+            tvFloatStatus.setTextColor(getColor(R.color.status_inactive));
+            btnGoSettings.setVisibility(View.VISIBLE);
+            btnGoSettings.setText(R.string.guide_btn_go_settings);
+            btnGoSettings.setOnClickListener(v -> {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName()));
+                    startActivityForResult(intent, REQUEST_CODE_FLOAT_WINDOW);
+                } catch (Exception e) {
+                    Toast.makeText(this, "无法打开设置页面", Toast.LENGTH_SHORT).show();
+                }
+                // 点"去设置"不标记完成，下次还弹
+            });
+        }
+
+        // ── 自启动/关联启动（提示性文字）──
+        TextView tvAutoTitle = view.findViewById(R.id.tv_autostart_title);
+        TextView tvAutoDesc  = view.findViewById(R.id.tv_autostart_desc);
+        TextView tvAutoHint  = view.findViewById(R.id.tv_autostart_hint);
+        tvAutoTitle.setText(R.string.guide_autostart_perm);
+        tvAutoDesc.setText(R.string.guide_autostart_perm_desc);
+        tvAutoHint.setText(R.string.guide_autostart_hint);
+        tvAutoHint.setTextColor(getColor(android.R.color.darker_gray));
+
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.guide_title)
+                .setMessage(null)
+                .setView(view)
+                .setPositiveButton(hasFloatPerm ? R.string.guide_btn_done : R.string.guide_btn_later,
+                        (d, which) -> markDone.run())
+                .setCancelable(false)
+                .show();
+
+        // 保存弹窗引用
+        mGuideDialog = dialog;
+        // 弹窗关闭时重置标记（用于下次 onResume 检测）
+        dialog.setOnDismissListener(d -> mGuideDialogShown = false);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_FLOAT_WINDOW) {
+            // 刷新首页状态
+            initHomePage();
+            // 关闭旧弹窗，让 onResume 显示新弹窗（权限状态已更新）
+            if (mGuideDialog != null && mGuideDialog.isShowing()) {
+                mGuideDialog.dismiss();
+                mGuideDialogShown = false;
+            }
         }
     }
 

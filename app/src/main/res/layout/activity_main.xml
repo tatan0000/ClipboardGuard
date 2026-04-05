@@ -16,10 +16,12 @@
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="72dp"
+            android:layout_height="30dp"
             app:title="@string/app_name"
             app:titleTextColor="?attr/colorOnSurface"
             app:titleCentered="false"
+            app:contentInsetStartWithNavigation="0dp"
+            app:contentInsetStart="16dp"
             app:titleTextAppearance="@style/TextAppearance.ClipboardGuard.Toolbar" />
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -524,6 +526,15 @@
         <include
             android:id="@+id/page_settings"
             layout="@layout/page_settings"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginBottom="62dp"
+            android:visibility="gone" />
+
+        <!-- ===== 第五页：权限详情页 ===== -->
+        <include
+            android:id="@+id/page_permission_detail"
+            layout="@layout/page_permission_detail"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_marginBottom="62dp"

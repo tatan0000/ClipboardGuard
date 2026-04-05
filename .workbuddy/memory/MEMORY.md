@@ -88,3 +88,19 @@ Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`�
 - 参考 ReVanced Manager 的主题实现方案
 - **主题切换方案**：用户选择主题 → `switchTheme()` 保存设置 → `recreate()` 重建 Activity → `onCreate()` 中通过 `applyThemeNoView()` 调用 `AppCompatDelegate.setDefaultNightMode()` 应用主题
 - **状态栏颜色**：使用 `colorPrimary` 资源（自动适配深浅色），深色模式/跟随系统深色时用黑色
+
+## 待开发功能（2026-04-20 更新）
+| # | 功能 | 说明 |
+|---|------|------|
+| 1 | 日志功能完善 | 日志页加开关 + Hook写库 |
+| 2 | 正则匹配剪贴板内容弹窗优化 | 匹配到数字/邮箱/身份证等敏感信息时才弹窗，减少弹窗次数 |
+| 3 | 读剪贴板权限控制 | 控制哪些应用可以读取剪贴板，支持正则匹配 |
+| 4 | system_server内弹窗 | WindowManager.addView() 重构弹窗逻辑 |
+| 5 | Magisk模块版 | Zygisk注入 + C++ Hook + nanohttpd |
+
+## 已完成功能
+| # | 功能 | 完成日期 |
+|---|------|----------|
+| 1 | 首次使用引导弹窗 | 2026-04-20 |
+| 2 | 权限检查页面 | 2026-04-20 |
+| 3 | 首次使用引导弹窗添加提示文字 | 2026-04-20 |
