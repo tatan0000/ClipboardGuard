@@ -10,7 +10,9 @@ import android.os.UserHandle;
 import android.util.Log;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +28,14 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * ClipboardGuard - Xposed模块核心Hook类
  * 拦截 ClipboardService.setPrimaryClip 实现剪贴板权限控制
  * 只 Hook system_server 进程（android 包名），不 Hook App 进程
+ *
+ * 权限模型：
+ *   PERMISSION_BLOCK  = 0：拦截，每次写剪贴板弹窗询问
+ *   PERMISSION_IGNORE = 1：放行，直接通过
+ *
+ * 系统核心包白名单（Thanox global_white_list）：
+ *   Hook 层：匹配则直接放行，不弹窗
+ *   UI 层：单独分"系统核心"一组，置灰不可更改
  */
 public class Hook implements IXposedHookLoadPackage {
 
@@ -152,9 +162,8 @@ public class Hook implements IXposedHookLoadPackage {
                 return;
             }
 
-            // 跳过系统组件
-            if (pkgName.startsWith("android") || "system".equals(pkgName)
-                    || pkgName.startsWith("com.android.systemui")) {
+            // 跳过系统核心包（来自 Thanox global_white_list，Hook 放行，UI 单独分组置灰显示）
+            if (isSystemCorePackage(pkgName)) {
                 return;
             }
 
@@ -541,4 +550,149 @@ public class Hook implements IXposedHookLoadPackage {
             return r;
         }
     }
+
+    // ──────────────────────────── 系统核心包白名单 ────────────────────────────
+
+    /**
+     * 判断是否是系统核心包（来自 Thanox global_white_list）。
+     * 匹配则 Hook 层直接放行，不弹窗。
+     * UI 层单独分"系统核心"一组，置灰不可更改。
+     */
+    private static boolean isSystemCorePackage(String pkgName) {
+        if (pkgName == null) return true;
+
+        // 精确匹配
+        if (sCorePackagesSet.contains(pkgName)) return true;
+
+        // 子包前缀匹配（如 com.android.systemui.* 匹配 com.android.systemui.keyguard）
+        for (String core : sCorePackagesSet) {
+            if (pkgName.startsWith(core + ".")) return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 系统核心包白名单集合（与 arrays.xml + MainActivity 保持一致）。
+     * 精确匹配 + 子包前缀匹配。
+     */
+    private static final HashSet<String> sCorePackagesSet = new HashSet<>(Arrays.asList(
+        // Android 框架核心
+        "android",
+        "com.android.systemui",
+        "com.android.phone",
+        "com.android.mtp",
+        "android.ext.shared",
+        "com.android.pacprocessor",
+        "com.android.server.telecom",
+        "com.android.carrierconfig",
+        "com.android.defcontainer",
+        "com.android.mms.service",
+        "com.validation",
+        "com.android.calllogbackup",
+        "com.android.carrierdefaultapp",
+        "com.android.cellbroadcastreceiver",
+        "com.android.egg",
+        "com.android.onetimeinitializer",
+        "com.android.packageinstaller",
+        "com.android.proxyhandler",
+        "android.ext.services",
+        "com.android.statementservice",
+        "com.android.inputdevices",
+        "com.android.externalstorage",
+        "com.example.android.livecubes",
+        "com.android.emergency",
+        "com.android.development_settings",
+        "com.android.bips",
+        "com.android.customlocale2",
+        "com.android.companiondevicemanager",
+        "com.genymotion.systempatcher",
+        "com.android.wallpaperpicker",
+        "com.android.wallpaperbackup",
+        "com.android.wallpapercropper",
+        "com.android.provision",
+        "com.android.cts.priv.ctsshim",
+        "com.android.certinstaller",
+        "com.android.dreams.basic",
+        "com.android.gesture.builder",
+        "com.android.cts.ctsshim",
+        "com.android.captiveportallogin",
+        "com.android.bluetoothmidiservice",
+        "com.android.bluetooth",
+        "com.android.backupconfirm",
+        "com.android.sharedstoragebackup",
+        "com.android.smspush",
+        "om.genymotion.genyd",
+        "com.android.location.fused",
+        "com.android.htmlviewer",
+        "com.android.keychain",
+        "com.android.wallpaper.livepicker",
+        "com.android.nfc",
+        "com.android.localtransport",
+        "jp.co.omronsoft.openwnn",
+        // Providers
+        "com.android.bookmarkprovider",
+        "com.android.providers.media",
+        "com.android.providers.calendar",
+        "com.android.providers.downloads",
+        "com.android.providers.downloads.ui",
+        "com.android.providers.settings",
+        "com.android.providers.telephony",
+        "com.android.providers.userdictionary",
+        "com.android.providers.phone",
+        "com.android.providers.blockednumber",
+        "com.android.providers.contacts",
+        "com.android.providers.media.module",
+        "com.zui.incallui",
+        // Xposed 自身
+        "github.tornaco.xposedmoduletest",
+        "de.robv.android.xposed.installer",
+        // Qualcomm/QTI
+        "com.qualcomm.uimremoteclient",
+        "com.qualcomm.qti.uceShimService",
+        "vendor.qti.hardware.cacert.server",
+        "com.qualcomm.qti.telephonyservice",
+        "vendor.qti.iwlan",
+        "com.qualcomm.uimremoteserver",
+        "com.qti.qualcomm.datastatusnotification",
+        "com.qualcomm.qti.callfeaturessetting",
+        "com.miui.vsimcore",
+        "com.qti.qualcomm.deviceinfo",
+        "com.android.ons",
+        "com.android.stk",
+        "org.codeaurora.ims",
+        "com.qualcomm.qti.dynamicddsservice",
+        "com.qualcomm.qcrilmsgtunnel",
+        "com.qti.dpmserviceapp",
+        "com.qti.xdivert",
+        "com.qualcomm.qti.cne",
+        "com.qualcomm.qti.lpa",
+        "com.qualcomm.qti.uim",
+        "com.qualcomm.qti.uimGbaApp",
+        "vendor.qti.imsrcs",
+        // MIUI/小米
+        "com.miui.securitycore",
+        "com.mobiletools.systemhelper",
+        "com.milink.service",
+        "com.xiaomi.finddevice",
+        "com.miui.contentcatcher",
+        "com.miui.securitycenter",
+        "com.miui.powerkeeper",
+        "com.xiaomi.mirror",
+        "com.xiaomi.NetworkBoost",
+        "com.miui.home",
+        "com.xiaomi.bluetooth",
+        // Google
+        "com.google.android.webview",
+        "com.google.android.ext.services",
+        "com.android.settings",
+        // 其他
+        "com.android.permissioncontroller",
+        "com.qualcomm.qti.devicestatisticsservice",
+        "com.android.se",
+        "com.qti.phone",
+        "com.qualcomm.qti.poweroffalarm",
+        "com.qti.qcc",
+        "com.qualcomm.timeservice"
+    ));
 }

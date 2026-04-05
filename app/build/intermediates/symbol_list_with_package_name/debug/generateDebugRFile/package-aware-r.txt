@@ -1,6 +1,7 @@
 com.android.clipboardguard
 anim dialog_enter
 anim dialog_exit
+array global_whitelist_packages
 array xposed_scope
 color black
 color bottom_nav_color
@@ -42,6 +43,8 @@ color dialog_bg
 color divider_color
 color group_header_bg
 color main_bg
+color nav_selected
+color nav_unselected
 color preview_bg
 color purple_200
 color purple_500
@@ -88,11 +91,14 @@ id app_bar
 id bottom_nav
 id btn_allow
 id btn_deny
+id btn_deselect_all
+id btn_select_all
 id card_status
 id cb_block
 id et_search
 id expandable_list
 id fab_save
+id frameLayout
 id item_about
 id item_license
 id item_theme_dark
@@ -149,12 +155,15 @@ string app_name
 string apps_tip
 string btn_allow
 string btn_deny
+string btn_deselect_all
+string btn_select_all
 string content_preview
 string countdown_format
 string countdown_initial
 string default_value
 string empty_tip
 string fab_save_desc
+string group_core_apps
 string group_expand
 string group_system_apps
 string group_user_apps
@@ -175,6 +184,7 @@ string nav_home
 string nav_log
 string nav_settings
 string permission_message
+string save_no_block
 string save_success
 string search_hint
 string settings_about
@@ -194,12 +204,12 @@ string usage_title
 style ShapeAppearance_ClipboardGuard_LargeComponent
 style ShapeAppearance_ClipboardGuard_MediumComponent
 style ShapeAppearance_ClipboardGuard_SmallComponent
+style TextAppearance_ClipboardGuard_BottomNavLabel
 style TextAppearance_ClipboardGuard_Toolbar
 style Theme_ClipboardGuard
 style Theme_ClipboardGuard_Dialog
 style Theme_Dialog_BottomSheet
 style Theme_Dialog_Transparent
-style Widget_ClipboardGuard_BottomNav_ActiveIndicator
 style Widget_ClipboardGuard_BottomSheet
 xml backup_rules
 xml data_extraction_rules

@@ -7,4 +7,139 @@
         <!-- 本模块：激活状态检测 -->
         <item>com.android.clipboardguard</item>
     </string-array>
+
+    <!--
+        全局系统核心包白名单（来自 Thanox）
+        这些包是系统正常运行所必需的，写剪贴板时直接放行，无需弹窗
+        应用列表中默认隐藏这些包，用户可以在设置中开启「显示系统核心应用」查看
+    -->
+    <string-array name="global_whitelist_packages">
+        <!-- Android 框架核心 -->
+        <item>android</item>
+        <item>com.android.systemui</item>
+        <item>com.android.phone</item>
+        <item>com.android.mtp</item>
+        <item>android.ext.shared</item>
+        <item>com.android.pacprocessor</item>
+        <item>com.android.server.telecom</item>
+        <item>com.android.carrierconfig</item>
+        <item>com.android.defcontainer</item>
+        <item>com.android.mms.service</item>
+        <item>com.validation</item>
+        <item>com.android.calllogbackup</item>
+        <item>com.android.carrierdefaultapp</item>
+        <item>com.android.cellbroadcastreceiver</item>
+        <item>com.android.egg</item>
+        <item>com.android.onetimeinitializer</item>
+        <item>com.android.packageinstaller</item>
+        <item>com.android.proxyhandler</item>
+        <item>android.ext.services</item>
+        <item>com.android.statementservice</item>
+        <item>com.android.inputdevices</item>
+        <item>com.android.externalstorage</item>
+        <item>com.example.android.livecubes</item>
+        <item>com.android.emergency</item>
+        <item>com.android.development_settings</item>
+        <item>com.android.bips</item>
+        <item>com.android.customlocale2</item>
+        <item>com.android.companiondevicemanager</item>
+        <item>com.genymotion.systempatcher</item>
+        <item>com.android.wallpaperpicker</item>
+        <item>com.android.wallpaperbackup</item>
+        <item>com.android.wallpapercropper</item>
+        <item>com.android.provision</item>
+        <item>com.android.cts.priv.ctsshim</item>
+        <item>com.android.certinstaller</item>
+        <item>com.android.dreams.basic</item>
+        <item>com.android.gesture.builder</item>
+        <item>com.android.cts.ctsshim</item>
+        <item>com.android.captiveportallogin</item>
+        <item>com.android.bluetoothmidiservice</item>
+        <item>com.android.bluetooth</item>
+        <item>com.android.backupconfirm</item>
+        <item>com.android.sharedstoragebackup</item>
+        <item>com.android.smspush</item>
+        <item>om.genymotion.genyd</item>
+        <item>com.android.location.fused</item>
+        <item>com.android.htmlviewer</item>
+        <item>com.android.keychain</item>
+        <item>com.android.wallpaper.livepicker</item>
+        <item>com.android.nfc</item>
+        <item>com.android.localtransport</item>
+
+        <!-- OpenWnn 日文输入法 -->
+        <item>jp.co.omronsoft.openwnn</item>
+
+        <!-- Providers -->
+        <item>com.android.bookmarkprovider</item>
+        <item>com.android.providers.media</item>
+        <item>com.android.providers.calendar</item>
+        <item>com.android.providers.downloads</item>
+        <item>com.android.providers.downloads.ui</item>
+        <item>com.android.providers.settings</item>
+        <item>com.android.providers.telephony</item>
+        <item>com.android.providers.userdictionary</item>
+        <item>com.android.providers.phone</item>
+        <item>com.android.providers.blockednumber</item>
+        <item>com.android.providers.contacts</item>
+        <item>com.android.providers.media.module</item>
+
+        <!-- ZUI 联想 -->
+        <item>com.zui.incallui</item>
+
+        <!-- Xposed 自身 -->
+        <item>github.tornaco.xposedmoduletest</item>
+        <item>de.robv.android.xposed.installer</item>
+
+        <!-- Qualcomm/QTI 组件 -->
+        <item>com.qualcomm.uimremoteclient</item>
+        <item>com.qualcomm.qti.uceShimService</item>
+        <item>vendor.qti.hardware.cacert.server</item>
+        <item>com.qualcomm.qti.telephonyservice</item>
+        <item>vendor.qti.iwlan</item>
+        <item>com.qualcomm.uimremoteserver</item>
+        <item>com.qti.qualcomm.datastatusnotification</item>
+        <item>com.qualcomm.qti.callfeaturessetting</item>
+        <item>com.miui.vsimcore</item>
+        <item>com.qti.qualcomm.deviceinfo</item>
+        <item>com.android.ons</item>
+        <item>com.android.stk</item>
+        <item>org.codeaurora.ims</item>
+        <item>com.qualcomm.qti.dynamicddsservice</item>
+        <item>com.qualcomm.qcrilmsgtunnel</item>
+        <item>com.qti.dpmserviceapp</item>
+        <item>com.qti.xdivert</item>
+        <item>com.qualcomm.qti.cne</item>
+        <item>com.qualcomm.qti.lpa</item>
+        <item>com.qualcomm.qti.uim</item>
+        <item>com.qualcomm.qti.uimGbaApp</item>
+        <item>vendor.qti.imsrcs</item>
+
+        <!-- MIUI/小米 -->
+        <item>com.miui.securitycore</item>
+        <item>com.mobiletools.systemhelper</item>
+        <item>com.milink.service</item>
+        <item>com.xiaomi.finddevice</item>
+        <item>com.miui.contentcatcher</item>
+        <item>com.miui.securitycenter</item>
+        <item>com.miui.powerkeeper</item>
+        <item>com.xiaomi.mirror</item>
+        <item>com.xiaomi.NetworkBoost</item>
+        <item>com.miui.home</item>
+        <item>com.xiaomi.bluetooth</item>
+
+        <!-- Google -->
+        <item>com.google.android.webview</item>
+        <item>com.google.android.ext.services</item>
+        <item>com.android.settings</item>
+
+        <!-- 其他 -->
+        <item>com.android.permissioncontroller</item>
+        <item>com.qualcomm.qti.devicestatisticsservice</item>
+        <item>com.android.se</item>
+        <item>com.qti.phone</item>
+        <item>com.qualcomm.qti.poweroffalarm</item>
+        <item>com.qti.qcc</item>
+        <item>com.qualcomm.timeservice</item>
+    </string-array>
 </resources>

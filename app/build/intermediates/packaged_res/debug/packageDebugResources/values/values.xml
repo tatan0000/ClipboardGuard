@@ -1,5 +1,134 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="global_whitelist_packages">
+        
+        <item>android</item>
+        <item>com.android.systemui</item>
+        <item>com.android.phone</item>
+        <item>com.android.mtp</item>
+        <item>android.ext.shared</item>
+        <item>com.android.pacprocessor</item>
+        <item>com.android.server.telecom</item>
+        <item>com.android.carrierconfig</item>
+        <item>com.android.defcontainer</item>
+        <item>com.android.mms.service</item>
+        <item>com.validation</item>
+        <item>com.android.calllogbackup</item>
+        <item>com.android.carrierdefaultapp</item>
+        <item>com.android.cellbroadcastreceiver</item>
+        <item>com.android.egg</item>
+        <item>com.android.onetimeinitializer</item>
+        <item>com.android.packageinstaller</item>
+        <item>com.android.proxyhandler</item>
+        <item>android.ext.services</item>
+        <item>com.android.statementservice</item>
+        <item>com.android.inputdevices</item>
+        <item>com.android.externalstorage</item>
+        <item>com.example.android.livecubes</item>
+        <item>com.android.emergency</item>
+        <item>com.android.development_settings</item>
+        <item>com.android.bips</item>
+        <item>com.android.customlocale2</item>
+        <item>com.android.companiondevicemanager</item>
+        <item>com.genymotion.systempatcher</item>
+        <item>com.android.wallpaperpicker</item>
+        <item>com.android.wallpaperbackup</item>
+        <item>com.android.wallpapercropper</item>
+        <item>com.android.provision</item>
+        <item>com.android.cts.priv.ctsshim</item>
+        <item>com.android.certinstaller</item>
+        <item>com.android.dreams.basic</item>
+        <item>com.android.gesture.builder</item>
+        <item>com.android.cts.ctsshim</item>
+        <item>com.android.captiveportallogin</item>
+        <item>com.android.bluetoothmidiservice</item>
+        <item>com.android.bluetooth</item>
+        <item>com.android.backupconfirm</item>
+        <item>com.android.sharedstoragebackup</item>
+        <item>com.android.smspush</item>
+        <item>om.genymotion.genyd</item>
+        <item>com.android.location.fused</item>
+        <item>com.android.htmlviewer</item>
+        <item>com.android.keychain</item>
+        <item>com.android.wallpaper.livepicker</item>
+        <item>com.android.nfc</item>
+        <item>com.android.localtransport</item>
+
+        
+        <item>jp.co.omronsoft.openwnn</item>
+
+        
+        <item>com.android.bookmarkprovider</item>
+        <item>com.android.providers.media</item>
+        <item>com.android.providers.calendar</item>
+        <item>com.android.providers.downloads</item>
+        <item>com.android.providers.downloads.ui</item>
+        <item>com.android.providers.settings</item>
+        <item>com.android.providers.telephony</item>
+        <item>com.android.providers.userdictionary</item>
+        <item>com.android.providers.phone</item>
+        <item>com.android.providers.blockednumber</item>
+        <item>com.android.providers.contacts</item>
+        <item>com.android.providers.media.module</item>
+
+        
+        <item>com.zui.incallui</item>
+
+        
+        <item>github.tornaco.xposedmoduletest</item>
+        <item>de.robv.android.xposed.installer</item>
+
+        
+        <item>com.qualcomm.uimremoteclient</item>
+        <item>com.qualcomm.qti.uceShimService</item>
+        <item>vendor.qti.hardware.cacert.server</item>
+        <item>com.qualcomm.qti.telephonyservice</item>
+        <item>vendor.qti.iwlan</item>
+        <item>com.qualcomm.uimremoteserver</item>
+        <item>com.qti.qualcomm.datastatusnotification</item>
+        <item>com.qualcomm.qti.callfeaturessetting</item>
+        <item>com.miui.vsimcore</item>
+        <item>com.qti.qualcomm.deviceinfo</item>
+        <item>com.android.ons</item>
+        <item>com.android.stk</item>
+        <item>org.codeaurora.ims</item>
+        <item>com.qualcomm.qti.dynamicddsservice</item>
+        <item>com.qualcomm.qcrilmsgtunnel</item>
+        <item>com.qti.dpmserviceapp</item>
+        <item>com.qti.xdivert</item>
+        <item>com.qualcomm.qti.cne</item>
+        <item>com.qualcomm.qti.lpa</item>
+        <item>com.qualcomm.qti.uim</item>
+        <item>com.qualcomm.qti.uimGbaApp</item>
+        <item>vendor.qti.imsrcs</item>
+
+        
+        <item>com.miui.securitycore</item>
+        <item>com.mobiletools.systemhelper</item>
+        <item>com.milink.service</item>
+        <item>com.xiaomi.finddevice</item>
+        <item>com.miui.contentcatcher</item>
+        <item>com.miui.securitycenter</item>
+        <item>com.miui.powerkeeper</item>
+        <item>com.xiaomi.mirror</item>
+        <item>com.xiaomi.NetworkBoost</item>
+        <item>com.miui.home</item>
+        <item>com.xiaomi.bluetooth</item>
+
+        
+        <item>com.google.android.webview</item>
+        <item>com.google.android.ext.services</item>
+        <item>com.android.settings</item>
+
+        
+        <item>com.android.permissioncontroller</item>
+        <item>com.qualcomm.qti.devicestatisticsservice</item>
+        <item>com.android.se</item>
+        <item>com.qti.phone</item>
+        <item>com.qualcomm.qti.poweroffalarm</item>
+        <item>com.qti.qcc</item>
+        <item>com.qualcomm.timeservice</item>
+    </string-array>
     <string-array name="xposed_scope">
         
         <item>android</item>
@@ -45,12 +174,14 @@
     <color name="divider_color">#C6C6C8</color>
     <color name="group_header_bg">#EEF2F7</color>
     <color name="main_bg">#F2F2F7</color>
+    <color name="nav_selected">#2196F3</color>
+    <color name="nav_unselected">#9E9E9E</color>
     <color name="preview_bg">#F2F2F7</color>
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
-    <color name="status_active">#34C759</color>
-    <color name="status_inactive">#8E8E93</color>
+    <color name="status_active">#4CAF50</color>
+    <color name="status_inactive">#F44336</color>
     <color name="teal_200">#FF03DAC5</color>
     <color name="teal_700">#FF018786</color>
     <color name="text_hint">#AEAEB2</color>
@@ -63,12 +194,15 @@
     <string name="apps_tip">勾选 = 拦截（写剪贴板时弹窗询问），未勾选 = 放行</string>
     <string name="btn_allow">允许</string>
     <string name="btn_deny">拒绝</string>
+    <string name="btn_deselect_all">全不选</string>
+    <string name="btn_select_all">全选</string>
     <string name="content_preview">内容预览：%s</string>
     <string name="countdown_format">%ds</string>
     <string name="countdown_initial">4s</string>
     <string name="default_value">--</string>
     <string name="empty_tip">未找到匹配的应用</string>
     <string name="fab_save_desc">保存配置</string>
+    <string name="group_core_apps">系统核心</string>
     <string name="group_expand">▼</string>
     <string name="group_system_apps">系统应用</string>
     <string name="group_user_apps">用户应用</string>
@@ -89,7 +223,8 @@
     <string name="nav_log">日志</string>
     <string name="nav_settings">设置</string>
     <string name="permission_message">"%s" 正在尝试写入剪贴板，是否允许？</string>
-    <string name="save_success">配置已保存</string>
+    <string name="save_no_block">已保存，未拦截任何应用</string>
+    <string name="save_success">已保存，拦截 %d 个应用</string>
     <string name="search_hint">搜索应用名或包名…</string>
     <string name="settings_about">关于</string>
     <string name="settings_about_module">关于模块</string>
@@ -116,6 +251,9 @@
     <style name="ShapeAppearance.ClipboardGuard.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">8dp</item>
+    </style>
+    <style name="TextAppearance.ClipboardGuard.BottomNavLabel" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">10sp</item>
     </style>
     <style name="TextAppearance.ClipboardGuard.Toolbar" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textSize">18sp</item>
@@ -180,9 +318,6 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:backgroundDimAmount">0.5</item>
-    </style>
-    <style name="Widget.ClipboardGuard.BottomNav.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">?attr/colorPrimaryContainer</item>
     </style>
     <style name="Widget.ClipboardGuard.BottomSheet" parent="Widget.Material3.BottomSheet">
         <item name="backgroundTint">@color/color_surface</item>

@@ -84,4 +84,9 @@
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
     </style>
+
+    <!-- ===== 底部导航 ===== -->
+    <style name="TextAppearance.ClipboardGuard.BottomNavLabel" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">10sp</item>
+    </style>
 </resources>

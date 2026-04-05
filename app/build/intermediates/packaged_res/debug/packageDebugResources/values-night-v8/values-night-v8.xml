@@ -39,6 +39,8 @@
     <color name="divider_color">#38383A</color>
     <color name="group_header_bg">#2C2C2E</color>
     <color name="main_bg">#000000</color>
+    <color name="nav_selected">#2196F3</color>
+    <color name="nav_unselected">#B0B0B0</color>
     <color name="preview_bg">#2C2C2E</color>
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
@@ -63,6 +65,9 @@
     <style name="ShapeAppearance.ClipboardGuard.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">8dp</item>
+    </style>
+    <style name="TextAppearance.ClipboardGuard.BottomNavLabel" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">10sp</item>
     </style>
     <style name="Theme.ClipboardGuard" parent="Theme.Material3.DayNight.NoActionBar">
         

@@ -1,0 +1,231 @@
+name: PR Check - Code Quality Gate
+
+# 仅在 PR 时触发，作为合并前的质量门控
+on:
+  pull_request:
+    branches: [ main, dev, develop ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/FUNDING.yml'
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────
+  # 快速检查：APK 大小、依赖变化、安全扫描
+  # ──────────────────────────────────────────────
+  quick-checks:
+    name: Quick Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+
+      # 检查是否有硬编码敏感信息
+      - name: Scan for secrets / hardcoded credentials
+        run: |
+          echo "Scanning for potential secrets..."
+          FOUND=0
+          # 检查常见的硬编码敏感字符串（排除注释行和 strings.xml 的展示用途）
+          PATTERNS=(
+            'password\s*=\s*"[^"]+'
+            'api_key\s*=\s*"[^"]+'
+            'secret\s*=\s*"[^"]+'
+            'BEGIN RSA PRIVATE KEY'
+            'BEGIN PRIVATE KEY'
+          )
+          for pattern in "${PATTERNS[@]}"; do
+            result=$(grep -rn --include="*.java" --include="*.kt" --include="*.xml" \
+              -iE "${pattern}" app/src/ 2>/dev/null \
+              | grep -v '//.*password' | grep -v '<!--' || true)
+            if [ -n "${result}" ]; then
+              echo "::warning::Potential secret found matching '${pattern}':"
+              echo "${result}"
+              FOUND=1
+            fi
+          done
+          if [ "${FOUND}" -eq 0 ]; then
+            echo "✅ No obvious hardcoded secrets found."
+          fi
+
+      # 检查 XposedBridgeAPI 版本一致性
+      - name: Check XposedBridgeAPI version consistency
+        run: |
+          JAR_VERSION=$(ls app/libs/XposedBridgeAPI-*.jar 2>/dev/null | grep -oP '\d+' | head -1 || echo "unknown")
+          MANIFEST_VERSION=$(grep 'xposedminversion' app/src/main/AndroidManifest.xml \
+            | grep -oP '\d+' || echo "unknown")
+          echo "Jar version: ${JAR_VERSION}, Manifest minversion: ${MANIFEST_VERSION}"
+          if [ "${JAR_VERSION}" != "unknown" ] && [ "${MANIFEST_VERSION}" != "unknown" ]; then
+            if [ "${JAR_VERSION}" != "${MANIFEST_VERSION}" ]; then
+              echo "::warning::XposedBridgeAPI jar version (${JAR_VERSION}) != xposedminversion (${MANIFEST_VERSION})"
+            else
+              echo "✅ XposedBridgeAPI version consistent: ${JAR_VERSION}"
+            fi
+          fi
+
+  # ──────────────────────────────────────────────
+  # 编译验证：确保 PR 代码能成功编译
+  # ──────────────────────────────────────────────
+  compile-check:
+    name: Compile Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Ensure XposedBridgeAPI jar
+        run: |
+          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
+            mkdir -p app/libs
+            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
+              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar" || true
+          fi
+
+      - name: Compile Debug (compileDebugJavaWithJavac)
+        run: ./gradlew compileDebugJavaWithJavac --stacktrace
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-test-failure-${{ github.event.pull_request.number }}
+          path: app/build/reports/tests/
+          retention-days: 3
+
+  # ──────────────────────────────────────────────
+  # APK 大小检查：防止无意间引入过大依赖
+  # ──────────────────────────────────────────────
+  apk-size-check:
+    name: APK Size Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: compile-check
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Restore Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Ensure XposedBridgeAPI jar
+        run: |
+          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
+            mkdir -p app/libs
+            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
+              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar" || true
+          fi
+
+      - name: Build Debug APK for size analysis
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Check APK size
+        id: apk_size
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          SIZE_BYTES=$(stat -c%s "${APK}")
+          SIZE_KB=$((SIZE_BYTES / 1024))
+          SIZE_MB=$(echo "scale=2; ${SIZE_BYTES}/1048576" | bc)
+          echo "size_bytes=${SIZE_BYTES}" >> $GITHUB_OUTPUT
+          echo "size_kb=${SIZE_KB}" >> $GITHUB_OUTPUT
+          echo "size_mb=${SIZE_MB}" >> $GITHUB_OUTPUT
+          echo "apk_path=${APK}" >> $GITHUB_OUTPUT
+          echo "APK size: ${SIZE_MB} MB (${SIZE_KB} KB)"
+
+          # Xposed 模块警告阈值：超过 10MB 发出警告
+          if [ "${SIZE_KB}" -gt 10240 ]; then
+            echo "::warning::APK size (${SIZE_MB} MB) exceeds 10MB threshold for an Xposed module. Consider checking for large assets."
+          else
+            echo "✅ APK size (${SIZE_MB} MB) is within acceptable range."
+          fi
+
+      # 在 PR 评论中汇报大小信息
+      - name: Comment APK size on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sizeMB   = '${{ steps.apk_size.outputs.size_mb }}';
+            const sizeKB   = '${{ steps.apk_size.outputs.size_kb }}';
+            const warn     = parseInt(sizeKB) > 10240;
+            const icon     = warn ? '⚠️' : '✅';
+            const body = [
+              '## 📦 APK 大小报告',
+              `| 指标 | 数值 |`,
+              `|------|------|`,
+              `| Debug APK 大小 | ${icon} **${sizeMB} MB** (${sizeKB} KB) |`,
+              warn
+                ? '\n> ⚠️ APK 超过 10MB，对于 Xposed 模块较大，请检查是否引入了不必要的资源或依赖。'
+                : '\n> ✅ APK 大小正常，适合 Xposed 模块分发。'
+            ].join('\n');
+
+            // 查找是否已有同类评论（避免重复）
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes('APK 大小报告')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                comment_id: existing.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }

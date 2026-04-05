@@ -96,7 +96,8 @@
     </style>
 
     <!-- ===== 底部导航 ===== -->
-    <style name="Widget.ClipboardGuard.BottomNav.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">?attr/colorPrimaryContainer</item>
+    <style name="TextAppearance.ClipboardGuard.BottomNavLabel" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">10sp</item>
     </style>
+
 </resources>

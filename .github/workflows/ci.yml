@@ -1,0 +1,182 @@
+name: CI - Build & Test
+
+# 触发条件：push 到 main/dev 分支，或向这些分支发起 PR
+on:
+  push:
+    branches: [ main, dev, develop ]
+    paths-ignore:
+      - '**.md'
+      - '.github/FUNDING.yml'
+      - 'docs/**'
+  pull_request:
+    branches: [ main, dev, develop ]
+    paths-ignore:
+      - '**.md'
+
+# 并发控制：同一分支只保留最新一次运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 构建缓存键
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: 单元测试 + Debug 构建
+  # ──────────────────────────────────────────────
+  build-and-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 完整历史，供 lint 做增量分析
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # ── Gradle 依赖缓存 ──
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            .gradle/
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ── XposedBridgeAPI jar（不提交到 git 时从 release 下载）──
+      # 若已提交到 app/libs/ 则删除此步骤
+      - name: Check XposedBridgeAPI jar
+        run: |
+          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
+            echo "::warning::XposedBridgeAPI-82.jar not found in app/libs/, downloading..."
+            mkdir -p app/libs
+            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
+              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar" \
+              || echo "::warning::Download failed, build may fail if jar is missing"
+          else
+            echo "XposedBridgeAPI-82.jar found."
+          fi
+
+      # ── 运行单元测试 ──
+      - name: Run unit tests
+        run: ./gradlew test --stacktrace
+
+      # ── 上传测试报告 ──
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+
+      # ── Debug 构建（验证编译可通过）──
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      # ── 上传 Debug APK ──
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+
+  # ──────────────────────────────────────────────
+  # Job 2: Android Lint 检查
+  # ──────────────────────────────────────────────
+  lint:
+    name: Android Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-and-test   # Lint 在构建通过后才跑，节省资源
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Restore Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Check XposedBridgeAPI jar
+        run: |
+          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
+            mkdir -p app/libs
+            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
+              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar" \
+              || true
+          fi
+
+      - name: Run Android Lint
+        run: ./gradlew lintDebug --stacktrace
+
+      - name: Upload Lint results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+          retention-days: 7
+
+      # 在 PR 评论中显示 Lint 摘要
+      - name: Lint summary comment (PR only)
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const xmlPath = 'app/build/reports/lint-results-debug.xml';
+            if (!fs.existsSync(xmlPath)) return;
+            const xml = fs.readFileSync(xmlPath, 'utf8');
+            const errors   = (xml.match(/severity="Error"/g)   || []).length;
+            const warnings = (xml.match(/severity="Warning"/g) || []).length;
+            const body = [
+              '## 🔍 Android Lint 检查结果',
+              `| 级别 | 数量 |`,
+              `|------|------|`,
+              `| ❌ Error   | ${errors}   |`,
+              `| ⚠️ Warning | ${warnings} |`,
+              errors > 0
+                ? '\n> **存在 Lint Error，请修复后合并。**'
+                : '\n> ✅ 无 Error，可以合并。'
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });

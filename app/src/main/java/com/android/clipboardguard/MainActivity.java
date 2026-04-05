@@ -26,7 +26,9 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ExpandableListView;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
+import com.google.android.material.button.MaterialButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,14 +36,16 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.bottomnavigation.BottomNavigationView;
+
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.android.clipboardguard.R;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -68,6 +72,7 @@ public class MainActivity extends AppCompatActivity {
     // 分组索引
     private static final int GROUP_USER   = 0;
     private static final int GROUP_SYSTEM = 1;
+    private static final int GROUP_CORE   = 2;
 
     // 页面索引
     public static final int PAGE_HOME     = 0;
@@ -87,8 +92,13 @@ public class MainActivity extends AppCompatActivity {
     private View mPageApps;
     private View mPageLog;
     private View mPageSettings;
-    private BottomNavigationView mBottomNav;
     private FloatingActionButton mFab;
+    // 底部导航
+    private LinearLayout mBottomNav;
+    private LinearLayout mNavHome;
+    private LinearLayout mNavApps;
+    private LinearLayout mNavLog;
+    private LinearLayout mNavSettings;
     private ExpandableListView mExpandableListView;
     private EditText mEtSearch;
     private TextView mTvStatusTitle;
@@ -105,8 +115,10 @@ public class MainActivity extends AppCompatActivity {
     private AppGroupAdapter mAdapter;
     private final List<AppItem> mUserApps   = new ArrayList<>();
     private final List<AppItem> mSystemApps = new ArrayList<>();
+    private final List<AppItem> mCoreApps   = new ArrayList<>();
     private final List<AppItem> mFilteredUser   = new ArrayList<>();
     private final List<AppItem> mFilteredSystem = new ArrayList<>();
+    private final List<AppItem> mFilteredCore    = new ArrayList<>();
     private String mCurrentQuery = "";
 
     // 用于记录「本次操作里修改过的项」（包名→新状态），FAB 保存时批量写入
@@ -121,9 +133,6 @@ public class MainActivity extends AppCompatActivity {
 
         // 单例
         sInstance = this;
-
-        // 启用边缘到边缘显示
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         setContentView(R.layout.activity_main);
 
@@ -146,24 +155,17 @@ public class MainActivity extends AppCompatActivity {
         });
         ViewCompat.requestApplyInsets(toolbarView);
 
-        // 底部导航栏避让导航栏
-        View bottomNav = findViewById(R.id.bottom_nav);
-        if (bottomNav != null) {
-            ViewCompat.setOnApplyWindowInsetsListener(bottomNav, (v, insets) -> {
-                int navH = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
-                v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), navH);
-                return insets;
-            });
-            ViewCompat.requestApplyInsets(bottomNav);
-        }
-
         // 找 View
         mPageHome     = findViewById(R.id.page_home);
         mPageApps    = findViewById(R.id.page_apps);
         mPageLog    = findViewById(R.id.page_log);
         mPageSettings = findViewById(R.id.page_settings);
-        mBottomNav = findViewById(R.id.bottom_nav);
         mFab       = findViewById(R.id.fab_save);
+        mBottomNav = findViewById(R.id.bottom_nav);
+        mNavHome   = findViewById(R.id.nav_home);
+        mNavApps   = findViewById(R.id.nav_apps);
+        mNavLog    = findViewById(R.id.nav_log);
+        mNavSettings = findViewById(R.id.nav_settings);
 
         mTvStatusTitle    = findViewById(R.id.tv_status_title);
         mTvStatusDesc     = findViewById(R.id.tv_status_desc);
@@ -175,8 +177,21 @@ public class MainActivity extends AppCompatActivity {
         mTvManufacturer     = findViewById(R.id.tv_manufacturer);
         mTvModel            = findViewById(R.id.tv_model);
 
+
         mEtSearch          = findViewById(R.id.et_search);
         mExpandableListView = findViewById(R.id.expandable_list);
+
+        // 全选/反选按钮
+        MaterialButton btnSelectAll = findViewById(R.id.btn_select_all);
+        MaterialButton btnDeselectAll = findViewById(R.id.btn_deselect_all);
+        btnSelectAll.setOnClickListener(v -> {
+            setAllAppsBlocked(true);
+            mAdapter.notifyDataSetChanged();
+        });
+        btnDeselectAll.setOnClickListener(v -> {
+            setAllAppsBlocked(false);
+            mAdapter.notifyDataSetChanged();
+        });
 
         // 初始化状态页信息
         initHomePage();
@@ -189,6 +204,9 @@ public class MainActivity extends AppCompatActivity {
         mExpandableListView.setOnChildClickListener((parent, v, groupPos, childPos, id) -> {
             AppItem item = getItem(groupPos, childPos);
             if (item == null) return false;
+
+            // 系统核心包不可更改
+            if (item.isCore) return false;
 
             // 切换勾选状态（勾选 = 拦截）
             item.isBlocked = !item.isBlocked;
@@ -215,42 +233,38 @@ public class MainActivity extends AppCompatActivity {
         mFab.setOnClickListener(v -> saveChanges());
 
         // 底部导航（4页：首页、应用、日志、设置）
-        mBottomNav.setOnItemSelectedListener(item -> {
-            int id = item.getItemId();
+        View.OnClickListener navClickListener = v -> {
+            int id = v.getId();
             if (id == R.id.nav_home) {
                 showPage(PAGE_HOME);
-                return true;
             } else if (id == R.id.nav_apps) {
                 showPage(PAGE_APPS);
-                return true;
             } else if (id == R.id.nav_log) {
                 showPage(PAGE_LOG);
-                return true;
             } else if (id == R.id.nav_settings) {
                 showPage(PAGE_SETTINGS);
-                return true;
             }
-            return false;
-        });
+        };
+        mNavHome.setOnClickListener(navClickListener);
+        mNavApps.setOnClickListener(navClickListener);
+        mNavLog.setOnClickListener(navClickListener);
+        mNavSettings.setOnClickListener(navClickListener);
 
-        // 默认显示首页（必须在 setOnItemSelectedListener 之后设置，否则重建时导航状态会错乱）
-        // 根据保存的页面索引恢复（recreate 后也能保持）
-        int targetNavId;
+        // 根据保存的页面索引恢复
         switch (sCurrentPage) {
             case PAGE_APPS:
-                targetNavId = R.id.nav_apps;
+                showPage(PAGE_APPS);
                 break;
             case PAGE_LOG:
-                targetNavId = R.id.nav_log;
+                showPage(PAGE_LOG);
                 break;
             case PAGE_SETTINGS:
-                targetNavId = R.id.nav_settings;
+                showPage(PAGE_SETTINGS);
                 break;
             default:
-                targetNavId = R.id.nav_home;
+                showPage(PAGE_HOME);
                 break;
         }
-        mBottomNav.setSelectedItemId(targetNavId);
 
         // 加载应用列表（后台）
         loadAppsAsync();
@@ -286,9 +300,6 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // 初始化主题RadioButton状态
-        initThemeRadioButtons();
-
         // 关于模块点击
         View itemAbout = findViewById(R.id.item_about);
         if (itemAbout != null) {
@@ -303,7 +314,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         // 如果已加载过，刷新权限（防止外部改动）
-        if (!mUserApps.isEmpty() || !mSystemApps.isEmpty()) {
+        if (!mUserApps.isEmpty() || !mSystemApps.isEmpty() || !mCoreApps.isEmpty()) {
             refreshPermissions();
         }
     }
@@ -313,6 +324,14 @@ public class MainActivity extends AppCompatActivity {
     private void showPage(int page) {
         // 保存当前页（用于 recreate 后恢复）
         sCurrentPage = page;
+
+        // 离开应用页时，丢弃未保存的更改
+        if (!mPendingChanges.isEmpty()) {
+            mPendingChanges.clear();
+            // 恢复所有应用到已保存的状态
+            refreshPermissions();
+            if (mAdapter != null) mAdapter.notifyDataSetChanged();
+        }
 
         // 先隐藏全部
         mPageHome.setVisibility(View.GONE);
@@ -358,6 +377,20 @@ public class MainActivity extends AppCompatActivity {
                 toolbar.setTitle(R.string.nav_settings);
                 break;
         }
+
+        // 更新底部导航图标和文字颜色
+        int selectedColor = getColor(R.color.nav_selected);
+        int unselectedColor = getColor(R.color.nav_unselected);
+        // 图标
+        ((ImageView) mNavHome.getChildAt(0)).setColorFilter(page == PAGE_HOME ? selectedColor : unselectedColor);
+        ((ImageView) mNavApps.getChildAt(0)).setColorFilter(page == PAGE_APPS ? selectedColor : unselectedColor);
+        ((ImageView) mNavLog.getChildAt(0)).setColorFilter(page == PAGE_LOG ? selectedColor : unselectedColor);
+        ((ImageView) mNavSettings.getChildAt(0)).setColorFilter(page == PAGE_SETTINGS ? selectedColor : unselectedColor);
+        // 文字
+        ((TextView) mNavHome.getChildAt(1)).setTextColor(page == PAGE_HOME ? selectedColor : unselectedColor);
+        ((TextView) mNavApps.getChildAt(1)).setTextColor(page == PAGE_APPS ? selectedColor : unselectedColor);
+        ((TextView) mNavLog.getChildAt(1)).setTextColor(page == PAGE_LOG ? selectedColor : unselectedColor);
+        ((TextView) mNavSettings.getChildAt(1)).setTextColor(page == PAGE_SETTINGS ? selectedColor : unselectedColor);
     }
 
     // ──────────────────────────── 首页初始化 ────────────────────────────
@@ -591,9 +624,32 @@ public class MainActivity extends AppCompatActivity {
         }.execute();
     }
 
+    /** 从资源读取系统核心包白名单（来自 Thanox global_white_list.xml），用于 UI 过滤 */
+    private static HashSet<String> sCorePackages;
+
+    /** 初始化系统核心包白名单（只在主线程调用一次） */
+    private void initCorePackages() {
+        if (sCorePackages != null) return;
+        sCorePackages = new HashSet<>();
+        String[] arr = getResources().getStringArray(R.array.global_whitelist_packages);
+        Collections.addAll(sCorePackages, arr);
+    }
+
+    /** 判断是否是应该从列表中排除的系统核心包（精确匹配或子包匹配） */
+    private boolean isCoreSystemPackage(String pkgName) {
+        initCorePackages();
+        if (sCorePackages.contains(pkgName)) return true;
+        // 支持子包前缀匹配（如 com.android.systemui.*）
+        for (String core : sCorePackages) {
+            if (pkgName.startsWith(core + ".")) return true;
+        }
+        return false;
+    }
+
     private void loadAllApps() {
         mUserApps.clear();
         mSystemApps.clear();
+        mCoreApps.clear();
 
         PackageManager pm = getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
@@ -610,10 +666,13 @@ public class MainActivity extends AppCompatActivity {
         for (ApplicationInfo info : apps) {
             if (modulePkg.equals(info.packageName)) continue;
 
+            boolean isCore = isCoreSystemPackage(info.packageName);
+
             AppItem item = new AppItem();
             item.packageName = info.packageName;
             item.appName     = pm.getApplicationLabel(info).toString();
             item.isSystem    = (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+            item.isCore      = isCore;
             try {
                 item.icon = pm.getApplicationIcon(info);
             } catch (Throwable e) {
@@ -625,7 +684,10 @@ public class MainActivity extends AppCompatActivity {
             Integer saved = permMap.get(item.packageName);
             item.isBlocked = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
 
-            if (item.isSystem) {
+            if (isCore) {
+                // 系统核心包单独一组，置灰不可改
+                mCoreApps.add(item);
+            } else if (item.isSystem) {
                 mSystemApps.add(item);
             } else {
                 mUserApps.add(item);
@@ -646,6 +708,7 @@ public class MainActivity extends AppCompatActivity {
             }
             return a.appName.compareToIgnoreCase(b.appName);
         });
+        Collections.sort(mCoreApps, (a, b) -> a.appName.compareToIgnoreCase(b.appName));
     }
 
     /** 刷新权限状态（不重新枚举包，仅更新状态字段），同时把 pendingChanges 合并进来 */
@@ -673,22 +736,32 @@ public class MainActivity extends AppCompatActivity {
                         == PermissionStorage.PERMISSION_BLOCK);
             }
         }
+        // 核心包不参与 pendingChanges，但同步权限状态
+        for (AppItem item : mCoreApps) {
+            Integer saved = permMap.get(item.packageName);
+            item.isBlocked = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+        }
         applyFilter();
     }
 
     private void applyFilter() {
         mFilteredUser.clear();
         mFilteredSystem.clear();
+        mFilteredCore.clear();
 
         if (mCurrentQuery.isEmpty()) {
             mFilteredUser.addAll(mUserApps);
             mFilteredSystem.addAll(mSystemApps);
+            mFilteredCore.addAll(mCoreApps);
         } else {
             for (AppItem item : mUserApps) {
                 if (matches(item, mCurrentQuery)) mFilteredUser.add(item);
             }
             for (AppItem item : mSystemApps) {
                 if (matches(item, mCurrentQuery)) mFilteredSystem.add(item);
+            }
+            for (AppItem item : mCoreApps) {
+                if (matches(item, mCurrentQuery)) mFilteredCore.add(item);
             }
         }
 
@@ -697,6 +770,7 @@ public class MainActivity extends AppCompatActivity {
             if (!mCurrentQuery.isEmpty()) {
                 mExpandableListView.expandGroup(GROUP_USER);
                 mExpandableListView.expandGroup(GROUP_SYSTEM);
+                mExpandableListView.expandGroup(GROUP_CORE);
             }
         });
     }
@@ -707,9 +781,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private AppItem getItem(int groupPos, int childPos) {
-        if (groupPos == GROUP_USER   && childPos < mFilteredUser.size())   return mFilteredUser.get(childPos);
+        if (groupPos == GROUP_USER   && childPos < mFilteredUser.size())    return mFilteredUser.get(childPos);
         if (groupPos == GROUP_SYSTEM && childPos < mFilteredSystem.size()) return mFilteredSystem.get(childPos);
+        if (groupPos == GROUP_CORE   && childPos < mFilteredCore.size())    return mFilteredCore.get(childPos);
         return null;
+    }
+
+    // ──────────────────────────── 全选/全不选 ────────────────────────────
+
+    /** 将所有（全量，非仅过滤后）应用设为拦截或放行，并记录到 pending（核心包除外） */
+    private void setAllAppsBlocked(boolean blocked) {
+        int perm = blocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        for (AppItem item : mUserApps) {
+            item.isBlocked = blocked;
+            mPendingChanges.put(item.packageName, perm);
+        }
+        for (AppItem item : mSystemApps) {
+            item.isBlocked = blocked;
+            mPendingChanges.put(item.packageName, perm);
+        }
+        // 核心包不参与全选/全不选操作
+        applyFilter();
     }
 
     // ──────────────────────────── 保存 ────────────────────────────
@@ -722,17 +814,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         for (Map.Entry<String, Integer> entry : mPendingChanges.entrySet()) {
-            // 使用 PermissionStorage.setPermission() 同时写入所有存储位置
-            // 确保 Hook 端通过 SharedPreferences fallback 也能读到正确的值
             PermissionStorage.setPermission(this, entry.getKey(), entry.getValue());
         }
-
-        int count = mPendingChanges.size();
         mPendingChanges.clear();
 
-        Toast.makeText(this,
-                getString(R.string.save_success) + "（" + count + " 个应用）",
-                Toast.LENGTH_SHORT).show();
+        // 统计保存后所有拦截应用的总数
+        int blockedCount = 0;
+        for (AppItem item : mUserApps) {
+            if (item.isBlocked) blockedCount++;
+        }
+        for (AppItem item : mSystemApps) {
+            if (item.isBlocked) blockedCount++;
+        }
+        // 核心包不计入保存计数（核心包不参与 pendingChanges）
+
+        String msg = blockedCount > 0
+                ? getString(R.string.save_success, blockedCount)
+                : getString(R.string.save_no_block);
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 
     // ──────────────────────────── 数据模型 ────────────────────────────
@@ -742,6 +841,7 @@ public class MainActivity extends AppCompatActivity {
         String   appName;
         Drawable icon;
         boolean  isSystem;
+        boolean  isCore;    // 是否为系统核心包（置灰，不可更改）
         boolean  isBlocked; // true=拦截(勾选), false=放行(不勾选)
     }
 
@@ -749,11 +849,13 @@ public class MainActivity extends AppCompatActivity {
 
     class AppGroupAdapter extends BaseExpandableListAdapter {
 
-        @Override public int getGroupCount() { return 2; }
+        @Override public int getGroupCount() { return 3; }
 
         @Override
         public int getChildrenCount(int groupPos) {
-            return groupPos == GROUP_USER ? mFilteredUser.size() : mFilteredSystem.size();
+            if (groupPos == GROUP_USER)   return mFilteredUser.size();
+            if (groupPos == GROUP_SYSTEM) return mFilteredSystem.size();
+            return mFilteredCore.size();
         }
 
         @Override public Object getGroup(int gp)              { return gp; }
@@ -761,7 +863,11 @@ public class MainActivity extends AppCompatActivity {
         @Override public long   getGroupId(int gp)            { return gp; }
         @Override public long   getChildId(int gp, int cp)    { return cp; }
         @Override public boolean hasStableIds()               { return false; }
-        @Override public boolean isChildSelectable(int gp, int cp) { return true; }
+        @Override public boolean isChildSelectable(int gp, int cp) {
+            // 核心包不可选中/不可点击
+            if (gp == GROUP_CORE) return false;
+            return true;
+        }
 
         @Override
         public View getGroupView(int groupPos, boolean isExpanded, View convertView, ViewGroup parent) {
@@ -775,18 +881,25 @@ public class MainActivity extends AppCompatActivity {
             }
 
             boolean isUser = (groupPos == GROUP_USER);
-            int count      = isUser ? mFilteredUser.size() : mFilteredSystem.size();
+            boolean isCore = (groupPos == GROUP_CORE);
+            int count = isCore ? mFilteredCore.size()
+                    : isUser ? mFilteredUser.size() : mFilteredSystem.size();
             int blockedCount = 0;
-            List<AppItem> list = isUser ? mFilteredUser : mFilteredSystem;
+            List<AppItem> list = isCore ? mFilteredCore
+                    : isUser ? mFilteredUser : mFilteredSystem;
             for (AppItem item : list) {
                 if (item.isBlocked) blockedCount++;
             }
 
             holder.tvArrow.setText(isExpanded ? "▲" : "▼");
-            holder.tvTitle.setText((isUser ? getString(R.string.group_user_apps)
-                                           : getString(R.string.group_system_apps))
-                    + "  " + count + " 个"
-                    + (blockedCount > 0 ? "（拦截 " + blockedCount + "）" : ""));
+            if (isCore) {
+                holder.tvTitle.setText(getString(R.string.group_core_apps) + "  " + count + " 个（不可更改）🔒");
+            } else {
+                holder.tvTitle.setText((isUser ? getString(R.string.group_user_apps)
+                                               : getString(R.string.group_system_apps))
+                        + "  " + count + " 个"
+                        + (blockedCount > 0 ? "（拦截 " + blockedCount + "）" : ""));
+            }
             return convertView;
         }
 
@@ -809,8 +922,16 @@ public class MainActivity extends AppCompatActivity {
             holder.tvName.setText(item.appName);
             holder.tvPkg.setText(item.packageName);
 
-            // 勾选 = 拦截
+            // 勾选 = 拦截；核心包置灰不可改
             holder.cbBlock.setChecked(item.isBlocked);
+            holder.cbBlock.setEnabled(!item.isCore);
+            holder.tvName.setEnabled(!item.isCore);
+            holder.tvPkg.setEnabled(!item.isCore);
+            if (item.isCore) {
+                holder.tvPkg.setText(item.packageName + "  🔒");
+            } else {
+                holder.tvPkg.setText(item.packageName);
+            }
 
             return convertView;
         }

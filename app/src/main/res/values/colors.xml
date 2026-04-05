@@ -66,11 +66,13 @@
     <color name="btn_pressed_bg">#F2F2F7</color>
 
     <!-- 状态 -->
-    <color name="status_active">#34C759</color>
-    <color name="status_inactive">#8E8E93</color>
+    <color name="status_active">#4CAF50</color>
+    <color name="status_inactive">#F44336</color>
 
     <!-- 底部导航 -->
     <color name="bottom_nav_selected">@color/color_primary</color>
+    <color name="nav_selected">#2196F3</color>
+    <color name="nav_unselected">#9E9E9E</color>
 
     <!-- Material 标准色 -->
     <color name="purple_200">#FFBB86FC</color>

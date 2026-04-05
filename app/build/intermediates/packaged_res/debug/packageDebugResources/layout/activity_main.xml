@@ -16,7 +16,7 @@
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="100dp"
+            android:layout_height="72dp"
             app:title="@string/app_name"
             app:titleTextColor="?attr/colorOnSurface"
             app:titleCentered="false"
@@ -26,6 +26,7 @@
 
     <!-- 内容区域 -->
     <FrameLayout
+        android:id="@+id/frameLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
@@ -35,9 +36,9 @@
             android:id="@+id/page_home"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="visible"
             android:fillViewport="true"
-            android:paddingBottom="80dp">
+            android:paddingBottom="62dp"
+            android:visibility="visible">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -391,6 +392,7 @@
                 </com.google.android.material.card.MaterialCardView>
 
             </LinearLayout>
+
         </androidx.core.widget.NestedScrollView>
 
         <!-- ===== 第二页：应用选择页 ===== -->
@@ -399,24 +401,28 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
+            android:paddingBottom="62dp"
             android:visibility="gone">
 
             <!-- 搜索框 - Material3 风格 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="16dp"
+                android:layout_marginLeft="16dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="1dp"
                 app:cardBackgroundColor="?attr/colorSurface"
                 app:cardCornerRadius="28dp"
                 app:cardElevation="0dp"
-                app:strokeWidth="1dp"
-                app:strokeColor="?attr/colorOutlineVariant">
+                app:strokeColor="?attr/colorOutlineVariant"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:orientation="horizontal"
                     android:gravity="center_vertical"
+                    android:orientation="horizontal"
                     android:paddingHorizontal="16dp">
 
                     <ImageView
@@ -429,42 +435,79 @@
                         android:id="@+id/et_search"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
-                        android:layout_weight="1"
                         android:layout_marginStart="12dp"
+                        android:layout_weight="1"
                         android:background="@android:color/transparent"
                         android:hint="@string/search_hint"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:singleLine="true"
                         android:textColor="?attr/colorOnSurface"
                         android:textColorHint="?attr/colorOnSurfaceVariant"
-                        android:textSize="15sp"
-                        android:singleLine="true"
-                        android:imeOptions="actionSearch"
-                        android:inputType="text" />
+                        android:textSize="15sp" />
 
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- 全选/全不选按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:gravity="end|center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_select_all"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="8dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="16dp"
+                    android:text="@string/btn_select_all"
+                    android:textSize="13sp"
+                    app:cornerRadius="18dp"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_deselect_all"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="16dp"
+                    android:text="@string/btn_deselect_all"
+                    android:textSize="13sp"
+                    app:cornerRadius="18dp"
+                    app:strokeWidth="1dp" />
+
+            </LinearLayout>
 
             <!-- 提示条 -->
             <TextView
                 android:id="@+id/tv_tip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="?attr/colorPrimaryContainer"
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="10dp"
                 android:text="@string/apps_tip"
                 android:textColor="?attr/colorPrimary"
-                android:textSize="13sp"
-                android:background="?attr/colorPrimaryContainer" />
+                android:textSize="13sp" />
 
             <!-- 应用列表 -->
             <ExpandableListView
                 android:id="@+id/expandable_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:childDivider="@android:color/transparent"
                 android:divider="@android:color/transparent"
                 android:dividerHeight="0dp"
-                android:groupIndicator="@null"
-                android:childDivider="@android:color/transparent" />
+                android:groupIndicator="@null" />
 
         </LinearLayout>
 
@@ -474,6 +517,7 @@
             layout="@layout/page_log"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:layout_marginBottom="62dp"
             android:visibility="gone" />
 
         <!-- ===== 第四页：设置页 ===== -->
@@ -482,6 +526,7 @@
             layout="@layout/page_settings"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:layout_marginBottom="62dp"
             android:visibility="gone" />
 
     </FrameLayout>
@@ -493,24 +538,115 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="96dp"
+        android:layout_marginBottom="78dp"
         android:contentDescription="@string/fab_save_desc"
         android:src="@drawable/ic_check"
         app:fabSize="normal"
         app:backgroundTint="?attr/colorPrimary"
         app:tint="?attr/colorOnPrimary" />
 
-    <!-- 底部导航栏 - Material3 风格 -->
-    <com.google.android.material.bottomnavigation.BottomNavigationView
+    <!-- 底部导航栏 - 自定义四图标带文字 -->
+    <LinearLayout
         android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="62dp"
         android:layout_gravity="bottom"
         android:background="?attr/colorSurface"
-        app:menu="@menu/bottom_nav_menu"
-        app:labelVisibilityMode="labeled"
-        app:itemIconTint="?attr/colorOnSurfaceVariant"
-        app:itemTextColor="?attr/colorOnSurfaceVariant"
-        app:itemActiveIndicatorStyle="@style/Widget.ClipboardGuard.BottomNav.ActiveIndicator" />
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <!-- 首页 -->
+        <LinearLayout
+            android:id="@+id/nav_home"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_home"
+                app:tint="?attr/colorPrimary" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="首页"
+                android:textSize="11sp"
+                android:textColor="?attr/colorPrimary" />
+        </LinearLayout>
+
+        <!-- 应用 -->
+        <LinearLayout
+            android:id="@+id/nav_apps"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_apps"
+                app:tint="?attr/colorOnSurfaceVariant" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="应用"
+                android:textSize="11sp"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <!-- 日志 -->
+        <LinearLayout
+            android:id="@+id/nav_log"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_log"
+                app:tint="?attr/colorOnSurfaceVariant" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="日志"
+                android:textSize="11sp"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <!-- 设置 -->
+        <LinearLayout
+            android:id="@+id/nav_settings"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_settings"
+                app:tint="?attr/colorOnSurfaceVariant" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="设置"
+                android:textSize="11sp"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

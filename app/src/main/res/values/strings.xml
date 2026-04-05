@@ -51,12 +51,16 @@
 
     <!-- 应用页 -->
     <string name="apps_tip">勾选 = 拦截（写剪贴板时弹窗询问），未勾选 = 放行</string>
+    <string name="btn_select_all">全选</string>
+    <string name="btn_deselect_all">全不选</string>
     <string name="search_hint">搜索应用名或包名…</string>
     <string name="group_user_apps">用户应用</string>
     <string name="group_system_apps">系统应用</string>
+    <string name="group_core_apps">系统核心</string>
     <string name="empty_tip">未找到匹配的应用</string>
     <string name="fab_save_desc">保存配置</string>
-    <string name="save_success">配置已保存</string>
+    <string name="save_success">已保存，拦截 %d 个应用</string>
+    <string name="save_no_block">已保存，未拦截任何应用</string>
 
     <!-- 兼容保留 -->
     <string name="main_tip">勾选应用 = 拦截，弹窗询问；未勾选 = 放行</string>
