@@ -34,7 +34,7 @@
 | targetSdk | 36 |
 | Xposed API | 82 |
 
-## 📌关于模块
+## 📌 关于模块
 - 本模块由 腾讯WorkBuddy 辅助生成，参考许多开源项目
 - 经过清明假期3天大量调试，在WSA（Android 13）以及AVD（Android 11）测试较为完好
 - 可能会有部分bug，若遇到可提 Issue
