@@ -16,7 +16,7 @@
 ### 安装要求
 
 - Android 11 (API 30) 及以上
-- 已安装 LSPosed 或其他兼容的 Xposed 框架(基于Xposed API82开发)
+- 已安装 LSPosed 或其他兼容的 Xposed 框架(基于Xposed API 82开发)
 
 ### 安装步骤
 
