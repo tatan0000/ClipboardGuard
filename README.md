@@ -1,4 +1,4 @@
-# 剪贴板卫士 (ClipboardGuard)
+# 剪贴板护卫 (ClipboardGuard)
 
 一个基于 LSPosed/Xposed 框架的 Android 模块，用于应用在剪贴板写入时进行筛选，防止应用在未经允许下在剪贴板里拉屎。
 
@@ -50,8 +50,9 @@
 ### 温馨提示：由于开发时间有限，问题处理可能存在延迟，若追求极致稳定可等待正式版发布~
 ## TODO
 有时间就更新
+<img width="741" height="261" alt="2026-04-19_211950" src="https://github.com/user-attachments/assets/38c5f511-2388-41b8-b5aa-30932cc5ac4b" />
 
-<img width="757" height="287" alt="2026-04-08_200512" src="https://github.com/user-attachments/assets/4c1064e3-1eac-4d22-ad65-66ffb2057f65" />
+
 
 ## 🔧 技术原理
 （此处待补充核心技术逻辑）
