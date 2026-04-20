@@ -4,7 +4,7 @@
             "outputFile": "com.android.clipboardguard.app-mergeDebugResources-28:/values-w600dp-land-v13/values-w600dp-land-v13.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\bb09dbf6be71711d60ed68d766fc71b6\\workspace\\transformed\\material-1.10.0\\res\\values-w600dp-land-v13\\values-w600dp-land-v13.xml",
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\9.3.1\\transforms\\4fa25e030c6684696ba067af5c00b083\\workspace\\transformed\\material-1.10.0\\res\\values-w600dp-land-v13\\values-w600dp-land-v13.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

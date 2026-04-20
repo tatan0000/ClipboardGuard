@@ -75,16 +75,6 @@
     </style>
 
     <!-- ===== Shape Appearances ===== -->
-    <style name="ShapeAppearance.ClipboardGuard.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">8dp</item>
-    </style>
-
-    <style name="ShapeAppearance.ClipboardGuard.MediumComponent" parent="ShapeAppearance.Material3.MediumComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">12dp</item>
-    </style>
-
     <style name="ShapeAppearance.ClipboardGuard.LargeComponent" parent="ShapeAppearance.Material3.LargeComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
@@ -95,9 +85,6 @@
         <item name="android:textSize">18sp</item>
     </style>
 
-    <!-- ===== 底部导航 ===== -->
-    <style name="TextAppearance.ClipboardGuard.BottomNavLabel" parent="TextAppearance.Material3.LabelSmall">
-        <item name="android:textSize">10sp</item>
-    </style>
+
 
 </resources>

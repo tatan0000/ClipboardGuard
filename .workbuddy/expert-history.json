@@ -3,12 +3,21 @@
   "sessions": {
     "02d882ce1218439781295039b6c695b6": [
       {
+        "expertId": "CodeReviewExpert",
+        "name": "火眼眼",
+        "profession": "代码审查专家",
+        "avatarUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/avatars/02-Engineering/CodeReviewExpert/CodeReviewExpert.png",
+        "promptUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/experts/02-Engineering/CodeReviewExpert/CodeReviewExpert_zh.md",
+        "usedAt": 1776753099116,
+        "industryId": "02-Engineering"
+      },
+      {
         "expertId": "MobileApplicationDeveloper",
         "name": "掌中灵",
         "profession": "移动应用开发工程师",
         "avatarUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/avatars/02-Engineering/MobileApplicationDeveloper/MobileApplicationDeveloper.png",
         "promptUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/experts/02-Engineering/MobileApplicationDeveloper/MobileApplicationDeveloper_zh.md",
-        "usedAt": 1776656553670,
+        "usedAt": 1776752481691,
         "industryId": "02-Engineering"
       },
       {
@@ -33,5 +42,5 @@
       }
     ]
   },
-  "lastUpdated": 1776657885617
+  "lastUpdated": 1776755495710
 }

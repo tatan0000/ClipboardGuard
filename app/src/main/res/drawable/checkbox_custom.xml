@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 勾选状态：白色方框 + 蓝色对勾 -->
+    <item android:state_checked="true">
+        <layer-list>
+            <!-- 白色方框 -->
+            <item>
+                <shape android:shape="rectangle">
+                    <stroke android:width="2dp" android:color="#FFFFFF" />
+                    <corners android:radius="4dp" />
+                    <solid android:color="@android:color/transparent" />
+                    <size android:width="24dp" android:height="24dp" />
+                </shape>
+            </item>
+            <!-- 蓝色对勾：包在 vector 里 -->
+            <item android:gravity="center">
+                <vector
+                    android:width="24dp"
+                    android:height="24dp"
+                    android:viewportWidth="24"
+                    android:viewportHeight="24">
+                    <path
+                        android:fillColor="#2196F3"
+                        android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z" />
+                </vector>
+            </item>
+        </layer-list>
+    </item>
+    <!-- 未勾选状态：白色方框 + 灰色对勾 -->
+    <item>
+        <layer-list>
+            <!-- 白色方框 -->
+            <item>
+                <shape android:shape="rectangle">
+                    <stroke android:width="2dp" android:color="#FFFFFF" />
+                    <corners android:radius="4dp" />
+                    <solid android:color="@android:color/transparent" />
+                    <size android:width="24dp" android:height="24dp" />
+                </shape>
+            </item>
+            <!-- 灰色对勾：包在 vector 里 -->
+            <item android:gravity="center">
+                <vector
+                    android:width="24dp"
+                    android:height="24dp"
+                    android:viewportWidth="24"
+                    android:viewportHeight="24">
+                    <path
+                        android:fillColor="#BDBDBD"
+                        android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z" />
+                </vector>
+            </item>
+        </layer-list>
+    </item>
+</selector>

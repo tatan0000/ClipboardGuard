@@ -50,6 +50,7 @@
                 android:id="@+id/btn_go_settings"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:text="@string/guide_btn_go_settings"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:paddingStart="8dp"

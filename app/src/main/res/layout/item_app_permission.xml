@@ -5,8 +5,8 @@
     android:layout_height="72dp"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingLeft="16dp"
-    android:paddingRight="16dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
     android:background="@drawable/bg_item_app">
 
     <!-- 应用图标 -->
@@ -61,7 +61,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:buttonTint="@color/color_primary"
+        android:button="@drawable/checkbox_custom"
         android:clickable="false"
         android:focusable="false" />
 

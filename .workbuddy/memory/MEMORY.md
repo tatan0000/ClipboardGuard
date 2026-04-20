@@ -81,6 +81,9 @@ Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`�
 - 逻辑：用户选择完成后1.5秒内对同一应用不弹窗，保持上次选择
 - 变量：`sLastDecisionTime` Map 记录每个应用的用户决策完成时间
 
+## 踩坑教训（2026-04-21）
+- **删除孤立资源前必须同时检查 Java 代码中的 R.drawable/R.string 引用**：仅搜索 XML 中的 `@drawable/` 或 `@string/` 引用是不完整的，Java 里的 `R.drawable.ic_back`、`R.string.guide_title` 等同样必须纳入检查范围，否则会导致编译失败。本次误删了 `ic_back`、`guide_title`、`guide_float_perm_granted`、`guide_float_perm_not_granted`，已恢复。
+
 ## 深色模式修复（2026-04-06）
 - 修改 `values-night/themes.xml`，使用与浅色模式一致的 Material3 主题
 - drawable 文件使用 `?android:attr/windowBackground` 动态颜色

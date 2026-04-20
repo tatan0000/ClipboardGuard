@@ -58,17 +58,6 @@
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
     </style>
-    <style name="ShapeAppearance.ClipboardGuard.MediumComponent" parent="ShapeAppearance.Material3.MediumComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">12dp</item>
-    </style>
-    <style name="ShapeAppearance.ClipboardGuard.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">8dp</item>
-    </style>
-    <style name="TextAppearance.ClipboardGuard.BottomNavLabel" parent="TextAppearance.Material3.LabelSmall">
-        <item name="android:textSize">10sp</item>
-    </style>
     <style name="Theme.ClipboardGuard" parent="Theme.Material3.DayNight.NoActionBar">
         
         <item name="colorPrimary">@color/color_primary</item>

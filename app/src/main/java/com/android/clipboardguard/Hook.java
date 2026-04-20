@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
-import android.os.UserHandle;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -32,82 +31,73 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * 权限模型：
  *   PERMISSION_BLOCK  = 0：拦截，每次写剪贴板弹窗询问
  *   PERMISSION_IGNORE = 1：放行，直接通过
- *
- * 系统核心包白名单（Thanox global_white_list）：
- *   Hook 层：匹配则直接放行，不弹窗
- *   UI 层：单独分"系统核心"一组，置灰不可更改
  */
 public class Hook implements IXposedHookLoadPackage {
 
     private static final String TAG = "ClipboardGuard";
     private static final String MODULE_PKG = "com.android.clipboardguard";
-    private static final long DEBOUNCE_MS = 1_500;  // 防抖1.5秒
-    private static final int DEFAULT_PERMISSION = PermissionStorage.PERMISSION_IGNORE;
-    private static final Map<String, Long> sLastPopupTime = new HashMap<>();
-    private static final Map<String, Long> sLastDecisionTime = new HashMap<>();  // 用户选择完成时间
+    private static final long DEBOUNCE_MS = 1_500;
+
+    // 防抖：记录上次用户做出决策的时间 和 决策结果
+    private static final Map<String, Long>    sLastDecisionTime = new HashMap<>();
     private static final Map<String, Integer> sLastUserDecision = new HashMap<>();
-    private static final Object sLock = new Object();
-    // 标记：防止 afterHookedMethod 中清空剪贴板时递归触发 hook
+    private static final Object sDebouncelock = new Object();
+
+    // 防止 afterHookedMethod 清空剪贴板时递归触发 hook
     private static final ThreadLocal<Boolean> sInAfterHook = ThreadLocal.withInitial(() -> false);
+
+    // 日志开关
+    private static final String PREF_CLIP_PREFS = "clipboardguard_prefs";
+    private static final String KEY_ENABLE_LOG   = "enable_log";
+
+    // ──────────────────────────────────────────────────────────────────────────
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        String pkgName = lpparam.packageName;
-
-        // Hook 本模块自身，用于激活状态检测
-        if (MODULE_PKG.equals(pkgName)) {
+        if (MODULE_PKG.equals(lpparam.packageName)) {
             hookSelfForActiveStatus(lpparam);
             return;
         }
-
-        // 只 Hook system_server 进程
-        if (!"android".equals(pkgName)) return;
-
-        hookClipboardService(lpparam);
+        if ("android".equals(lpparam.packageName)) {
+            hookClipboardService(lpparam);
+        }
     }
 
-    /**
-     * Hook 本模块自身，让 MainActivity.isModuleActive() 返回 true
-     */
+    /** Hook 本模块自身，让 isModuleActive() / getXposedApiVersion() 返回正确值 */
     private void hookSelfForActiveStatus(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
-            XposedHelpers.findAndHookMethod(
-                    MODULE_PKG + ".MainActivity",
-                    lpparam.classLoader,
-                    "isModuleActive",
+            XposedHelpers.findAndHookMethod(MODULE_PKG + ".MainActivity",
+                    lpparam.classLoader, "isModuleActive",
                     new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(true);
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            p.setResult(true);
                         }
                     });
-            XposedHelpers.findAndHookMethod(
-                    MODULE_PKG + ".MainActivity",
-                    lpparam.classLoader,
-                    "getXposedApiVersion",
+            XposedHelpers.findAndHookMethod(MODULE_PKG + ".MainActivity",
+                    lpparam.classLoader, "getXposedApiVersion",
                     new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(XposedBridge.getXposedVersion());
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            p.setResult(XposedBridge.getXposedVersion());
                         }
                     });
-            Log.i(TAG, "自身Hook成功：状态检测已激活");
+            Log.i(TAG, "自身Hook成功");
         } catch (Throwable e) {
             Log.e(TAG, "自身Hook失败: " + e.getMessage());
         }
     }
 
+    /** 依次尝试多个候选类名，找到 setPrimaryClip 就 Hook */
     private void hookClipboardService(XC_LoadPackage.LoadPackageParam lpparam) {
         String[] candidates = {
             "com.android.server.clipboard.ClipboardService$ClipboardImpl",
             "com.android.server.clipboard.ClipboardService$BinderService",
+            "com.android.server.clipboard.ClipboardService",
         };
-
         for (String className : candidates) {
             try {
                 Class<?> cls = XposedHelpers.findClass(className, lpparam.classLoader);
-                for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                    if (m.getName().equals("setPrimaryClip")) {
+                for (Method m : cls.getDeclaredMethods()) {
+                    if ("setPrimaryClip".equals(m.getName())) {
                         m.setAccessible(true);
                         XposedBridge.hookMethod(m, new ClipboardServiceHook());
                         Log.i(TAG, "Hook成功: " + className);
@@ -116,291 +106,202 @@ public class Hook implements IXposedHookLoadPackage {
                 }
             } catch (Throwable ignored) {}
         }
-        // 降级：直接Hook外部类
-        try {
-            Class<?> cls = XposedHelpers.findClass("com.android.server.clipboard.ClipboardService", lpparam.classLoader);
-            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                if (m.getName().equals("setPrimaryClip")) {
-                    m.setAccessible(true);
-                    XposedBridge.hookMethod(m, new ClipboardServiceHook());
-                    Log.i(TAG, "Hook成功: ClipboardService");
-                    return;
-                }
-            }
-        } catch (Throwable e) {
-            Log.e(TAG, "Hook失败: " + e.getMessage());
-        }
+        Log.e(TAG, "Hook失败：未找到 setPrimaryClip");
     }
 
-    /**
-     * ClipboardService Hook 回调
-     */
+    // ──────────────────────────────────────────────────────────────────────────
+
     private static class ClipboardServiceHook extends XC_MethodHook {
 
-        // 用于在 before 和 after 之间传递决策结果
-        private static final ThreadLocal<Integer> sThreadDecision = ThreadLocal.withInitial(() -> -1);
-        // 标记：是否已经处理过（防止重复处理）
-        private static final ThreadLocal<Boolean> sThreadHandled = ThreadLocal.withInitial(() -> false);
+        /**
+         * 在 before/after 之间传递：是否应该拦截（true=拦截，false=放行）
+         * 只有 beforeHookedMethod 写，afterHookedMethod 读后清理。
+         */
+        private static final ThreadLocal<Boolean> sShouldBlock = new ThreadLocal<>();
 
         @Override
         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-            // 防止 afterHookedMethod 中清空剪贴板时递归触发
-            if (sInAfterHook.get()) {
-                return;
-            }
+            // 防止递归（afterHookedMethod 调内部方法时会再次触发）
+            if (Boolean.TRUE.equals(sInAfterHook.get())) return;
 
-            // 已经处理过，直接跳过（防止递归）
-            if (sThreadHandled.get()) {
-                sThreadHandled.set(false);
-                return;
-            }
-
-            // 获取调用者包名
             String pkgName = getCallingPackageName();
             if (pkgName == null || pkgName.isEmpty()) {
                 Log.w(TAG, "无法获取调用者包名，放行");
                 return;
             }
+            if (isSystemCorePackage(pkgName)) return;
 
-            // 跳过系统核心包（来自 Thanox global_white_list，Hook 放行，UI 单独分组置灰显示）
-            if (isSystemCorePackage(pkgName)) {
+            Context ctx = getSystemServerContext();
+            if (ctx == null) {
+                Log.e(TAG, "获取Context失败，放行");
                 return;
             }
 
-            Log.i(TAG, "检测到剪贴板操作: " + pkgName);
-
-            // 从 ActivityThread 获取 system_server 的 Context
-            Context systemContext = getSystemServerContext();
-            if (systemContext == null) {
-                Log.e(TAG, "获取system_server Context失败，放行");
-                return;
-            }
-
-            // 读取权限：优先通过 IContentProvider 直接调用（绕开 Binder 包名校验）
-            // 必须先 clearCallingIdentity：Hook 在 system_server Binder 线程执行，
-            // Binder.getCallingUid() 此时返回的是远端调用者(如 Chrome uid=10131)，
-            // 不清除的话 ContentResolver.call() 会以 uid=10131 发出，导致包名/uid 不匹配
-            long identity = Binder.clearCallingIdentity();
+            // 读取权限（先 clearCallingIdentity 避免 Binder uid 校验失败）
             int savedPerm;
+            long identity = Binder.clearCallingIdentity();
             try {
-                savedPerm = directQueryPermission(systemContext, pkgName);
-                if (savedPerm < 0) {
-                    // fallback: 尝试直接读取 SQLite 文件
-                    savedPerm = readPermissionFromFile(pkgName);
-                }
+                savedPerm = directQueryPermission(ctx, pkgName);
+                if (savedPerm < 0) savedPerm = readPermissionFromFile(pkgName);
+                if (savedPerm < 0) savedPerm = PermissionStorage.PERMISSION_IGNORE; // 默认放行
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
-            // 全部失败，使用默认值
-            if (savedPerm < 0) {
-                savedPerm = DEFAULT_PERMISSION;
-            }
+
             Log.i(TAG, "权限查询: " + pkgName + " -> " + savedPerm + " (0=拦截,1=放行)");
 
-            // IGNORE = 放行
-            if (savedPerm == PermissionStorage.PERMISSION_IGNORE) {
-                Log.i(TAG, "放行: " + pkgName);
-                return;
-            }
-
-            // 防抖：用户选择完成后3秒内对同一应用不弹窗
-            // 防抖期间保持上一次用户的选择
-            boolean shouldPopup;
-            int decision;
-            boolean isDebounce = false;
-            synchronized (sLock) {
-                long now = System.currentTimeMillis();
-                Long lastDecision = sLastDecisionTime.get(pkgName);
-                if (lastDecision != null && now - lastDecision < DEBOUNCE_MS) {
-                    isDebounce = true;
-                    // 防抖期间：应用上次的用户选择
-                    Log.i(TAG, "防抖期间保持上次选择: " + pkgName);
-                    Integer lastUserDecision = sLastUserDecision.get(pkgName);
-                    decision = (lastUserDecision != null) ? lastUserDecision : PermissionStorage.PERMISSION_BLOCK;
-                    shouldPopup = false;
-                } else {
-                    shouldPopup = true;
-                    decision = PermissionStorage.PERMISSION_BLOCK; // 默认值，等待弹窗返回
-                }
-                // 提前保存决策，避免防抖期间决策未保存
-                if (shouldPopup) {
-                    sLastUserDecision.put(pkgName, decision);
-                }
-            }
-
-            // 提取内容预览
             String preview = extractPreview(param.args[0]);
 
-            if (shouldPopup) {
-                // 弹窗询问用户
-                Log.i(TAG, "请求权限: " + pkgName);
-                decision = askUser(systemContext, pkgName, preview);
-                // 保存用户决定用于防抖期间
+            if (savedPerm == PermissionStorage.PERMISSION_IGNORE) {
+                writeLog(ctx, pkgName, "放行", preview);
+                return; // 直接放行，不设置 sShouldBlock
+            }
+
+            // ── 拦截模式：检查防抖 ──
+            int decision;
+            synchronized (sDebouncelock) {
                 long now = System.currentTimeMillis();
-                synchronized (sLock) {
-                    sLastUserDecision.put(pkgName, decision);
-                    sLastDecisionTime.put(pkgName, now);  // 记录用户选择完成时间
+                Long lastTime = sLastDecisionTime.get(pkgName);
+                if (lastTime != null && now - lastTime < DEBOUNCE_MS) {
+                    // 防抖期内沿用上次决策
+                    Integer last = sLastUserDecision.get(pkgName);
+                    decision = (last != null) ? last : PermissionStorage.PERMISSION_BLOCK;
+                    Log.i(TAG, "防抖沿用上次选择: " + pkgName + " -> " + decision);
+                } else {
+                    decision = -1; // 需要弹窗
                 }
             }
 
-            // 保存决策结果，在 afterHookedMethod 中处理
-            sThreadDecision.set(decision);
-            // 标记：在 beforeHookedMethod 中标记为已处理
-            sThreadHandled.set(true);
+            if (decision < 0) {
+                // 弹窗询问
+                decision = askUser(ctx, pkgName, preview);
+                // 弹窗结束后才记录防抖（用真实决策）
+                synchronized (sDebouncelock) {
+                    sLastUserDecision.put(pkgName, decision);
+                    sLastDecisionTime.put(pkgName, System.currentTimeMillis());
+                }
+            }
 
             if (decision == PermissionStorage.PERMISSION_IGNORE) {
-                // 允许：继续执行原始方法（不设置任何返回值，void方法）
                 Log.i(TAG, "用户允许: " + pkgName);
+                writeLog(ctx, pkgName, "放行", preview);
+                // 不设置 sShouldBlock → afterHookedMethod 不处理
             } else {
-                // 拒绝：阻止原始方法执行，然后通过反射调用内部方法实现真正的拦截
                 Log.i(TAG, "用户拒绝: " + pkgName + " - 拦截");
-
-                // 保存原始 ClipData（用于可能需要恢复）
-                final Object originalClip = param.args[0];
-
-                // 阻止原始方法执行
+                writeLog(ctx, pkgName, "拦截", preview);
+                // 阻断原方法执行
                 param.setResult(null);
-
-                // 在 afterHookedMethod 中调用内部方法恢复/清空剪贴板
-                // 这里只是标记，具体清理在 afterHookedMethod 中做
-                sThreadHandled.set(true);
+                // 通知 afterHookedMethod 执行真正的剪贴板清空
+                sShouldBlock.set(true);
             }
         }
 
         @Override
         protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-            // 防止递归触发
-            if (sInAfterHook.get()) {
-                return;
-            }
+            if (Boolean.TRUE.equals(sInAfterHook.get())) return;
 
-            // 检查是否需要处理拦截（用户拒绝的情况）
-            int decision = sThreadDecision.get();
-            if (decision == PermissionStorage.PERMISSION_BLOCK) {
-                // 用户拒绝：通过反射调用内部方法真正清空剪贴板
-                // 这样可以绕过我们的 hook，真正实现拦截
-                try {
-                    // 设置标记，防止递归
-                    sInAfterHook.set(true);
+            Boolean shouldBlock = sShouldBlock.get();
+            sShouldBlock.remove();
 
-                    // 获取 this 对象（ClipboardService 实例）
-                    Object clipboardService = param.thisObject;
-                    // 调用 setPrimaryClipInternal 方法
-                    Method internalMethod = clipboardService.getClass().getDeclaredMethod(
-                            "setPrimaryClipInternal",
-                            android.content.ClipData.class,
-                            String.class,
-                            int.class);
-                    internalMethod.setAccessible(true);
+            if (!Boolean.TRUE.equals(shouldBlock)) return;
 
-                    // 传入 null 真正清空剪贴板
-                    internalMethod.invoke(clipboardService, null, "clipboardguard_blocked", 0);
-                    Log.i(TAG, "已通过内部方法拦截剪贴板写入");
-                } catch (NoSuchMethodException e) {
-                    // 内部方法不存在是正常的（不同 Android 版本差异）
-                    // 降级方案：使用 ClipboardManager 强制清空
-                    try {
-                        Context systemContext = getSystemServerContext();
-                        if (systemContext != null) {
-                            Object clipboardManager = systemContext.getSystemService(Context.CLIPBOARD_SERVICE);
-                            if (clipboardManager != null) {
-                                Method clearMethod = clipboardManager.getClass().getMethod("setPrimaryClip", android.content.ClipData.class);
-                                clearMethod.invoke(clipboardManager, (Object) null);
-                                Log.i(TAG, "通过系统服务清空剪贴板（已拦截）");
-                            }
-                        }
-                    } catch (Exception ex) {
-                        // 降级失败不影响拦截效果（剪贴板已被置空）
-                        Log.w(TAG, "降级清空（可忽略）: " + ex.getMessage());
-                    }
-                } catch (Exception e) {
-                    Log.e(TAG, "调用内部方法失败: " + e.getMessage());
-                } finally {
-                    sInAfterHook.set(false);
+            // 用户拒绝：通过内部方法将剪贴板置空
+            sInAfterHook.set(true);
+            try {
+                Object service = param.thisObject;
+                // 尝试调用 setPrimaryClipInternal(null, "android", 0)
+                Method internal = findMethod(service.getClass(), "setPrimaryClipInternal",
+                        ClipData.class, String.class, int.class);
+                if (internal != null) {
+                    internal.invoke(service, null, "clipboardguard_blocked", 0);
+                    Log.i(TAG, "已通过内部方法清空剪贴板");
+                } else {
+                    Log.w(TAG, "setPrimaryClipInternal 不存在，剪贴板已被前置阻断");
                 }
+            } catch (Exception e) {
+                Log.w(TAG, "清空剪贴板失败（可忽略，写入已被阻断）: " + e.getMessage());
+            } finally {
+                sInAfterHook.set(false);
             }
+        }
 
-            // 清理线程本地变量
-            sThreadDecision.remove();
-            sThreadHandled.remove();
+        // ──────────────────────────── 辅助方法 ────────────────────────────
+
+        /** 在类及其父类中查找方法，找不到返回 null */
+        private static Method findMethod(Class<?> cls, String name, Class<?>... params) {
+            while (cls != null) {
+                try {
+                    Method m = cls.getDeclaredMethod(name, params);
+                    m.setAccessible(true);
+                    return m;
+                } catch (NoSuchMethodException ignored) {}
+                cls = cls.getSuperclass();
+            }
+            return null;
         }
 
         private String getCallingPackageName() {
             try {
-                int callingUid = Binder.getCallingUid();
-                if (callingUid <= 0) return null;
-
-                Object activityThread = XposedHelpers.callStaticMethod(
+                int uid = Binder.getCallingUid();
+                if (uid <= 0) return null;
+                Object at = XposedHelpers.callStaticMethod(
                         XposedHelpers.findClass("android.app.ActivityThread", null),
                         "currentActivityThread");
-                if (activityThread == null) return null;
-
-                Object app = XposedHelpers.callMethod(activityThread, "getApplication");
-                if (app == null) return null;
-
-                Context context = (Context) app;
-                String[] pkgs = context.getPackageManager().getPackagesForUid(callingUid);
-                if (pkgs != null && pkgs.length > 0) {
-                    return pkgs[0];
-                }
-            } catch (Throwable ignored) {}
-            return null;
+                if (at == null) return null;
+                Context ctx = (Context) XposedHelpers.callMethod(at, "getApplication");
+                if (ctx == null) return null;
+                String[] pkgs = ctx.getPackageManager().getPackagesForUid(uid);
+                return (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
+            } catch (Throwable ignored) {
+                return null;
+            }
         }
 
-
+        private Context getSystemServerContext() {
+            try {
+                Object at = XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass("android.app.ActivityThread", null),
+                        "currentActivityThread");
+                if (at == null) return null;
+                return (Context) XposedHelpers.callMethod(at, "getApplication");
+            } catch (Throwable e) {
+                Log.e(TAG, "获取Context失败: " + e.getMessage());
+                return null;
+            }
+        }
 
         /**
-         * 核心方案：通过 Binder.clearCallingIdentity() + ContentResolver.call() 读取权限。
-         *
-         * 根本原因：Hook 在 system_server Binder 线程执行，此时 Binder.getCallingUid()
-         * 返回的是远端调用者的 uid（如 Chrome uid=10131），而 ContentResolver.call()
-         * 会用当前 Binder 调用者的 uid 去和 callingPackage 做绑定校验，导致报错：
-         *   "Given calling package android does not match caller's uid 10131"
-         *
-         * clearCallingIdentity() 会把 Binder 调用者 uid 重置为本进程 uid=1000（android），
-         * 与 callingPackage "android" 完全匹配，校验通过。
+         * 通过 ContentProvider.call() 读取权限（需外层已 clearCallingIdentity）
          */
-        private int directQueryPermission(Context systemContext, String pkgName) {
+        private int directQueryPermission(Context ctx, String pkgName) {
             try {
-                android.net.Uri uri = android.net.Uri.parse(
-                        "content://" + PermissionProvider.AUTHORITY);
+                android.net.Uri uri = android.net.Uri.parse("content://" + PermissionProvider.AUTHORITY);
                 android.os.Bundle args = new android.os.Bundle();
                 args.putString(PermissionProvider.CALL_KEY_PACKAGE, pkgName);
-                // 此处 callingIdentity 已由外层 clearCallingIdentity() 处理，
-                // 直接用 systemContext.getContentResolver().call() 即可正常通过校验
-                android.os.Bundle result = systemContext.getContentResolver()
+                android.os.Bundle result = ctx.getContentResolver()
                         .call(uri, PermissionProvider.CALL_METHOD_GET, null, args);
                 if (result != null && result.containsKey(PermissionProvider.CALL_KEY_RESULT)) {
-                    int perm = result.getInt(PermissionProvider.CALL_KEY_RESULT, -1);
-                    Log.d(TAG, "ContentProvider读取: " + pkgName + " = " + perm);
-                    return perm;
+                    return result.getInt(PermissionProvider.CALL_KEY_RESULT, -1);
                 }
             } catch (Throwable e) {
-                Log.w(TAG, "directQueryPermission失败: " + e.getMessage());
+                Log.w(TAG, "ContentProvider读取失败: " + e.getMessage());
             }
             return -1;
         }
 
-        /**
-         * 直接读取 SQLite 数据库文件（最终 fallback，不依赖任何 IPC）
-         * system_server (uid=1000) 在 Android 10+ 的 SELinux 策略中通常允许读取
-         * /data/data/<pkg>/databases/ 下的 db 文件（通过 shell 域）
-         */
+        /** 直接打开 SQLite 文件读取权限（最终 fallback） */
         private int readPermissionFromFile(String pkgName) {
             String dbPath = "/data/data/" + MODULE_PKG + "/databases/clipboardguard.db";
             android.database.sqlite.SQLiteDatabase db = null;
             try {
                 db = android.database.sqlite.SQLiteDatabase.openDatabase(
-                        dbPath, null,
-                        android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
+                        dbPath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
                 try (android.database.Cursor cursor = db.query(
                         "permission", null,
                         "package_name = ?", new String[]{pkgName},
                         null, null, null)) {
                     if (cursor != null && cursor.moveToFirst()) {
-                        int perm = cursor.getInt(cursor.getColumnIndexOrThrow("permission"));
-                        Log.d(TAG, "直接DB读取: " + pkgName + " = " + perm);
-                        return perm;
+                        return cursor.getInt(cursor.getColumnIndexOrThrow("permission"));
                     }
                 }
             } catch (Throwable e) {
@@ -409,57 +310,6 @@ public class Hook implements IXposedHookLoadPackage {
                 if (db != null) try { db.close(); } catch (Throwable ignored) {}
             }
             return -1;
-        }
-
-        /**
-         * 查询 pending 表获取最新的弹窗结果（通过 ContentProvider 跨进程读取）
-         */
-        private int queryPendingResult(Context systemContext, String pkgName) {
-            try {
-                // 使用 ContentResolver.query 跨进程查询 pending 表
-                android.content.ContentResolver resolver = systemContext.getContentResolver();
-                android.net.Uri uri = android.net.Uri.parse("content://" + PermissionProvider.AUTHORITY + "/pending/" + pkgName);
-                // 直接 query，selection 已在 URI 中
-                android.database.Cursor cursor = resolver.query(uri, null, null, null, null);
-                if (cursor != null) {
-                    try {
-                        if (cursor.moveToFirst()) {
-                            int decisionIdx = cursor.getColumnIndex("decision");
-                            if (decisionIdx >= 0) {
-                                int decision = cursor.getInt(decisionIdx);
-                                Log.d(TAG, "读取pending结果: " + pkgName + " = " + decision);
-                                // 读取后删除 pending 记录
-                                resolver.delete(uri, null, null);
-                                cursor.close();
-                                return decision;
-                            }
-                        }
-                    } finally {
-                        cursor.close();
-                    }
-                }
-            } catch (Throwable e) {
-                Log.w(TAG, "查询pending结果失败: " + e.getMessage());
-            }
-            return -1;
-        }
-
-        /**
-         * 获取 system_server 进程的 Context
-         */
-        private Context getSystemServerContext() {
-            try {
-                Object activityThread = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("android.app.ActivityThread", null),
-                        "currentActivityThread");
-                if (activityThread == null) return null;
-
-                Object app = XposedHelpers.callMethod(activityThread, "getApplication");
-                return (Context) app;
-            } catch (Throwable e) {
-                Log.e(TAG, "获取Context失败: " + e.getMessage());
-                return null;
-            }
         }
 
         private String extractPreview(Object arg) {
@@ -473,9 +323,9 @@ public class Hook implements IXposedHookLoadPackage {
                         String s = text.toString().trim();
                         return s.length() > 100 ? s.substring(0, 100) + "…" : s;
                     }
-                    text = item.getHtmlText();
-                    if (text != null && text.length() > 0) {
-                        String s = text.toString().trim().replaceAll("<[^>]+>", "");
+                    String html = item.getHtmlText();
+                    if (html != null && !html.isEmpty()) {
+                        String s = html.replaceAll("<[^>]+>", "").trim();
                         return s.length() > 100 ? s.substring(0, 100) + "…" : s;
                     }
                     if (item.getUri() != null) return "[图片/文件]";
@@ -484,100 +334,97 @@ public class Hook implements IXposedHookLoadPackage {
             return "(非文本内容)";
         }
 
-        private int askUser(Context context, String pkgName, String preview) {
-            final CountDownLatch latch = new CountDownLatch(1);
-            final AtomicInteger result = new AtomicInteger(PermissionStorage.PERMISSION_BLOCK);
+        /** 弹窗询问用户，阻塞直到结果返回或超时（默认 BLOCK） */
+        private int askUser(Context ctx, String pkgName, String preview) {
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicInteger result = new AtomicInteger(PermissionStorage.PERMISSION_BLOCK);
 
-            PermissionResultReceiver receiver = new PermissionResultReceiver(pkgName, latch, result);
-            receiver.register(context);
+            // 先注册轮询监听，再启动 Activity
+            new PermissionResultReceiver(pkgName, latch, result).register(ctx);
 
-            // 构建启动参数
+            // 构建启动 Intent
             Intent intent = new Intent();
             intent.setComponent(new ComponentName(MODULE_PKG, PermissionDialogActivity.class.getName()));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             intent.putExtra(PermissionDialogActivity.EXTRA_PACKAGE_NAME, pkgName);
             intent.putExtra(PermissionDialogActivity.EXTRA_CONTENT_PREVIEW, preview);
 
-            try {
-                // 获取 ActivityTaskManager（高版本）或 ActivityManager（低版本）
-                Object activityTaskManager = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("android.app.ActivityTaskManager", null),
-                        "getService");
-
-                // 调用 startActivity
-                Method startActivity = activityTaskManager.getClass().getMethod(
-                        "startActivity", Intent.class, String.class, IBinder.class, String.class,
-                        int.class, int.class, int.class, String.class, int.class);
-
-                // 获取 system_server 的 token（作为调用者）
-                IBinder windowToken = (IBinder) XposedHelpers.getObjectField(context, "mMainThread");
-
-                int userId = android.os.Process.myUserHandle().hashCode();
-
-                startActivity.invoke(activityTaskManager,
-                        intent, "com.android.clipboardguard", windowToken, null,
-                        -1, userId, 0, null, 0);
-
-                Log.i(TAG, "Activity启动成功: " + pkgName);
-            } catch (Exception e) {
-                // 降级方案：使用广播
-                try {
-                    Log.w(TAG, "ActivityTaskManager失败，降级广播: " + e.getMessage());
-                    Intent broadcastIntent = new Intent("com.android.clipboardguard.ACTION_SHOW_DIALOG");
-                    broadcastIntent.setPackage(MODULE_PKG);
-                    broadcastIntent.putExtra(PermissionDialogActivity.EXTRA_PACKAGE_NAME, pkgName);
-                    broadcastIntent.putExtra(PermissionDialogActivity.EXTRA_CONTENT_PREVIEW, preview);
-                    broadcastIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                    context.sendBroadcast(broadcastIntent);
-                    Log.i(TAG, "广播已发送: " + pkgName);
-                } catch (Throwable e2) {
-                    Log.e(TAG, "启动弹窗失败: " + e2.getMessage());
-                    return PermissionStorage.PERMISSION_BLOCK;
-                }
+            boolean started = tryStartActivity(ctx, intent, pkgName);
+            if (!started) {
+                // 降级：广播
+                sendDialogBroadcast(ctx, pkgName, preview);
             }
 
             try {
-                // 弹窗超时4秒 + 3秒通信余量 = 7秒
-                // 防抖1.5秒内不再弹窗
                 latch.await(7, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-
             int r = result.get();
             Log.i(TAG, "askUser结果: " + pkgName + " -> " + (r == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
             return r;
+        }
+
+        private boolean tryStartActivity(Context ctx, Intent intent, String pkgName) {
+            try {
+                Object atm = XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass("android.app.ActivityTaskManager", null),
+                        "getService");
+                Method start = atm.getClass().getMethod("startActivity",
+                        Intent.class, String.class, IBinder.class, String.class,
+                        int.class, int.class, int.class, String.class, int.class);
+                IBinder token = (IBinder) XposedHelpers.getObjectField(ctx, "mMainThread");
+                int userId = android.os.Process.myUserHandle().hashCode();
+                start.invoke(atm, intent, MODULE_PKG, token, null, -1, userId, 0, null, 0);
+                Log.i(TAG, "ActivityTaskManager启动成功: " + pkgName);
+                return true;
+            } catch (Exception e) {
+                Log.w(TAG, "ActivityTaskManager失败: " + e.getMessage());
+                return false;
+            }
+        }
+
+        private void sendDialogBroadcast(Context ctx, String pkgName, String preview) {
+            try {
+                Intent bi = new Intent(DialogLaunchReceiver.ACTION_SHOW_DIALOG);
+                bi.setPackage(MODULE_PKG);
+                bi.putExtra(PermissionDialogActivity.EXTRA_PACKAGE_NAME, pkgName);
+                bi.putExtra(PermissionDialogActivity.EXTRA_CONTENT_PREVIEW, preview);
+                bi.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                ctx.sendBroadcast(bi);
+                Log.i(TAG, "广播已发送: " + pkgName);
+            } catch (Throwable e) {
+                Log.e(TAG, "广播发送失败: " + e.getMessage());
+            }
+        }
+    }
+
+    // ──────────────────────────── 日志写入 ────────────────────────────
+
+    private static void writeLog(Context ctx, String pkgName, String action, String content) {
+        if (ctx == null) return;
+        try {
+            android.content.SharedPreferences prefs =
+                    ctx.getSharedPreferences(PREF_CLIP_PREFS, Context.MODE_PRIVATE);
+            if (!prefs.getBoolean(KEY_ENABLE_LOG, false)) return;
+            PermissionProvider.writeLog(ctx, pkgName, action, content);
+        } catch (Throwable e) {
+            Log.e(TAG, "写入日志失败: " + e.getMessage());
         }
     }
 
     // ──────────────────────────── 系统核心包白名单 ────────────────────────────
 
-    /**
-     * 判断是否是系统核心包（来自 Thanox global_white_list）。
-     * 匹配则 Hook 层直接放行，不弹窗。
-     * UI 层单独分"系统核心"一组，置灰不可更改。
-     */
     private static boolean isSystemCorePackage(String pkgName) {
         if (pkgName == null) return true;
-
-        // 精确匹配
         if (sCorePackagesSet.contains(pkgName)) return true;
-
-        // 子包前缀匹配（如 com.android.systemui.* 匹配 com.android.systemui.keyguard）
         for (String core : sCorePackagesSet) {
             if (pkgName.startsWith(core + ".")) return true;
         }
-
         return false;
     }
 
-    /**
-     * 系统核心包白名单集合（与 arrays.xml + MainActivity 保持一致）。
-     * 精确匹配 + 子包前缀匹配。
-     */
     private static final HashSet<String> sCorePackagesSet = new HashSet<>(Arrays.asList(
-        // Android 框架核心
         "android",
         "com.android.systemui",
         "com.android.phone",
@@ -630,7 +477,6 @@ public class Hook implements IXposedHookLoadPackage {
         "com.android.nfc",
         "com.android.localtransport",
         "jp.co.omronsoft.openwnn",
-        // Providers
         "com.android.bookmarkprovider",
         "com.android.providers.media",
         "com.android.providers.calendar",
@@ -644,10 +490,8 @@ public class Hook implements IXposedHookLoadPackage {
         "com.android.providers.contacts",
         "com.android.providers.media.module",
         "com.zui.incallui",
-        // Xposed 自身
         "github.tornaco.xposedmoduletest",
         "de.robv.android.xposed.installer",
-        // Qualcomm/QTI
         "com.qualcomm.uimremoteclient",
         "com.qualcomm.qti.uceShimService",
         "vendor.qti.hardware.cacert.server",
@@ -670,7 +514,6 @@ public class Hook implements IXposedHookLoadPackage {
         "com.qualcomm.qti.uim",
         "com.qualcomm.qti.uimGbaApp",
         "vendor.qti.imsrcs",
-        // MIUI/小米
         "com.miui.securitycore",
         "com.mobiletools.systemhelper",
         "com.milink.service",
@@ -682,11 +525,9 @@ public class Hook implements IXposedHookLoadPackage {
         "com.xiaomi.NetworkBoost",
         "com.miui.home",
         "com.xiaomi.bluetooth",
-        // Google
         "com.google.android.webview",
         "com.google.android.ext.services",
         "com.android.settings",
-        // 其他
         "com.android.permissioncontroller",
         "com.qualcomm.qti.devicestatisticsservice",
         "com.android.se",

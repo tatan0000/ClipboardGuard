@@ -19,7 +19,6 @@
             android:layout_height="30dp"
             app:title="@string/app_name"
             app:titleTextColor="?attr/colorOnSurface"
-            app:titleCentered="false"
             app:contentInsetStartWithNavigation="0dp"
             app:contentInsetStart="16dp"
             app:titleTextAppearance="@style/TextAppearance.ClipboardGuard.Toolbar" />
