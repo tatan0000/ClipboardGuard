@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - 直接在 system_server 进程内创建权限询问浮窗
  * - 使用 WindowManager.addView() 渲染，无需跨进程启动 Activity
  * - 通过 CountDownLatch 同步等待用户选择结果
- * - 自动处理超时（默认 3 秒）
+ * - 自动处理超时（默认 4 秒）
  *
  * 优势：
  * - 无 Activity 启动延迟（约 200-500ms）
@@ -115,25 +115,38 @@ public class InlineDialogManager {
         // 如果已有弹窗在显示，先关闭它
         dismissCurrentDialog();
 
+        CountDownLatch latch;
+        AtomicInteger resultRef;
+        
         synchronized (mLock) {
-            mCurrentLatch = new CountDownLatch(1);
+            latch = new CountDownLatch(1);
+            mCurrentLatch = latch;
+            resultRef = decision;
             mCurrentResult = decision;
             mCurrentPackageName = pkgName;
         }
 
         // 在主线程创建弹窗（使用 CountDownLatch 同步等待）
-        final CountDownLatch latch = new CountDownLatch(1);
+        final CountDownLatch createLatch = new CountDownLatch(1);
         mMainHandler.post(() -> {
             try {
                 createAndShowDialog(pkgName, contentPreview, matchedRule);
+            } catch (Throwable e) {
+                android.util.Log.e(TAG, "创建弹窗异常: " + e.getMessage());
+                // 异常情况下也要释放 latch
+                synchronized (mLock) {
+                    if (mCurrentLatch != null) {
+                        mCurrentLatch.countDown();
+                    }
+                }
             } finally {
-                latch.countDown();
+                createLatch.countDown();
             }
         });
 
         // 等待主线程完成（最多 1 秒，避免 Binder 线程长时间阻塞）
         try {
-            latch.await(1, java.util.concurrent.TimeUnit.SECONDS);
+            createLatch.await(1, java.util.concurrent.TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -141,7 +154,7 @@ public class InlineDialogManager {
         // 等待用户选择或超时
         try {
             // 使用较短的超时，避免主线程阻塞太久
-            mCurrentLatch.await(TIMEOUT_MS + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
+            latch.await(TIMEOUT_MS + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -150,13 +163,11 @@ public class InlineDialogManager {
         dismissCurrentDialog();
 
         // 如果用户没选择（latch 未 countdown），设置默认拒绝
-        if (mCurrentLatch.getCount() > 0) {
-            synchronized (mLock) {
-                if (mCurrentResult != null) {
-                    mCurrentResult.set(PermissionStorage.PERMISSION_BLOCK);
-                }
+        try {
+            if (latch.getCount() > 0 && resultRef != null) {
+                resultRef.set(PermissionStorage.PERMISSION_BLOCK);
             }
-        }
+        } catch (Throwable ignored) {}
 
         android.util.Log.i(TAG, "弹窗结果: " + pkgName + " -> " +
                 (decision.get() == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
@@ -481,27 +492,37 @@ public class InlineDialogManager {
      */
     private void dismissCurrentDialog() {
         // 取消倒计时
-        if (mCurrentTimer != null) {
-            mCurrentTimer.cancel();
+        CountDownTimer timerToCancel;
+        View viewToRemove;
+        
+        synchronized (mLock) {
+            timerToCancel = mCurrentTimer;
+            viewToRemove = mCurrentDialogView;
             mCurrentTimer = null;
+            mCurrentDialogView = null;
+            mCurrentPackageName = null;
         }
-
-        // 从窗口移除
-        if (mCurrentDialogView != null) {
+        
+        // 在外部取消定时器，避免持有锁时执行耗时操作
+        if (timerToCancel != null) {
             try {
-                mMainHandler.post(() -> {
-                    if (mCurrentDialogView != null) {
-                        try {
-                            mWindowManager.removeView(mCurrentDialogView);
-                        } catch (Exception ignored) {}
-                        mCurrentDialogView = null;
-                    }
-                });
+                timerToCancel.cancel();
             } catch (Throwable ignored) {}
         }
 
-        synchronized (mLock) {
-            mCurrentPackageName = null;
+        // 从窗口移除（必须在主线程）
+        if (viewToRemove != null && mWindowManager != null) {
+            try {
+                mMainHandler.post(() -> {
+                    try {
+                        mWindowManager.removeView(viewToRemove);
+                    } catch (IllegalArgumentException e) {
+                        // 视图已经被移除，忽略
+                    } catch (Throwable e) {
+                        android.util.Log.w(TAG, "移除弹窗失败: " + e.getMessage());
+                    }
+                });
+            } catch (Throwable ignored) {}
         }
     }
 

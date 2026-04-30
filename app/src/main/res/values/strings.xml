@@ -13,11 +13,15 @@
 
     <!-- 底部导航 -->
     <string name="nav_home">首页</string>
-    <string name="nav_apps">应用</string>
-    <string name="nav_log">日志</string>
+    <string name="nav_write">写入</string>
+    <string name="nav_read">读取</string>
     <string name="nav_settings">设置</string>
     <string name="log_empty">暂无日志记录</string>
     <string name="settings_appearance">外观</string>
+
+    <!-- 页面标题 -->
+    <string name="title_write_block">写入拦截</string>
+    <string name="title_read_block">读取拦截</string>
 
     <string name="settings_about">关于</string>
     <string name="settings_log">日志</string>
@@ -49,10 +53,13 @@
 
     <!-- 首页 - 使用说明 -->
     <string name="usage_title">使用说明</string>
-    <string name="usage_content">• 在"应用"页勾选需要拦截剪贴板写入的 APP\n• 点击右下角保存按钮使配置生效\n• 被拦截的 APP 写入剪贴板时，会弹窗询问您是否允许\n• 永久允许/永久拦截 由 AppOps/Thanox 等工具管理</string>
+    <string name="usage_content">• 在"写入"页勾选需要拦截剪贴板写入的 APP\n• 点击右下角保存按钮使配置生效\n• 被拦截的 APP 写入剪贴板时，会弹窗询问您是否允许\n• 永久允许/永久拦截 由 AppOps/Thanox 等工具管理</string>
 
-    <!-- 应用页 -->
-    <string name="apps_tip">勾选 = 拦截（写剪贴板时弹窗询问），未勾选 = 放行</string>
+    <!-- 写入页 -->
+    <string name="write_tip">勾选 = 拦截（写入剪贴板时弹窗询问），未勾选 = 放行</string>
+
+    <!-- 读取页 -->
+    <string name="read_tip">勾选 = 拦截（读取剪贴板时弹窗询问），未勾选 = 放行</string>
     <string name="btn_select_all">全选</string>
     <string name="btn_deselect_all">全不选</string>
     <string name="select_all">全选</string>
@@ -88,6 +95,56 @@
     <string name="guide_title">欢迎使用 ClipboardGuard</string>
     <string name="guide_btn_open_float">打开设置</string>
 
+    <!-- 正则规则页面 -->
+    <string name="tab_write_rules">写入规则</string>
+    <string name="tab_read_rules">读取规则</string>
+    <string name="write_rules_title">写入内容拦截规则</string>
+    <string name="read_rules_title">读取内容拦截规则</string>
+    <string name="rules_regex_enabled">内容检测</string>
+    <string name="rules_regex_enabled_desc">启用正则规则匹配</string>
+    <string name="rules_regex_enabled_write_desc">广告内容过滤，命中规则的内容会弹窗询问</string>
+    <string name="rules_regex_enabled_read_desc">敏感信息检测，命中规则的内容会弹窗询问</string>
+    <string name="rules_hint">点击右下角按钮添加新规则</string>
+    <string name="rules_hint_write">匹配广告/垃圾内容，命中后弹窗询问</string>
+    <string name="rules_hint_read">匹配敏感信息，命中后弹窗询问</string>
+    <string name="rules_btn_add">添加拦截规则</string>
+    <string name="rules_btn_edit">编辑</string>
+    <string name="rules_btn_delete">删除</string>
+    <string name="rules_btn_enable_selected">开启</string>
+    <string name="rules_btn_disable_selected">关闭</string>
+    <string name="rules_dialog_title_add">添加拦截规则</string>
+    <string name="rules_dialog_title_edit">编辑规则</string>
+    <string name="rules_dialog_title_view">规则详情</string>
+    <string name="rules_dialog_name_hint">规则名称</string>
+    <string name="rules_dialog_regex_hint">正则表达式</string>
+    <string name="rules_dialog_regex_helper">正则示例：[0-9]{4,8}</string>
+    <string name="rules_dialog_name_helper">名称示例：验证码</string>
+    <string name="rules_save_success">规则已保存</string>
+    <string name="save">保存</string>
+    <string name="rules_delete_confirm">确定删除此规则？</string>
+    <string name="rules_regex_error">正则表达式格式错误</string>
+    <string name="rules_name_required">规则名称不能为空</string>
+    <string name="rules_default_hint">默认规则内置常用检测模式，不可删除和修改</string>
+    <string name="default_rules_title">默认拦截规则</string>
+    <string name="enable_selected">开启</string>
+    <string name="disable_selected">关闭</string>
+    <string name="rules_delete_confirm_title">删除规则</string>
+    <string name="rules_delete_selected_confirm">确定删除选中的 %d 条规则？</string>
+    <string name="rules_delete_all_confirm">确定删除全部 %d 条规则？</string>
+    <string name="rules_hint_long_press">长按选择多条规则进行批量操作</string>
+    <string name="selected_count">已选择 %d 项</string>
+    <string name="rules_write_hint">匹配广告/垃圾内容，命中后弹窗询问。开启后将检测剪贴板内容是否匹配以下正则规则。\n💡 长按可批量选择多条规则进行操作</string>
+    <string name="rules_read_hint">匹配敏感信息，命中后弹窗询问。开启后将检测剪贴板内容是否匹配以下正则规则。\n💡 长按可批量选择多条规则进行操作</string>
+
+    <!-- 设置页 -->
+    <string name="settings_rules">内容拦截规则</string>
+    <string name="settings_rules_desc">配置正则过滤规则</string>
+    <string name="settings_write_rules">写入规则</string>
+    <string name="settings_write_rules_desc">广告过滤</string>
+    <string name="settings_read_rules">读取规则</string>
+    <string name="settings_read_rules_desc">敏感信息检测</string>
 
 
+
+    
 </resources>

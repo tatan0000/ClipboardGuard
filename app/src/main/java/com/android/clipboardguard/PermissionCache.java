@@ -9,219 +9,238 @@ import android.os.Binder;
 import android.os.FileObserver;
 import android.util.Log;
 
-import de.robv.android.xposed.XposedHelpers;
-
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * PermissionCache - 内存 blockSet 缓存
+ * PermissionCache - 被动刷新内存缓存
  *
- * 改造说明（2026-04-29）：
- * - blockSet：只存勾选（拦截）的包名
- * - isIgnored()：blockSet 里没有该包 → 返回 true（放行，不弹窗）
- * - Hook 启动时全量拉取 → 内存查表 O(1)
- * - 主刷新机制：FileObserver 监听文件变化（实时、无需广播）
- * - 备用机制：30s 兜底刷新（防止 FileObserver 失效）
- * - 数据源：纯文本文件，直接 I/O 读取（不经 ContentProvider，避免 system_server 同步 Binder 调用）
- *
- * 查询：PermissionCache.isIgnored(pkg) → true=放行，false=拦截弹窗
+ * 改造说明：
+ * - 移除定时静默刷新，仅依靠广播和 FileObserver 被动更新
+ * - 使用单线程守护线程池执行带文件时间检查的刷新
+ * - 移除静态 Context 引用，避免内存泄漏
+ * - 未加载完成时查询返回 true（放行），避免误拦
+ * - 最低 API 30，使用新版 FileObserver 构造函数
+ * - 增加规则文件 FileObserver，实现规则文件的被动同步
  */
 public class PermissionCache {
 
     private static final String TAG = "ClipboardGuard.PermCache";
 
-    // ── 内存 blockSet：2026-04-28 改造
-    // 勾选(拦截)的包名存这里
-    // isIgnored() 返回 false = 需要拦截弹窗，true = 放行
-    private static final Set<String> sBlockSet = new HashSet<>();
-    private static boolean sLoaded = false;
+    // ── 缓存集合 ──
+    private static final Set<String> sWriteBlockSet = new HashSet<>();
+    private static boolean sWriteLoaded = false;
 
-    // ── 广播接收器（Hook 侧刷新用）──
+    private static final Set<String> sReadBlockSet = new HashSet<>();
+    private static boolean sReadLoaded = false;
+
+    // ── 单线程守护线程池，用于被动刷新 ──
+    private static final ExecutorService sRefreshExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "PermCache-Refresh");
+        t.setDaemon(true);
+        return t;
+    });
+
+    // ── 广播接收器 ──
     private static BroadcastReceiver sRefreshReceiver;
 
-    // ── FileObserver（备用机制：监听 App 进程的 blocklist.txt 变化）──
-    // 注意：system_server 无法直接读 App 私有目录文件，FileObserver 仅用于通知
-    // 实际数据通过广播 Intent 传递，FileObserver 收到通知后触发 refresh
-    private static FileObserver sFileObserver;
+    // ── FileObserver（拦截列表） ──
+    private static FileObserver sWriteFileObserver;
+    private static FileObserver sReadFileObserver;
+
+    // ── FileObserver（规则文件） ──
+    private static FileObserver sWriteRulesFileObserver;
+    private static FileObserver sReadRulesFileObserver;
+    private static FileObserver sWriteDefaultRulesFileObserver;
+    private static FileObserver sReadDefaultRulesFileObserver;
+
+    // 硬编码配置文件路径（模块通用，Xposed 环境无更优方案）
+    @SuppressLint("SdCardPath")
     private static final String CONFIG_DIR = "/data/data/com.android.clipboardguard/files/";
-    private static final String BLOCKLIST_FILE = "blocklist.txt";
+    private static final String WRITE_BLOCKLIST_FILE = "write_blocklist.txt";
+    private static final String READ_BLOCKLIST_FILE  = "read_blocklist.txt";
 
-    // ── 单例 Context 引用（用于重新加载）──
-    private static Context sContext;
+    // 规则文件名
+    private static final String WRITE_RULES_FILE   = "write_rules.json";
+    private static final String READ_RULES_FILE    = "read_rules.json";
+    private static final String WRITE_DEFAULT_RULES_FILE = "write_default_rules.json";
+    private static final String READ_DEFAULT_RULES_FILE  = "read_default_rules.json";
 
-    // ── 时间戳兜底：广播不可靠时，定期静默刷新 ──
-    private static final long STALE_THRESHOLD_MS = 30_000; // 30s 无刷新则强制重载
-    private static volatile long sLastRefreshTime = 0;
-    private static final AtomicBoolean sRefreshing = new AtomicBoolean(false);
-    private static final Object sTimeLock = new Object();
+    // ── 文件最后修改时间记录 ──
+    private static volatile long sWriteFileLastModified = 0;
+    private static volatile long sReadFileLastModified  = 0;
 
-    // ──────────────────────────── 初始化 & 全量加载 ────────────────────────────
+    // ──────────────────────────── 加载方法（无 Context 参数） ────────────────────────────
 
-    /**
-     * Hook 启动时调用：全量拉取所有权限到 blockSet
-     *
-     * 加载策略（system_server 无法直接读 App 私有目录文件）：
-     * 1. 优先用 ContentProvider.getAllPermissionsDirect() 拉取（App 进程已启动时可用）
-     * 2. 加载广告过滤规则（正则）
-     * 3. 注册 FileObserver 监听文件变化（备用）
-     * 4. 注册广播接收器，App 保存权限时会推送 blocklist 到这里
-     *
-     * 注意：system_server 发出同步 Binder 调用到 App 进程会产生 "Outgoing transactions
-     * must be FLAG_ONEWAY" 警告，但不影响功能（只是规范问题，不导致崩溃）。
-     * 正常使用时，App 进程已启动，ContentProvider 响应快。
-     */
-    public static synchronized void loadIgnoreSet(Context context) {
-        if (context == null) {
-            Log.e(TAG, "loadIgnoreSet: context 为空！");
-            return;
-        }
-        sContext = context;
-
-        Log.i(TAG, "loadIgnoreSet 开始...");
+    public static synchronized void loadWriteBlockSet() {
+        Log.i(TAG, "loadWriteBlockSet 开始...");
         long start = System.currentTimeMillis();
 
         try {
-            // ── 通过 ContentProvider 拉取 blocklist ──
-            // system_server → App ContentProvider（同步调用，会产生 Binder 警告但不影响功能）
-            sBlockSet.clear();
-            boolean loadSuccess = false;
-            try {
-                Map<String, Integer> all = PermissionProvider.getAllPermissionsDirect(context);
-                for (Map.Entry<String, Integer> e : all.entrySet()) {
-                    if (e.getValue() == PermissionStorage.PERMISSION_BLOCK) {
-                        sBlockSet.add(e.getKey());
-                    }
+            sWriteBlockSet.clear();
+            Map<String, Integer> all = PermissionProvider.getAllWritePermissionsDirect(null);
+            for (Map.Entry<String, Integer> e : all.entrySet()) {
+                if (e.getValue() == PermissionStorage.PERMISSION_BLOCK) {
+                    sWriteBlockSet.add(e.getKey());
                 }
-                loadSuccess = true;
-                Log.d(TAG, "ContentProvider 拉取 blockSet=" + sBlockSet.size() + " 条");
-            } catch (Throwable e) {
-                Log.e(TAG, "ContentProvider 拉取失败: " + e.getMessage() + "（等待 App 进程启动）");
-                loadSuccess = false;
             }
+            sWriteLoaded = true;
 
-            // 同步加载广告过滤规则（用户配置的正则）
-            ContentRulesManager.loadRules();
-            sLastRefreshTime = System.currentTimeMillis();
+            File file = new File(CONFIG_DIR + WRITE_BLOCKLIST_FILE);
+            sWriteFileLastModified = file.exists() ? file.lastModified() : System.currentTimeMillis();
+
             long cost = System.currentTimeMillis() - start;
-            Log.i(TAG, "loadBlockSet 完成！blockSet.size=" + sBlockSet.size() + "，耗时=" + cost + "ms");
-
-            // 只有 ContentProvider 真正加载成功才标记 sLoaded = true
-            // 否则视为未加载（需要等待开机广播或 App 启动后重新初始化）
-            sLoaded = loadSuccess;
-
-            // 注册 FileObserver（监听 App 进程数据文件变化通知，不依赖实际读取权限）
-            registerFileObserver();
-
+            Log.i(TAG, "loadWriteBlockSet 完成！size=" + sWriteBlockSet.size() + "，耗时=" + cost + "ms");
         } catch (Throwable e) {
-            Log.e(TAG, "loadIgnoreSet 失败: " + e.getMessage());
-            sLoaded = false; // 确保失败时不标记为已加载
+            Log.e(TAG, "loadWriteBlockSet 失败: " + e.getMessage());
+            sWriteLoaded = false;
         }
     }
 
-    /**
-     * 从广播 Intent 中更新 blocklist（App 保存权限时推送过来）
-     * App 端通过 PermissionProvider.sendPermissionChangedBroadcastWithData() 发送
-     * @param blocklist 包含 BLOCK 权限的包名列表
-     */
-    public static synchronized void updateFromBlockList(java.util.List<String> blocklist) {
-        if (blocklist == null) {
-            Log.w(TAG, "updateFromBlockList: 数据为空，跳过");
-            return;
-        }
-        Log.i(TAG, "updateFromBlockList: 收到 " + blocklist.size() + " 条 blocklist");
+    public static synchronized void loadReadBlockSet() {
+        Log.i(TAG, "loadReadBlockSet 开始...");
+        long start = System.currentTimeMillis();
 
-        // 加载广告过滤规则（正则）
-        if (!ContentRulesManager.isLoaded()) {
-            ContentRulesManager.loadRules();
-        }
-
-        sBlockSet.clear();
-        sBlockSet.addAll(blocklist);
-        sLastRefreshTime = System.currentTimeMillis();
-        sLoaded = true;
-
-        Log.i(TAG, "updateFromBlockList 完成！blockSet.size=" + sBlockSet.size());
-    }
-
-    /**
-     * 刷新 ignoreSet（收到广播时调用）
-     */
-    public static synchronized void refreshIgnoreSet() {
-        if (sContext == null) {
-            Log.w(TAG, "refreshIgnoreSet: sContext 为空，跳过刷新");
-            return;
-        }
-        Log.i(TAG, "refreshIgnoreSet 开始...");
-        loadIgnoreSet(sContext);
-    }
-
-    /**
-     * 检查是否需要静默刷新（30s 兜底机制）
-     * 由 isIgnored() 触发，广播失败时的兜底方案
-     */
-    private static void checkAndSilentRefresh() {
-        long now = System.currentTimeMillis();
-        if (now - sLastRefreshTime < STALE_THRESHOLD_MS) return;
-        if (!sRefreshing.compareAndSet(false, true)) return; // 已有刷新在进行中，跳过
-
-        Log.i(TAG, "静默刷新: ignoreSet 已超过 " + STALE_THRESHOLD_MS / 1000 + "s 未更新，开始后台重载...");
-        new Thread(() -> {
-            try {
-                if (sContext != null) {
-                    // 同步刷新（重新加载 ignoreSet）
-                    synchronized (sTimeLock) {
-                        loadIgnoreSet(sContext);
-                    }
-                    Log.i(TAG, "静默刷新完成");
+        try {
+            sReadBlockSet.clear();
+            Map<String, Integer> all = PermissionProvider.getAllReadPermissionsDirect(null);
+            for (Map.Entry<String, Integer> e : all.entrySet()) {
+                if (e.getValue() == PermissionStorage.PERMISSION_BLOCK) {
+                    sReadBlockSet.add(e.getKey());
                 }
-            } catch (Throwable e) {
-                Log.e(TAG, "静默刷新失败: " + e.getMessage());
-            } finally {
-                sRefreshing.set(false);
             }
-        }, "PermCache-SilentRefresh").start();
+            sReadLoaded = true;
+
+            File file = new File(CONFIG_DIR + READ_BLOCKLIST_FILE);
+            sReadFileLastModified = file.exists() ? file.lastModified() : System.currentTimeMillis();
+
+            long cost = System.currentTimeMillis() - start;
+            Log.i(TAG, "loadReadBlockSet 完成！size=" + sReadBlockSet.size() + "，耗时=" + cost + "ms");
+        } catch (Throwable e) {
+            Log.e(TAG, "loadReadBlockSet 失败: " + e.getMessage());
+            sReadLoaded = false;
+        }
     }
 
-    /**
-     * 注册广播接收器（在 Hook 初始化时调用）
-     * 监听 App 侧保存权限后发出的 ACTION_PERMISSION_CHANGED 广播（数据推送）
-     */
+    // ──────────────────────────── 广播/文件事件触发更新 ────────────────────────────
+
+    public static synchronized void updateFromWriteBlockList(ArrayList<String> blocklist) {
+        if (blocklist == null) return;
+        Log.i(TAG, "updateFromWriteBlockList: 收到 " + blocklist.size() + " 条数据");
+        sWriteBlockSet.clear();
+        sWriteBlockSet.addAll(blocklist);
+        sWriteLoaded = true;
+        updateWriteFileLastModified();
+    }
+
+    public static synchronized void updateFromReadBlockList(ArrayList<String> blocklist) {
+        if (blocklist == null) return;
+        Log.i(TAG, "updateFromReadBlockList: 收到 " + blocklist.size() + " 条数据");
+        sReadBlockSet.clear();
+        sReadBlockSet.addAll(blocklist);
+        sReadLoaded = true;
+        updateReadFileLastModified();
+    }
+
+    // ──────────────────────────── 被动刷新（文件时间检查） ────────────────────────────
+
+    public static synchronized void refreshWriteBlockSet() {
+        sRefreshExecutor.execute(() -> {
+            File file = new File(CONFIG_DIR + WRITE_BLOCKLIST_FILE);
+            long currentModified = file.exists() ? file.lastModified() : -1;
+            if (currentModified == sWriteFileLastModified && sWriteFileLastModified != 0) {
+                Log.d(TAG, "writeBlockSet 文件未变化，跳过刷新");
+                return;
+            }
+            Log.i(TAG, "被动刷新 writeBlockSet...");
+            loadWriteBlockSet();
+        });
+    }
+
+    public static synchronized void refreshReadBlockSet() {
+        sRefreshExecutor.execute(() -> {
+            File file = new File(CONFIG_DIR + READ_BLOCKLIST_FILE);
+            long currentModified = file.exists() ? file.lastModified() : -1;
+            if (currentModified == sReadFileLastModified && sReadFileLastModified != 0) {
+                Log.d(TAG, "readBlockSet 文件未变化，跳过刷新");
+                return;
+            }
+            Log.i(TAG, "被动刷新 readBlockSet...");
+            loadReadBlockSet();
+        });
+    }
+
+    private static void updateWriteFileLastModified() {
+        File file = new File(CONFIG_DIR + WRITE_BLOCKLIST_FILE);
+        sWriteFileLastModified = file.exists() ? file.lastModified() : System.currentTimeMillis();
+    }
+
+    private static void updateReadFileLastModified() {
+        File file = new File(CONFIG_DIR + READ_BLOCKLIST_FILE);
+        sReadFileLastModified = file.exists() ? file.lastModified() : System.currentTimeMillis();
+    }
+
+    // ──────────────────────────── 广播接收器注册 ────────────────────────────
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public static synchronized void registerRefreshReceiver(Context context) {
-        // 检查是否已注册
-        if (sRefreshReceiver != null) {
-            Log.d(TAG, "刷新接收器已注册，跳过");
-            return;
-        }
+        if (sRefreshReceiver != null) return;
 
-        // ── 注册 FileObserver（备用：监听 App 进程数据文件变化通知）──
-        registerFileObserver();
+        registerWriteFileObserver();
+        registerReadFileObserver();
+        registerRulesFileObservers(); // 首次尝试注册（可能因文件不存在而跳过）
 
         try {
             BroadcastReceiver receiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context ctx, Intent intent) {
-                    Log.i(TAG, "收到权限变更广播，刷新 ignoreSet...");
-                    // 优先从 Intent 中提取 blocklist 数据（App 保存时推送过来）
-                    java.util.ArrayList<String> blocklist =
-                            intent.getStringArrayListExtra("blocklist");
-                    if (blocklist != null && !blocklist.isEmpty()) {
-                        Log.i(TAG, "广播携带 blocklist: " + blocklist.size() + " 条");
-                        updateFromBlockList(blocklist);
-                    } else {
-                        // 兜底：通过 ContentProvider 拉取
-                        Log.i(TAG, "广播无 blocklist 数据，通过 ContentProvider 拉取...");
-                        refreshIgnoreSet();
+                    Log.d(TAG, "收到权限变更广播");
+
+                    // 处理写入拦截列表
+                    ArrayList<String> writeBlocklist = intent.getStringArrayListExtra("write_blocklist");
+                    if (intent.hasExtra("write_blocklist")) {
+                        updateFromWriteBlockList(writeBlocklist != null ? writeBlocklist : new ArrayList<>());
+                    }
+
+                    // 处理读取拦截列表
+                    ArrayList<String> readBlocklist = intent.getStringArrayListExtra("read_blocklist");
+                    if (intent.hasExtra("read_blocklist")) {
+                        updateFromReadBlockList(readBlocklist != null ? readBlocklist : new ArrayList<>());
+                    }
+
+                    // 处理写入规则 JSON
+                    String writeRulesJson = intent.getStringExtra("write_rules_json");
+                    if (intent.hasExtra("write_rules_json") && writeRulesJson != null && !writeRulesJson.isEmpty()) {
+                        ContentRulesManager.updateRulesFromJson(writeRulesJson, false);
+                        // ★ 补注册：如果文件观察者未创建，现在创建
+                        if (sWriteRulesFileObserver == null) registerWriteRulesObserver();
+                        if (sWriteDefaultRulesFileObserver == null) registerWriteDefaultRulesObserver();
+                    }
+
+                    // 处理读取规则 JSON
+                    String readRulesJson = intent.getStringExtra("read_rules_json");
+                    if (intent.hasExtra("read_rules_json") && readRulesJson != null && !readRulesJson.isEmpty()) {
+                        ContentRulesManager.updateReadRulesFromJson(readRulesJson);
+                        // ★ 补注册
+                        if (sReadRulesFileObserver == null) registerReadRulesObserver();
+                        if (sReadDefaultRulesFileObserver == null) registerReadDefaultRulesObserver();
+                    }
+
+                    // 如果广播中没有有效数据，尝试基于文件刷新
+                    if (!intent.hasExtra("write_blocklist") && !intent.hasExtra("read_blocklist")
+                            && !intent.hasExtra("write_rules_json") && !intent.hasExtra("read_rules_json")) {
+                        refreshWriteBlockSet();
+                        refreshReadBlockSet();
                     }
                 }
             };
 
-            IntentFilter filter = new IntentFilter(
-                    PermissionProvider.ACTION_PERMISSION_CHANGED);
+            IntentFilter filter = new IntentFilter(PermissionProvider.ACTION_PERMISSION_CHANGED);
             long identity = Binder.clearCallingIdentity();
             try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -229,7 +248,7 @@ public class PermissionCache {
                 } else {
                     context.registerReceiver(receiver, filter);
                 }
-                sRefreshReceiver = receiver; // 保存引用
+                sRefreshReceiver = receiver;
                 Log.i(TAG, "权限变更广播接收器注册成功");
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -239,92 +258,190 @@ public class PermissionCache {
         }
     }
 
-    /**
-     * 注册 FileObserver 监听配置文件变化（主刷新机制）
-     * 相比广播更可靠：文件一变就刷新，不依赖进程间通信
-     */
-    private static void registerFileObserver() {
-        if (sFileObserver != null) {
-            // 已注册过，先停止
-            try {
-                sFileObserver.stopWatching();
-            } catch (Throwable ignored) {}
-        }
+    private static void registerRulesFileObservers() {
+        registerWriteRulesObserver();
+        registerReadRulesObserver();
+        registerWriteDefaultRulesObserver();
+        registerReadDefaultRulesObserver();
+    }
 
-        String path = CONFIG_DIR + BLOCKLIST_FILE;
+    private static void registerWriteRulesObserver() {
+        if (sWriteRulesFileObserver != null) {
+            try { sWriteRulesFileObserver.stopWatching(); } catch (Throwable ignored) {}
+        }
+        File file = new File(CONFIG_DIR + WRITE_RULES_FILE);
+        if (!file.exists()) {
+            Log.d(TAG, "write_rules.json 暂未创建，跳过 FileObserver");
+            return;
+        }
         try {
-            sFileObserver = new FileObserver(path, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
-                @Override
-                public void onEvent(int event, String path) {
-                    Log.i(TAG, "FileObserver 检测到配置文件变化，刷新缓存...");
-                    refreshIgnoreSet();
+            sWriteRulesFileObserver = new FileObserver(file, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
+                @Override public void onEvent(int event, String path) {
+                    Log.i(TAG, "write_rules.json 变化，重新加载写入规则");
+                    ContentRulesManager.loadRules();
                 }
             };
-            sFileObserver.startWatching();
-            Log.i(TAG, "FileObserver 注册成功: " + path);
+            sWriteRulesFileObserver.startWatching();
+            Log.i(TAG, "write_rules FileObserver 注册成功: " + file.getPath());
         } catch (Throwable e) {
-            Log.e(TAG, "FileObserver 注册失败: " + e.getMessage());
+            Log.e(TAG, "write_rules FileObserver 注册失败", e);
+        }
+    }
+
+    private static void registerReadRulesObserver() {
+        if (sReadRulesFileObserver != null) {
+            try { sReadRulesFileObserver.stopWatching(); } catch (Throwable ignored) {}
+        }
+        File file = new File(CONFIG_DIR + READ_RULES_FILE);
+        if (!file.exists()) {
+            Log.d(TAG, "read_rules.json 暂未创建，跳过 FileObserver");
+            return;
+        }
+        try {
+            sReadRulesFileObserver = new FileObserver(file, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
+                @Override public void onEvent(int event, String path) {
+                    Log.i(TAG, "read_rules.json 变化，重新加载读取规则");
+                    ContentRulesManager.loadReadRules();
+                }
+            };
+            sReadRulesFileObserver.startWatching();
+            Log.i(TAG, "read_rules FileObserver 注册成功: " + file.getPath());
+        } catch (Throwable e) {
+            Log.e(TAG, "read_rules FileObserver 注册失败", e);
+        }
+    }
+
+    private static void registerWriteDefaultRulesObserver() {
+        if (sWriteDefaultRulesFileObserver != null) {
+            try { sWriteDefaultRulesFileObserver.stopWatching(); } catch (Throwable ignored) {}
+        }
+        File file = new File(CONFIG_DIR + WRITE_DEFAULT_RULES_FILE);
+        if (!file.exists()) {
+            Log.d(TAG, "write_default_rules.json 暂未创建，跳过 FileObserver");
+            return;
+        }
+        try {
+            sWriteDefaultRulesFileObserver = new FileObserver(file, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
+                @Override public void onEvent(int event, String path) {
+                    Log.i(TAG, "write_default_rules.json 变化，重新加载写入规则");
+                    ContentRulesManager.loadRules();
+                }
+            };
+            sWriteDefaultRulesFileObserver.startWatching();
+            Log.i(TAG, "write_default_rules FileObserver 注册成功: " + file.getPath());
+        } catch (Throwable e) {
+            Log.e(TAG, "write_default_rules FileObserver 注册失败", e);
+        }
+    }
+
+    private static void registerReadDefaultRulesObserver() {
+        if (sReadDefaultRulesFileObserver != null) {
+            try { sReadDefaultRulesFileObserver.stopWatching(); } catch (Throwable ignored) {}
+        }
+        File file = new File(CONFIG_DIR + READ_DEFAULT_RULES_FILE);
+        if (!file.exists()) {
+            Log.d(TAG, "read_default_rules.json 暂未创建，跳过 FileObserver");
+            return;
+        }
+        try {
+            sReadDefaultRulesFileObserver = new FileObserver(file, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
+                @Override public void onEvent(int event, String path) {
+                    Log.i(TAG, "read_default_rules.json 变化，重新加载读取规则");
+                    ContentRulesManager.loadReadRules();
+                }
+            };
+            sReadDefaultRulesFileObserver.startWatching();
+            Log.i(TAG, "read_default_rules FileObserver 注册成功: " + file.getPath());
+        } catch (Throwable e) {
+            Log.e(TAG, "read_default_rules FileObserver 注册失败", e);
+        }
+    }
+
+    private static void registerWriteFileObserver() {
+        if (sWriteFileObserver != null) {
+            try { sWriteFileObserver.stopWatching(); } catch (Throwable ignored) {}
+        }
+        File file = new File(CONFIG_DIR + WRITE_BLOCKLIST_FILE);
+        try {
+            sWriteFileObserver = new FileObserver(file, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
+                @Override public void onEvent(int event, String path) {
+                    Log.i(TAG, "FileObserver 检测到 write_blocklist 变化，刷新缓存...");
+                    refreshWriteBlockSet();
+                }
+            };
+            sWriteFileObserver.startWatching();
+            Log.i(TAG, "write_blocklist FileObserver 注册成功: " + file.getPath());
+        } catch (Throwable e) {
+            Log.e(TAG, "write_blocklist FileObserver 注册失败: " + e.getMessage());
+        }
+    }
+
+    private static void registerReadFileObserver() {
+        if (sReadFileObserver != null) {
+            try { sReadFileObserver.stopWatching(); } catch (Throwable ignored) {}
+        }
+        File file = new File(CONFIG_DIR + READ_BLOCKLIST_FILE);
+        try {
+            sReadFileObserver = new FileObserver(file, FileObserver.CLOSE_WRITE | FileObserver.MODIFY) {
+                @Override public void onEvent(int event, String path) {
+                    Log.i(TAG, "FileObserver 检测到 read_blocklist 变化，刷新缓存...");
+                    refreshReadBlockSet();
+                }
+            };
+            sReadFileObserver.startWatching();
+            Log.i(TAG, "read_blocklist FileObserver 注册成功: " + file.getPath());
+        } catch (Throwable e) {
+            Log.e(TAG, "read_blocklist FileObserver 注册失败: " + e.getMessage());
         }
     }
 
     // ──────────────────────────── 查询接口 ────────────────────────────
 
-    /**
-     * 检查包名是否在放行名单中
-     * @return true = 放行(IGNORE)，false = 需要拦截(BLOCK)
-     */
-    public static boolean isIgnored(String packageName) {
-        if (!sLoaded) {
-            Log.w(TAG, "isIgnored: blockSet 尚未加载！package=" + packageName);
-            return false; // 保守策略：未加载完视为需要拦截
+    public static boolean isWriteIgnored(String packageName) {
+        if (!sWriteLoaded) {
+            Log.w(TAG, "写入缓存未加载，暂时放行: " + packageName);
+            return true;
         }
-
-        // 兜底检查：30s 未刷新则静默后台重载（解决跨进程广播不可靠问题）
-        checkAndSilentRefresh();
-
-        // blockSet 里有 → 拦截（不忽略），返回 false
-        // blockSet 里没有（不在文件里 = 未勾选 = 默认拦截），返回 true = 放行
-        boolean ignored = !sBlockSet.contains(packageName);
-        Log.d(TAG, "isIgnored(" + packageName + ") = " + ignored + " (blockSet.size=" + sBlockSet.size() + ")");
-        return ignored;
+        return !sWriteBlockSet.contains(packageName);
     }
 
-
-    /**
-     * 获取当前 ignoreSet 大小（调试用）
-     */
-    public static int getIgnoreSetSize() {
-        return sBlockSet.size();
+    @SuppressWarnings("unused")
+    public static boolean isReadIgnored(String packageName) {
+        if (!sReadLoaded) {
+            Log.w(TAG, "读取缓存未加载，暂时放行: " + packageName);
+            return true;
+        }
+        return !sReadBlockSet.contains(packageName);
     }
 
-    /**
-     * 是否已加载完成
-     */
-    public static boolean isLoaded() {
-        return sLoaded;
-    }
+    @SuppressWarnings("unused")
+    public static boolean isWriteLoaded() { return sWriteLoaded; }
 
-    /**
-     * 从黑名单移除包名（用户点击"允许"时调用）
-     * 同时更新内存缓存和持久化存储
-     */
-    public static synchronized void removeFromBlockSet(Context context, String packageName) {
+    @SuppressWarnings("unused")
+    public static int getWriteBlockSetSize() { return sWriteBlockSet.size(); }
+
+    @SuppressWarnings("unused")
+    public static int getReadBlockSetSize() { return sReadBlockSet.size(); }
+
+    @SuppressWarnings("unused")
+    public static void removeFromBlockSet(Context context, String packageName) {
         if (packageName == null || packageName.isEmpty()) return;
-        sBlockSet.remove(packageName);  // 从黑名单移除 = 放行
-        sLastRefreshTime = System.currentTimeMillis();
-        Log.i(TAG, "removeFromBlockSet: " + packageName + " 已放行，blockSet.size=" + sBlockSet.size());
-        // 持久化：标记为 PERMISSION_IGNORE（不在 blockSet 中）
+        sWriteBlockSet.remove(packageName);
+        updateWriteFileLastModified();
         if (context != null) {
-            PermissionProvider.savePermission(context, packageName, PermissionStorage.PERMISSION_IGNORE);
+            PermissionProvider.saveWritePermission(context, packageName, PermissionStorage.PERMISSION_IGNORE);
         }
     }
 
-    /**
-     * 清空黑名单（谨慎使用）
-     */
-    public static synchronized void clear() {
-        sBlockSet.clear();
-        sLoaded = false;
-        Log.i(TAG, "blockSet 已清空");
+    @SuppressWarnings("unused")
+    public static synchronized void clearWriteBlockSet() {
+        sWriteBlockSet.clear();
+        sWriteLoaded = false;
+    }
+
+    @SuppressWarnings("unused")
+    public static synchronized void clearReadBlockSet() {
+        sReadBlockSet.clear();
+        sReadLoaded = false;
     }
 }

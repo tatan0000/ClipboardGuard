@@ -14,8 +14,8 @@ android {
         applicationId "com.android.clipboardguard"
         minSdk 30
         targetSdk 36
-        versionCode 1
-        versionName "1.0"
+        versionCode 260501
+        versionName "1.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -51,6 +51,7 @@ dependencies {
     implementation libs.activity
     implementation libs.appcompat
     implementation libs.material
+    implementation libs.swiperefreshlayout
 
     compileOnly files('libs\\XposedBridgeAPI-82.jar')
     testImplementation libs.junit

@@ -1,7 +1,7 @@
 package com.android.clipboardguard;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
@@ -9,19 +9,19 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-
-import androidx.core.content.ContextCompat;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.net.Uri;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.LruCache;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.AbsListView;
 import android.widget.BaseExpandableListAdapter;
@@ -33,23 +33,25 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import android.util.Log;
 import androidx.activity.OnBackPressedCallback;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.lang.ref.WeakReference;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,89 +62,80 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * 主界面
- *
- * 首页（Home）：模块激活状态、版本信息
- * 应用页（Apps）：全部已安装应用，勾选 = 拦截，FAB 保存
- *
- * 权限逻辑：
- *   勾选(checked)  = BLOCK  = 每次写剪贴板弹窗询问
- *   未勾选         = IGNORE = 放行，不拦截
- */
 public class MainActivity extends AppCompatActivity {
 
-    // 静态实例（WeakReference 防内存泄漏）
     private static WeakReference<MainActivity> sInstanceRef;
 
-    // 保存当前主题（recreate 后恢复，-1 = 未初始化）
     private static int sCurrentTheme = -1;
-    // 保存当前页（recreate 后恢复，0 = PAGE_HOME）
     private static int sCurrentPage = 0;
 
-    // 分组索引
     private static final int GROUP_USER   = 0;
     private static final int GROUP_SYSTEM = 1;
     private static final int GROUP_CORE   = 2;
 
-    // 页面索引
     public static final int PAGE_HOME              = 0;
-    public static final int PAGE_APPS              = 1;
-    public static final int PAGE_LOG               = 2;
+    public static final int PAGE_WRITE             = 1;
+    public static final int PAGE_READ              = 2;
     public static final int PAGE_SETTINGS          = 3;
     public static final int PAGE_PERMISSION_DETAIL = 4;
 
-    // 主题常量（引用 ClipboardGuardApp，避免多处重复定义）
     public static final String PREF_NAME   = ClipboardGuardApp.PREF_NAME;
     public static final String KEY_THEME   = ClipboardGuardApp.KEY_THEME;
     public static final int    THEME_LIGHT  = ClipboardGuardApp.THEME_LIGHT;
     public static final int    THEME_DARK   = ClipboardGuardApp.THEME_DARK;
     public static final int    THEME_SYSTEM = ClipboardGuardApp.THEME_SYSTEM;
 
-    // 首次使用引导
-    private static final String KEY_FIRST_LAUNCH = "first_launch";
-
-    // ── Views ──
     private View mPageHome;
-    private View mPageApps;
-    private View mPageLog;
+    private View mPageWrite;
+    private View mPageRead;
     private View mPageSettings;
     private View mPagePermissionDetail;
     private FloatingActionButton mFab;
     private LinearLayout mBottomNav;
-    private LinearLayout mNavHome, mNavApps, mNavLog, mNavSettings;
-    private ExpandableListView mExpandableListView;
-    private EditText mEtSearch;
+    private LinearLayout mNavHome, mNavApps, mNavRead, mNavSettings;
+    private ExpandableListView mWriteExpandableListView;
+    private ExpandableListView mReadExpandableListView;
+    private SwipeRefreshLayout mWriteSwipeRefresh;
+    private SwipeRefreshLayout mReadSwipeRefresh;
     private TextView mTvStatusTitle, mTvStatusDesc;
     private ImageView mIvStatusIcon;
     private TextView mTvXposedSdk, mTvModuleVersion;
     private TextView mTvAndroidVersion, mTvManufacturer, mTvModel;
 
-    // ── 数据 ──
-    private AppGroupAdapter mAdapter;
-    private final List<AppItem> mUserApps   = new ArrayList<>();
-    private final List<AppItem> mSystemApps = new ArrayList<>();
-    private final List<AppItem> mCoreApps   = new ArrayList<>();
-    private final List<AppItem> mFilteredUser   = new ArrayList<>();
-    private final List<AppItem> mFilteredSystem = new ArrayList<>();
-    private final List<AppItem> mFilteredCore   = new ArrayList<>();
-    private String mCurrentQuery = "";
+    private AppGroupAdapter mWriteAdapter;
+    private final List<AppItem> mWriteUserApps   = new ArrayList<>();
+    private final List<AppItem> mWriteSystemApps = new ArrayList<>();
+    private final List<AppItem> mWriteCoreApps   = new ArrayList<>();
+    private final List<AppItem> mWriteFilteredUser   = new ArrayList<>();
+    private final List<AppItem> mWriteFilteredSystem = new ArrayList<>();
+    private final List<AppItem> mWriteFilteredCore   = new ArrayList<>();
+    private String mWriteCurrentQuery = "";
+    private final Map<String, Integer> mWritePendingChanges = new HashMap<>();
+
+    private AppGroupAdapter mReadAdapter;
+    private final List<AppItem> mReadUserApps   = new ArrayList<>();
+    private final List<AppItem> mReadSystemApps = new ArrayList<>();
+    private final List<AppItem> mReadCoreApps   = new ArrayList<>();
+    private final List<AppItem> mReadFilteredUser   = new ArrayList<>();
+    private final List<AppItem> mReadFilteredSystem = new ArrayList<>();
+    private final List<AppItem> mReadFilteredCore   = new ArrayList<>();
+    private String mReadCurrentQuery = "";
+    private final Map<String, Integer> mReadPendingChanges = new HashMap<>();
+
     private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private static final ExecutorService sExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "ClipboardGuard-Worker");
+        t.setDaemon(true);
+        return t;
+    });
 
-    private AlertDialog mGuideDialog;
-    private View        mGuideView;
+    private final LruCache<String, Drawable> mIconCache = new LruCache<>(4 * 1024 * 1024) {
+        @Override
+        protected int sizeOf(String key, Drawable value) {
+            return value.getIntrinsicWidth() * value.getIntrinsicHeight() * 4;
+        }
+    };
 
-    /** 未保存的变更缓存（包名 → 新状态），FAB 保存时批量写入 */
-    private final Map<String, Integer> mPendingChanges = new HashMap<>();
-
-    // 日志
-    private RecyclerView mRvLog;
-    private LogAdapter   mLogAdapter;
-
-    private static final ExecutorService sExecutor = Executors.newSingleThreadExecutor();
-    private static final int REQUEST_CODE_FLOAT_WINDOW = 1001;
-
-    // FAB 自动隐藏：无操作 4s 后隐藏
     private static final long FAB_AUTO_HIDE_DELAY = 4000L;
     private final Runnable mFabAutoHide = () -> {
         if (mFab != null && mFab.getVisibility() == View.VISIBLE) {
@@ -153,11 +146,9 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    /** 重置 FAB 自动隐藏倒计时（取消旧的，重新开始 2s 计时） */
     private void resetFabAutoHide() {
         mHandler.removeCallbacks(mFabAutoHide);
-        // 有操作时显示 FAB
-        if (mFab.getVisibility() != View.VISIBLE && sCurrentPage == PAGE_APPS) {
+        if (mFab.getVisibility() != View.VISIBLE && (sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ)) {
             mFab.setVisibility(View.VISIBLE);
             mFab.setAlpha(1f);
             mFab.setScaleX(1f);
@@ -165,8 +156,6 @@ public class MainActivity extends AppCompatActivity {
         }
         mHandler.postDelayed(mFabAutoHide, FAB_AUTO_HIDE_DELAY);
     }
-
-    // ──────────────────────────── 生命周期 ────────────────────────────
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -179,7 +168,6 @@ public class MainActivity extends AppCompatActivity {
         initThemeRadioButtons();
         applyTheme();
 
-        // 状态栏间距适配
         View appBarView = findViewById(R.id.app_bar);
         ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
@@ -189,23 +177,16 @@ public class MainActivity extends AppCompatActivity {
         });
         ViewCompat.requestApplyInsets(appBarView);
 
-        // Toolbar
-        MaterialToolbar toolbar = findViewById(R.id.toolbar);
-        toolbar.setNavigationOnClickListener(v -> {
-            if (sCurrentPage == PAGE_PERMISSION_DETAIL) showPage(PAGE_SETTINGS);
-        });
-
-        // 找 View
         mPageHome             = findViewById(R.id.page_home);
-        mPageApps             = findViewById(R.id.page_apps);
-        mPageLog              = findViewById(R.id.page_log);
+        mPageWrite            = findViewById(R.id.page_write);
+        mPageRead             = findViewById(R.id.page_read);
         mPageSettings         = findViewById(R.id.page_settings);
         mPagePermissionDetail = findViewById(R.id.page_permission_detail);
         mFab                  = findViewById(R.id.fab_save);
         mBottomNav            = findViewById(R.id.bottom_nav);
         mNavHome              = findViewById(R.id.nav_home);
         mNavApps              = findViewById(R.id.nav_apps);
-        mNavLog               = findViewById(R.id.nav_log);
+        mNavRead              = findViewById(R.id.nav_read);
         mNavSettings          = findViewById(R.id.nav_settings);
         mTvStatusTitle        = findViewById(R.id.tv_status_title);
         mTvStatusDesc         = findViewById(R.id.tv_status_desc);
@@ -215,117 +196,20 @@ public class MainActivity extends AppCompatActivity {
         mTvAndroidVersion     = findViewById(R.id.tv_android_version);
         mTvManufacturer       = findViewById(R.id.tv_manufacturer);
         mTvModel              = findViewById(R.id.tv_model);
-        mEtSearch             = findViewById(R.id.et_search);
-        mExpandableListView   = findViewById(R.id.expandable_list);
 
-        // 日志
-        mRvLog = findViewById(R.id.rv_log);
-        mLogAdapter = new LogAdapter();
-        mRvLog.setLayoutManager(new LinearLayoutManager(this));
-        mRvLog.setAdapter(mLogAdapter);
-
-        // 全选/反选
-        MaterialButton btnSelectAll   = findViewById(R.id.btn_select_all);
-        MaterialButton btnDeselectAll = findViewById(R.id.btn_deselect_all);
-        btnSelectAll.setOnClickListener(v -> { setAllAppsBlocked(true);  mAdapter.notifyDataSetChanged(); resetFabAutoHide(); });
-        btnDeselectAll.setOnClickListener(v -> { setAllAppsBlocked(false); mAdapter.notifyDataSetChanged(); resetFabAutoHide(); });
-
+        initWritePage();
+        initReadPage();
+        initRuleFiles();
         initHomePage();
-
-        mAdapter = new AppGroupAdapter();
-        mExpandableListView.setAdapter(mAdapter);
-
-        // 触摸/滑动列表时显示 FAB
-        mExpandableListView.setOnTouchListener((v, event) -> {
-            resetFabAutoHide();
-            return false; // 不拦截事件，让 OnChildClickListener 正常响应
-        });
-        mExpandableListView.setOnScrollListener(new AbsListView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(AbsListView view, int scrollState) {
-                if (scrollState != SCROLL_STATE_IDLE) {
-                    resetFabAutoHide();
-                }
-            }
-            @Override
-            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {}
-        });
-
-        // 列表点击切换勾选
-        mExpandableListView.setOnChildClickListener((parent, v, groupPos, childPos, id) -> {
-            AppItem item = getItem(groupPos, childPos);
-            if (item == null || item.isCore) return false;
-            item.isBlocked = !item.isBlocked;
-            mPendingChanges.put(item.packageName,
-                    item.isBlocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
-            mAdapter.notifyDataSetChanged();
-            resetFabAutoHide();
-            return true;
-        });
-
-        // 分组头点击：展开/折叠列表（由 Adapter 的 getGroupView 中设置）
-        mExpandableListView.setOnGroupClickListener((parent, v, groupPos, id) -> {
-            // 点击分组头时展开/折叠（由行布局的 OnClickListener 处理）
-            // 这里返回 true 表示已处理，不让 ExpandableListView 默认处理
-            return true;
-        });
-
-        // 搜索
-        mEtSearch.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
-            @Override public void afterTextChanged(Editable s) {
-                mCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
-                applyFilter();
-                resetFabAutoHide();
-            }
-        });
-
-        // FAB 保存
-        mFab.setOnClickListener(v -> {
-            saveChanges();
-            resetFabAutoHide(); // 保存后重新开始倒计时
-        });
-
-        // 底部导航
-        View.OnClickListener navClick = v -> {
-            int id = v.getId();
-            if      (id == R.id.nav_home)     showPage(PAGE_HOME);
-            else if (id == R.id.nav_apps)     showPage(PAGE_APPS);
-            else if (id == R.id.nav_log)      showPage(PAGE_LOG);
-            else if (id == R.id.nav_settings) showPage(PAGE_SETTINGS);
-        };
-        mNavHome.setOnClickListener(navClick);
-        mNavApps.setOnClickListener(navClick);
-        mNavLog.setOnClickListener(navClick);
-        mNavSettings.setOnClickListener(navClick);
-
-        // 恢复页面
-        showPage(sCurrentPage == PAGE_APPS || sCurrentPage == PAGE_LOG
-                || sCurrentPage == PAGE_SETTINGS ? sCurrentPage : PAGE_HOME);
-
+        setupBottomNav();
+        setupSettingsPage();
+        setupBackPressed();
         loadAppsAsync();
 
-        // ── 设置页交互 ──
-        setupSettingsPage();
+        showPage(sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ
+                || sCurrentPage == PAGE_SETTINGS ? sCurrentPage : PAGE_HOME);
 
-        // 首次使用引导弹窗：暂时跳过，代码保留供免 Root 版复用
-        // 后续免 Root 版可改为检查无障碍服务权限，在此恢复调用
-        // if (!getSharedPreferences(PREF_NAME, MODE_PRIVATE).getBoolean(KEY_FIRST_LAUNCH, false)) {
-        //     showPermissionGuideDialog();
-        // }
-
-        // 返回键：权限详情页回到设置页
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override public void handleOnBackPressed() {
-                if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
-                    showPage(PAGE_SETTINGS);
-                } else {
-                    setEnabled(false);
-                    MainActivity.super.onBackPressed();
-                }
-            }
-        });
+        PermissionProvider.sendFullConfigBroadcast(this);
     }
 
     @Override
@@ -333,21 +217,13 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         initHomePage();
         if (sCurrentPage == PAGE_PERMISSION_DETAIL) initPermissionDetailPage();
+        loadAppsAsync();
+    }
 
-        // 引导弹窗：暂时跳过，代码保留供免 Root 版复用
-        // if (!getSharedPreferences(PREF_NAME, MODE_PRIVATE).getBoolean(KEY_FIRST_LAUNCH, false)) {
-        //     boolean hasPerm = Settings.canDrawOverlays(this);
-        //     if (mGuideDialog != null && mGuideDialog.isShowing()) {
-        //         refreshGuideDialog(hasPerm);
-        //     } else {
-        //         showPermissionGuideDialog();
-        //     }
-        // }
-
-        // 刷新应用权限（仅列表非空时）
-        if (!mUserApps.isEmpty() || !mSystemApps.isEmpty()) {
-            refreshPermissions();
-        }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mHandler.removeCallbacksAndMessages(null);
     }
 
     @Override
@@ -355,63 +231,170 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
-    // ──────────────────────────── 设置页 ────────────────────────────
+    @SuppressLint("ClickableViewAccessibility")
+    private void initWritePage() {
+        mWriteExpandableListView = findViewById(R.id.expandable_list_write);
+        mWriteSwipeRefresh = findViewById(R.id.swipe_refresh_write);
 
-    private void setupSettingsPage() {
-        setupThemeItem(R.id.item_theme_light,  THEME_LIGHT);
-        setupThemeItem(R.id.item_theme_dark,   THEME_DARK);
-        setupThemeItem(R.id.item_theme_system, THEME_SYSTEM);
+        mWriteAdapter = new AppGroupAdapter(false);
+        mWriteExpandableListView.setAdapter(mWriteAdapter);
 
-        // 权限入口：暂时隐藏，代码保留供免 Root 版复用（免 Root 版需要检查无障碍权限）
-        View itemPermission = findViewById(R.id.item_permission);
-        if (itemPermission != null) {
-            itemPermission.setVisibility(View.GONE);
-            // itemPermission.setOnClickListener(v -> showPage(PAGE_PERMISSION_DETAIL));
-        }
+        mWriteSwipeRefresh.setOnRefreshListener(this::loadAppsAsync);
 
-        SwitchMaterial switchLog = findViewById(R.id.switch_enable_log);
-        if (switchLog != null) {
-            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
-            switchLog.setChecked(prefs.getBoolean("enable_log", false));
-            switchLog.setOnCheckedChangeListener((btn, checked) ->
-                    prefs.edit().putBoolean("enable_log", checked).apply());
-        }
+        // 触摸时显示 FAB，同时调用 performClick 避免警告
 
-        View itemAbout = findViewById(R.id.item_about);
-        if (itemAbout != null) {
-            itemAbout.setOnClickListener(v ->
-                    Toast.makeText(this, "模块版本: " + getModuleVersion(), Toast.LENGTH_SHORT).show());
-        }
-    }
+        mWriteExpandableListView.setOnTouchListener((v, event) -> {
+            v.performClick();
+            resetFabAutoHide();
+            return false;
+        });
+        mWriteExpandableListView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+                if (scrollState != SCROLL_STATE_IDLE) resetFabAutoHide();
+            }
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {}
+        });
 
-    private void setupThemeItem(int viewId, int theme) {
-        View item = findViewById(viewId);
-        if (item != null) {
-            item.setOnClickListener(v -> {
-                switchTheme(theme);
-                updateThemeRadioButtons(theme);
+        mWriteExpandableListView.setOnChildClickListener((parent, v, groupPos, childPos, id) -> {
+            AppItem item = getWriteItem(groupPos, childPos);
+            if (item == null || item.isCore) return false;
+            item.isBlockedWrite = !item.isBlockedWrite;
+            mWritePendingChanges.put(item.packageName,
+                    item.isBlockedWrite ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+            mWriteAdapter.notifyDataSetChanged();
+            resetFabAutoHide();
+            return true;
+        });
+
+        EditText mWriteEtSearch = findViewById(R.id.et_search_write);
+        mWriteEtSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) {
+                mWriteCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
+                applyWriteFilter();
+                resetFabAutoHide();
+            }
+        });
+
+        TextView btnSelectAll = findViewById(R.id.btn_select_all_write);
+        TextView btnDeselectAll = findViewById(R.id.btn_deselect_all_write);
+        if (btnSelectAll != null) {
+            btnSelectAll.setOnClickListener(v -> {
+                setAllWriteApps(true);
+                mWriteAdapter.notifyDataSetChanged();
+                resetFabAutoHide();
             });
         }
+        if (btnDeselectAll != null) {
+            btnDeselectAll.setOnClickListener(v -> {
+                setAllWriteApps(false);
+                mWriteAdapter.notifyDataSetChanged();
+                resetFabAutoHide();
+            });
+        }
+
+        View cardWriteRules = findViewById(R.id.card_write_rules);
+        if (cardWriteRules != null) {
+            cardWriteRules.setOnClickListener(v ->
+                    startActivity(new Intent(this, WriteRulesDetailActivity.class)));
+        }
     }
 
-    // ──────────────────────────── 页面切换 ────────────────────────────
+    @SuppressLint("ClickableViewAccessibility")
+    private void initReadPage() {
+        mReadExpandableListView = findViewById(R.id.expandable_list_read);
+        mReadSwipeRefresh = findViewById(R.id.swipe_refresh_read);
+
+        mReadAdapter = new AppGroupAdapter(true);
+        mReadExpandableListView.setAdapter(mReadAdapter);
+
+        mReadSwipeRefresh.setOnRefreshListener(this::loadAppsAsync);
+
+        mReadExpandableListView.setOnTouchListener((v, event) -> {
+            v.performClick();
+            resetFabAutoHide();
+            return false;
+        });
+        mReadExpandableListView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+                if (scrollState != SCROLL_STATE_IDLE) resetFabAutoHide();
+            }
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {}
+        });
+
+        mReadExpandableListView.setOnChildClickListener((parent, v, groupPos, childPos, id) -> {
+            AppItem item = getReadItem(groupPos, childPos);
+            if (item == null || item.isCore) return false;
+            item.isBlockedRead = !item.isBlockedRead;
+            mReadPendingChanges.put(item.packageName,
+                    item.isBlockedRead ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+            mReadAdapter.notifyDataSetChanged();
+            resetFabAutoHide();
+            return true;
+        });
+
+        mReadExpandableListView.setOnGroupClickListener((parent, v, groupPos, id) -> true);
+
+        EditText mReadEtSearch = findViewById(R.id.et_search_read);
+        mReadEtSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) {
+                mReadCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
+                applyReadFilter();
+                resetFabAutoHide();
+            }
+        });
+
+        TextView btnSelectAllRead = findViewById(R.id.btn_select_all_read);
+        TextView btnDeselectAllRead = findViewById(R.id.btn_deselect_all_read);
+        if (btnSelectAllRead != null) {
+            btnSelectAllRead.setOnClickListener(v -> {
+                setAllReadApps(true);
+                mReadAdapter.notifyDataSetChanged();
+                resetFabAutoHide();
+            });
+        }
+        if (btnDeselectAllRead != null) {
+            btnDeselectAllRead.setOnClickListener(v -> {
+                setAllReadApps(false);
+                mReadAdapter.notifyDataSetChanged();
+                resetFabAutoHide();
+            });
+        }
+
+        View cardReadRules = findViewById(R.id.card_read_rules);
+        if (cardReadRules != null) {
+            cardReadRules.setOnClickListener(v ->
+                    startActivity(new Intent(this, ReadRulesDetailActivity.class)));
+        }
+    }
 
     private void showPage(int page) {
         sCurrentPage = page;
 
-        // 离开应用页时丢弃未保存变更 + 取消 FAB 倒计时
-        if (page != PAGE_APPS) {
+        if (page != PAGE_WRITE && page != PAGE_READ) {
             mHandler.removeCallbacks(mFabAutoHide);
-            if (!mPendingChanges.isEmpty()) {
-                mPendingChanges.clear();
-                refreshPermissions();
-                if (mAdapter != null) mAdapter.notifyDataSetChanged();
+            if (!mWritePendingChanges.isEmpty()) {
+                mWritePendingChanges.clear();
+                refreshWritePermissions();
+                if (mWriteAdapter != null) mWriteAdapter.notifyDataSetChanged();
+            }
+            if (!mReadPendingChanges.isEmpty()) {
+                mReadPendingChanges.clear();
+                refreshReadPermissions();
+                if (mReadAdapter != null) mReadAdapter.notifyDataSetChanged();
             }
         }
 
         mPageHome.setVisibility(View.GONE);
-        mPageApps.setVisibility(View.GONE);
-        mPageLog.setVisibility(View.GONE);
+        mPageWrite.setVisibility(View.GONE);
+        mPageRead.setVisibility(View.GONE);
         mPageSettings.setVisibility(View.GONE);
         mPagePermissionDetail.setVisibility(View.GONE);
 
@@ -420,23 +403,15 @@ public class MainActivity extends AppCompatActivity {
                 mPageHome.setVisibility(View.VISIBLE);
                 mFab.setVisibility(View.GONE);
                 break;
-            case PAGE_APPS:
-                mPageApps.setVisibility(View.VISIBLE);
-                // FAB 初始隐藏，有操作时才显示
+            case PAGE_WRITE:
+                mPageWrite.setVisibility(View.VISIBLE);
                 mFab.setVisibility(View.GONE);
-                mExpandableListView.expandGroup(GROUP_USER);
-                // 返回时重新加载权限 + 排序 + 刷新列表
-                if (!mUserApps.isEmpty() || !mSystemApps.isEmpty()) {
-                    refreshPermissions();
-                    sortApps(mUserApps);
-                    sortApps(mSystemApps);
-                    applyFilter();
-                }
+                mWriteExpandableListView.expandGroup(GROUP_USER);
                 break;
-            case PAGE_LOG:
-                mPageLog.setVisibility(View.VISIBLE);
+            case PAGE_READ:
+                mPageRead.setVisibility(View.VISIBLE);
                 mFab.setVisibility(View.GONE);
-                loadLogs();
+                mReadExpandableListView.expandGroup(GROUP_USER);
                 break;
             case PAGE_SETTINGS:
                 mPageSettings.setVisibility(View.VISIBLE);
@@ -449,22 +424,35 @@ public class MainActivity extends AppCompatActivity {
                 break;
         }
 
-        // 标题栏
+        updateToolbar(page);
+        updateBottomNav(page);
+    }
+
+    private void updateToolbar(int page) {
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         switch (page) {
-            case PAGE_HOME:       toolbar.setTitle(R.string.app_name);          toolbar.setNavigationIcon(null);       break;
-            case PAGE_APPS:       toolbar.setTitle(R.string.nav_apps);          toolbar.setNavigationIcon(null);       break;
-            case PAGE_LOG:        toolbar.setTitle(R.string.nav_log);           toolbar.setNavigationIcon(null);       break;
-            case PAGE_SETTINGS:   toolbar.setTitle(R.string.nav_settings);      toolbar.setNavigationIcon(null);       break;
-            case PAGE_PERMISSION_DETAIL: toolbar.setTitle(R.string.settings_permission); toolbar.setNavigationIcon(R.drawable.ic_back); break;
+            case PAGE_HOME:       toolbar.setTitle(R.string.app_name);         toolbar.setNavigationIcon(null); break;
+            case PAGE_WRITE:      toolbar.setTitle(R.string.title_write_block); toolbar.setNavigationIcon(null); break;
+            case PAGE_READ:       toolbar.setTitle(R.string.title_read_block);  toolbar.setNavigationIcon(null); break;
+            case PAGE_SETTINGS:   toolbar.setTitle(R.string.nav_settings);      toolbar.setNavigationIcon(null); break;
+            case PAGE_PERMISSION_DETAIL:
+                toolbar.setTitle(R.string.settings_permission);
+                toolbar.setNavigationIcon(R.drawable.ic_back);
+                break;
         }
+        toolbar.setNavigationOnClickListener(v -> {
+            if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
+                showPage(PAGE_SETTINGS);
+            }
+        });
+    }
 
-        // 底部导航高亮
+    private void updateBottomNav(int page) {
         int sel   = ContextCompat.getColor(this, R.color.nav_selected);
         int unsel = ContextCompat.getColor(this, R.color.nav_unselected);
         tintNavItem(mNavHome,     page == PAGE_HOME,     sel, unsel);
-        tintNavItem(mNavApps,     page == PAGE_APPS,     sel, unsel);
-        tintNavItem(mNavLog,      page == PAGE_LOG,      sel, unsel);
+        tintNavItem(mNavApps,     page == PAGE_WRITE,    sel, unsel);
+        tintNavItem(mNavRead,     page == PAGE_READ,     sel, unsel);
         tintNavItem(mNavSettings, page == PAGE_SETTINGS, sel, unsel);
 
         mBottomNav.setVisibility(page == PAGE_PERMISSION_DETAIL ? View.GONE : View.VISIBLE);
@@ -476,8 +464,43 @@ public class MainActivity extends AppCompatActivity {
         ((TextView)  nav.getChildAt(1)).setTextColor(color);
     }
 
-    // ──────────────────────────── 首页 ────────────────────────────
+    private void setupBottomNav() {
+        View.OnClickListener navClick = v -> {
+            int id = v.getId();
+            if      (id == R.id.nav_home)     showPage(PAGE_HOME);
+            else if (id == R.id.nav_apps)     showPage(PAGE_WRITE);
+            else if (id == R.id.nav_read)     showPage(PAGE_READ);
+            else if (id == R.id.nav_settings) showPage(PAGE_SETTINGS);
+        };
+        mNavHome.setOnClickListener(navClick);
+        mNavApps.setOnClickListener(navClick);
+        mNavRead.setOnClickListener(navClick);
+        mNavSettings.setOnClickListener(navClick);
 
+        mFab.setOnClickListener(v -> {
+            if (sCurrentPage == PAGE_WRITE) {
+                saveWriteChanges();
+            } else if (sCurrentPage == PAGE_READ) {
+                saveReadChanges();
+            }
+            resetFabAutoHide();
+        });
+    }
+
+    private void setupBackPressed() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {
+                if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
+                    showPage(PAGE_SETTINGS);
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed(); // 不再使用已弃用的 super.onBackPressed()
+                }
+            }
+        });
+    }
+
+    @SuppressLint("SetTextI18n")
     private void initHomePage() {
         boolean isActive = isModuleActive();
         if (isActive) {
@@ -497,7 +520,8 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            mTvModuleVersion.setText("v" + pi.versionName + " (" + pi.versionCode + ")");
+            // 使用 getLongVersionCode() 代替已弃用的 versionCode
+            mTvModuleVersion.setText("v" + pi.versionName + " (" + pi.getLongVersionCode() + ")");
         } catch (PackageManager.NameNotFoundException e) {
             mTvModuleVersion.setText("--");
         }
@@ -507,7 +531,6 @@ public class MainActivity extends AppCompatActivity {
         mTvModel.setText(Build.MODEL);
     }
 
-    /** 权限详情页 */
     private void initPermissionDetailPage() {
         boolean hasPerm = Settings.canDrawOverlays(this);
 
@@ -532,13 +555,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Hook 注入时返回 true */
     private boolean isModuleActive() { return false; }
-
-    /** Hook 注入时返回真实版本 */
     private int getXposedApiVersion() { return -1; }
-
-    // ──────────────────────────── 主题 ────────────────────────────
 
     private void applyThemeNoView() {
         if (sCurrentTheme < 0) {
@@ -559,8 +577,12 @@ public class MainActivity extends AppCompatActivity {
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         w.setStatusBarColor(isDark ? Color.BLACK : Color.WHITE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            w.getDecorView().setSystemUiVisibility(isDark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        WindowInsetsController controller = w.getDecorView().getWindowInsetsController();
+        if (controller != null) {
+            controller.setSystemBarsAppearance(
+                    isDark ? 0 : WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+            );
         }
     }
 
@@ -572,7 +594,7 @@ public class MainActivity extends AppCompatActivity {
             MainActivity inst = sInstanceRef != null ? sInstanceRef.get() : null;
             if (inst != null) {
                 inst.getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-                        .edit().putInt(KEY_THEME, theme).commit();
+                        .edit().putInt(KEY_THEME, theme).apply();
             }
         } catch (Exception ignored) {}
     }
@@ -600,109 +622,53 @@ public class MainActivity extends AppCompatActivity {
                 : getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM));
     }
 
+    @SuppressLint("SetTextI18n")
+    private void setupSettingsPage() {
+        setupThemeItem(R.id.item_theme_light,  THEME_LIGHT);
+        setupThemeItem(R.id.item_theme_dark,   THEME_DARK);
+        setupThemeItem(R.id.item_theme_system, THEME_SYSTEM);
+
+        View itemPermission = findViewById(R.id.item_permission);
+        if (itemPermission != null) {
+            itemPermission.setVisibility(View.GONE);
+        }
+
+        SwitchMaterial switchLog = findViewById(R.id.switch_enable_log);
+        if (switchLog != null) {
+            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
+            switchLog.setChecked(prefs.getBoolean("enable_log", false));
+            switchLog.setOnCheckedChangeListener((btn, checked) ->
+                    prefs.edit().putBoolean("enable_log", checked).apply());
+        }
+
+        View itemAbout = findViewById(R.id.item_about);
+        if (itemAbout != null) {
+            itemAbout.setOnClickListener(v ->
+                    Toast.makeText(this, "模块版本: " + getModuleVersion(), Toast.LENGTH_SHORT).show());
+        }
+    }
+
+    private void setupThemeItem(int viewId, int theme) {
+        View item = findViewById(viewId);
+        if (item != null) {
+            item.setOnClickListener(v -> {
+                switchTheme(theme);
+                updateThemeRadioButtons(theme);
+            });
+        }
+    }
+
     private String getModuleVersion() {
         try {
             PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            return pi.versionName + " (" + pi.versionCode + ")";
+            return pi.versionName + " (" + pi.getLongVersionCode() + ")";
         } catch (PackageManager.NameNotFoundException e) {
             return "--";
         }
     }
 
-    // ──────────────────────────── 首次使用引导弹窗 ────────────────────────────
-
-    private void showPermissionGuideDialog() {
-        if (mGuideDialog != null && mGuideDialog.isShowing()) return;
-
-        mGuideView = getLayoutInflater().inflate(R.layout.dialog_first_launch_guide, null);
-
-        TextView tvTitle  = mGuideView.findViewById(R.id.tv_float_perm_title);
-        TextView tvDesc   = mGuideView.findViewById(R.id.tv_float_perm_desc);
-        TextView tvStatus = mGuideView.findViewById(R.id.tv_float_perm_status);
-        TextView btnGo    = mGuideView.findViewById(R.id.btn_go_settings);
-
-        boolean hasPerm = Settings.canDrawOverlays(this);
-        tvTitle.setText(R.string.guide_float_perm);
-        tvDesc.setText(R.string.guide_float_perm_desc);
-
-        updateGuideFloatStatus(tvStatus, btnGo, hasPerm);
-
-        TextView tvAutoTitle = mGuideView.findViewById(R.id.tv_autostart_title);
-        TextView tvAutoDesc  = mGuideView.findViewById(R.id.tv_autostart_desc);
-        TextView tvAutoHint  = mGuideView.findViewById(R.id.tv_autostart_hint);
-        tvAutoTitle.setText(R.string.guide_autostart_perm);
-        tvAutoDesc.setText(R.string.guide_autostart_perm_desc);
-        tvAutoHint.setText(R.string.guide_autostart_hint);
-        tvAutoHint.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray));
-
-        mGuideDialog = new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.guide_title)
-                .setView(mGuideView)
-                .setPositiveButton(hasPerm ? R.string.guide_btn_done : R.string.guide_btn_later,
-                        (d, which) -> {
-                            getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-                                    .edit().putBoolean(KEY_FIRST_LAUNCH, true).apply();
-                            mGuideDialog = null;
-                        })
-                .setCancelable(false)
-                .show();
-    }
-
-    /** 刷新引导弹窗内的权限状态（回到 App 时调用） */
-    private void refreshGuideDialog(boolean hasPerm) {
-        if (mGuideDialog == null || !mGuideDialog.isShowing()) return;
-        try {
-            View dv = mGuideDialog.getWindow().getDecorView();
-            TextView tvStatus = dv.findViewById(R.id.tv_float_perm_status);
-            TextView btnGo    = dv.findViewById(R.id.btn_go_settings);
-            updateGuideFloatStatus(tvStatus, btnGo, hasPerm);
-
-            // 同步底部按钮文字
-            android.widget.Button pos = dv.findViewById(android.R.id.button1);
-            if (pos != null) {
-                pos.setText(hasPerm ? R.string.guide_btn_done : R.string.guide_btn_later);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /** 统一更新悬浮窗状态文字和「去设置」按钮 */
-    private void updateGuideFloatStatus(TextView tvStatus, TextView btnGo, boolean hasPerm) {
-        if (tvStatus != null) {
-            tvStatus.setText(hasPerm ? R.string.guide_float_perm_granted : R.string.guide_float_perm_not_granted);
-            tvStatus.setTextColor(ContextCompat.getColor(this,
-                    hasPerm ? R.color.status_active : R.color.status_inactive));
-        }
-        if (btnGo != null) {
-            if (hasPerm) {
-                btnGo.setVisibility(View.GONE);
-            } else {
-                btnGo.setVisibility(View.VISIBLE);
-                btnGo.setOnClickListener(v -> {
-                    try {
-                        startActivityForResult(new Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:" + getPackageName())),
-                                REQUEST_CODE_FLOAT_WINDOW);
-                    } catch (Exception e) {
-                        Toast.makeText(this, "无法打开设置页面", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        }
-    }
-
-    // ──────────────────────────── 应用列表 ────────────────────────────
-
     private void loadAppsAsync() {
-        sExecutor.execute(() -> {
-            loadAllApps();
-            runOnUiThread(() -> {
-                applyFilter();
-                mExpandableListView.expandGroup(GROUP_USER);
-            });
-        });
+        sExecutor.execute(this::loadAllApps);
     }
 
     private static HashSet<String> sCorePackages;
@@ -723,333 +689,385 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadAllApps() {
-        mUserApps.clear();
-        mSystemApps.clear();
-        mCoreApps.clear();
-
         PackageManager pm = getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
 
-        List<String[]> savedPerms = PermissionProvider.getAllPermissions(this);
-        android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
-        for (String[] row : savedPerms) {
-            permMap.put(row[0], Integer.parseInt(row[1]));
+        List<String[]> savedWritePerms = PermissionProvider.getAllWritePermissions(this);
+        android.util.ArrayMap<String, Integer> writePermMap = new android.util.ArrayMap<>();
+        for (String[] row : savedWritePerms) {
+            writePermMap.put(row[0], Integer.parseInt(row[1]));
         }
-        // 文件里只有 BLOCK 条目；不在文件里 = 未勾选 = 默认放行
+
+        List<String[]> savedReadPerms = PermissionProvider.getAllReadPermissions(this);
+        android.util.ArrayMap<String, Integer> readPermMap = new android.util.ArrayMap<>();
+        for (String[] row : savedReadPerms) {
+            readPermMap.put(row[0], Integer.parseInt(row[1]));
+        }
+
+        List<AppItem> tmpWriteUser = new ArrayList<>();
+        List<AppItem> tmpWriteSystem = new ArrayList<>();
+        List<AppItem> tmpWriteCore = new ArrayList<>();
+        List<AppItem> tmpReadUser = new ArrayList<>();
+        List<AppItem> tmpReadSystem = new ArrayList<>();
+        List<AppItem> tmpReadCore = new ArrayList<>();
 
         final String self = getPackageName();
         for (ApplicationInfo info : apps) {
             if (self.equals(info.packageName)) continue;
 
             boolean isCore = isCoreSystemPackage(info.packageName);
-            AppItem item = new AppItem();
-            item.packageName = info.packageName;
-            item.appName     = pm.getApplicationLabel(info).toString();
-            item.isSystem    = (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-            item.isCore      = isCore;
-            try {
-                item.icon = pm.getApplicationIcon(info);
-            } catch (Throwable e) {
-                item.icon = getDrawable(R.drawable.ic_app_default);
-            }
-            Integer saved = permMap.get(item.packageName);
-            item.isBlocked = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+            String appName = pm.getApplicationLabel(info).toString();
+            boolean isSystem = (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
 
-            if (isCore)            mCoreApps.add(item);
-            else if (item.isSystem) mSystemApps.add(item);
-            else                    mUserApps.add(item);
+            Integer writeSaved = writePermMap.get(info.packageName);
+            AppItem writeItem = new AppItem();
+            writeItem.packageName = info.packageName;
+            writeItem.appName = appName;
+            writeItem.isSystem = isSystem;
+            writeItem.isCore = isCore;
+            writeItem.isBlockedWrite = (writeSaved != null && writeSaved == PermissionStorage.PERMISSION_BLOCK);
+            if (isCore) tmpWriteCore.add(writeItem);
+            else if (isSystem) tmpWriteSystem.add(writeItem);
+            else tmpWriteUser.add(writeItem);
+
+            Integer readSaved = readPermMap.get(info.packageName);
+            AppItem readItem = new AppItem();
+            readItem.packageName = info.packageName;
+            readItem.appName = appName;
+            readItem.isSystem = isSystem;
+            readItem.isCore = isCore;
+            readItem.isBlockedRead = (readSaved != null && readSaved == PermissionStorage.PERMISSION_BLOCK);
+            if (isCore) tmpReadCore.add(readItem);
+            else if (isSystem) tmpReadSystem.add(readItem);
+            else tmpReadUser.add(readItem);
         }
 
-        sortApps(mUserApps);
-        sortApps(mSystemApps);
-        Collections.sort(mCoreApps, (a, b) -> a.appName.compareToIgnoreCase(b.appName));
+        sortWriteApps(tmpWriteUser);
+        sortWriteApps(tmpWriteSystem);
+        sortWriteApps(tmpWriteCore);
+        sortReadApps(tmpReadUser);
+        sortReadApps(tmpReadSystem);
+        sortReadApps(tmpReadCore);
+
+        runOnUiThread(() -> {
+            mWriteUserApps.clear();   mWriteUserApps.addAll(tmpWriteUser);
+            mWriteSystemApps.clear(); mWriteSystemApps.addAll(tmpWriteSystem);
+            mWriteCoreApps.clear();   mWriteCoreApps.addAll(tmpWriteCore);
+            mReadUserApps.clear();    mReadUserApps.addAll(tmpReadUser);
+            mReadSystemApps.clear();  mReadSystemApps.addAll(tmpReadSystem);
+            mReadCoreApps.clear();    mReadCoreApps.addAll(tmpReadCore);
+
+            refreshWritePermissions();
+            refreshReadPermissions();
+            applyWriteFilter();
+            applyReadFilter();
+            mWriteExpandableListView.expandGroup(GROUP_USER);
+
+            if (mWriteSwipeRefresh != null) mWriteSwipeRefresh.setRefreshing(false);
+            if (mReadSwipeRefresh != null) mReadSwipeRefresh.setRefreshing(false);
+        });
     }
 
-    private static void sortApps(List<AppItem> list) {
-        Collections.sort(list, (a, b) -> {
-            if (a.isBlocked != b.isBlocked) return a.isBlocked ? -1 : 1;
+    private static void sortWriteApps(List<AppItem> list) {
+        list.sort((a, b) -> {
+            if (a.isBlockedWrite != b.isBlockedWrite) return a.isBlockedWrite ? -1 : 1;
             return a.appName.compareToIgnoreCase(b.appName);
         });
     }
 
-    private void refreshPermissions() {
-        List<String[]> savedPerms = PermissionProvider.getAllPermissions(this);
+    private static void sortReadApps(List<AppItem> list) {
+        list.sort((a, b) -> {
+            if (a.isBlockedRead != b.isBlockedRead) return a.isBlockedRead ? -1 : 1;
+            return a.appName.compareToIgnoreCase(b.appName);
+        });
+    }
+
+    private void refreshWritePermissions() {
+        List<String[]> savedPerms = PermissionProvider.getAllWritePermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
         for (String[] row : savedPerms) permMap.put(row[0], Integer.parseInt(row[1]));
 
-        for (AppItem item : mUserApps)   applyPermToItem(item, permMap);
-        for (AppItem item : mSystemApps) applyPermToItem(item, permMap);
-        for (AppItem item : mCoreApps) {
+        for (AppItem item : mWriteUserApps)   applyWritePermToItem(item, permMap);
+        for (AppItem item : mWriteSystemApps) applyWritePermToItem(item, permMap);
+        for (AppItem item : mWriteCoreApps) {
             Integer saved = permMap.get(item.packageName);
-            item.isBlocked = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+            item.isBlockedWrite = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
         }
-        applyFilter();
+        applyWriteFilter();
     }
 
-    private void applyPermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
+    private void applyWritePermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
         Integer saved = permMap.get(item.packageName);
-        item.isBlocked = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
-        if (mPendingChanges.containsKey(item.packageName)) {
-            item.isBlocked = (mPendingChanges.get(item.packageName) == PermissionStorage.PERMISSION_BLOCK);
+        item.isBlockedWrite = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+        Integer pending = mWritePendingChanges.get(item.packageName);
+        if (pending != null) {
+            item.isBlockedWrite = (pending == PermissionStorage.PERMISSION_BLOCK);
         }
     }
 
-    private void applyFilter() {
-        mFilteredUser.clear();
-        mFilteredSystem.clear();
-        mFilteredCore.clear();
+    private void applyWriteFilter() {
+        mWriteFilteredUser.clear();
+        mWriteFilteredSystem.clear();
+        mWriteFilteredCore.clear();
 
-        if (mCurrentQuery.isEmpty()) {
-            mFilteredUser.addAll(mUserApps);
-            mFilteredSystem.addAll(mSystemApps);
-            mFilteredCore.addAll(mCoreApps);
+        if (mWriteCurrentQuery.isEmpty()) {
+            mWriteFilteredUser.addAll(mWriteUserApps);
+            mWriteFilteredSystem.addAll(mWriteSystemApps);
+            mWriteFilteredCore.addAll(mWriteCoreApps);
         } else {
-            for (AppItem i : mUserApps)   if (matches(i)) mFilteredUser.add(i);
-            for (AppItem i : mSystemApps) if (matches(i)) mFilteredSystem.add(i);
-            for (AppItem i : mCoreApps)   if (matches(i)) mFilteredCore.add(i);
+            for (AppItem i : mWriteUserApps)   if (matchesWrite(i)) mWriteFilteredUser.add(i);
+            for (AppItem i : mWriteSystemApps) if (matchesWrite(i)) mWriteFilteredSystem.add(i);
+            for (AppItem i : mWriteCoreApps)   if (matchesWrite(i)) mWriteFilteredCore.add(i);
         }
 
         runOnUiThread(() -> {
-            mAdapter.notifyDataSetChanged();
-            if (!mCurrentQuery.isEmpty()) {
-                mExpandableListView.expandGroup(GROUP_USER);
-                mExpandableListView.expandGroup(GROUP_SYSTEM);
-                mExpandableListView.expandGroup(GROUP_CORE);
+            if (mWriteAdapter != null) mWriteAdapter.notifyDataSetChanged();
+            if (!mWriteCurrentQuery.isEmpty()) {
+                mWriteExpandableListView.expandGroup(GROUP_USER);
+                mWriteExpandableListView.expandGroup(GROUP_SYSTEM);
+                mWriteExpandableListView.expandGroup(GROUP_CORE);
             }
         });
     }
 
-    private boolean matches(AppItem item) {
-        return item.appName.toLowerCase(Locale.ROOT).contains(mCurrentQuery)
-                || item.packageName.toLowerCase(Locale.ROOT).contains(mCurrentQuery);
+    private boolean matchesWrite(AppItem item) {
+        return item.appName.toLowerCase(Locale.ROOT).contains(mWriteCurrentQuery)
+                || item.packageName.toLowerCase(Locale.ROOT).contains(mWriteCurrentQuery);
     }
 
-    private AppItem getItem(int group, int child) {
-        if (group == GROUP_USER   && child < mFilteredUser.size())   return mFilteredUser.get(child);
-        if (group == GROUP_SYSTEM && child < mFilteredSystem.size()) return mFilteredSystem.get(child);
-        if (group == GROUP_CORE   && child < mFilteredCore.size())   return mFilteredCore.get(child);
+    private AppItem getWriteItem(int group, int child) {
+        if (group == GROUP_USER   && child < mWriteFilteredUser.size())   return mWriteFilteredUser.get(child);
+        if (group == GROUP_SYSTEM && child < mWriteFilteredSystem.size()) return mWriteFilteredSystem.get(child);
+        if (group == GROUP_CORE   && child < mWriteFilteredCore.size())   return mWriteFilteredCore.get(child);
         return null;
     }
 
-    // ──────────────────────────── 全选/反选 ────────────────────────────
+    private void refreshReadPermissions() {
+        List<String[]> savedPerms = PermissionProvider.getAllReadPermissions(this);
+        android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
+        for (String[] row : savedPerms) permMap.put(row[0], Integer.parseInt(row[1]));
 
-    private void setAllAppsBlocked(boolean blocked) {
-        int perm = blocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
-        for (AppItem i : mUserApps)   { i.isBlocked = blocked; mPendingChanges.put(i.packageName, perm); }
-        for (AppItem i : mSystemApps) { i.isBlocked = blocked; mPendingChanges.put(i.packageName, perm); }
-        applyFilter();
+        for (AppItem item : mReadUserApps)   applyReadPermToItem(item, permMap);
+        for (AppItem item : mReadSystemApps) applyReadPermToItem(item, permMap);
+        for (AppItem item : mReadCoreApps) {
+            Integer saved = permMap.get(item.packageName);
+            item.isBlockedRead = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+        }
+        applyReadFilter();
     }
 
-    /**
-     * 切换指定分组的全选/取消全选状态
-     * @param groupPos 分组位置：GROUP_USER(0) / GROUP_SYSTEM(1)
-     * @param select true = 全选，false = 取消全选
-     */
-    private void toggleGroupSelection(int groupPos, boolean select) {
+    private void applyReadPermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
+        Integer saved = permMap.get(item.packageName);
+        item.isBlockedRead = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+        Integer pending = mReadPendingChanges.get(item.packageName);
+        if (pending != null) {
+            item.isBlockedRead = (pending == PermissionStorage.PERMISSION_BLOCK);
+        }
+    }
+
+    private void applyReadFilter() {
+        mReadFilteredUser.clear();
+        mReadFilteredSystem.clear();
+        mReadFilteredCore.clear();
+
+        if (mReadCurrentQuery.isEmpty()) {
+            mReadFilteredUser.addAll(mReadUserApps);
+            mReadFilteredSystem.addAll(mReadSystemApps);
+            mReadFilteredCore.addAll(mReadCoreApps);
+        } else {
+            for (AppItem i : mReadUserApps)   if (matchesRead(i)) mReadFilteredUser.add(i);
+            for (AppItem i : mReadSystemApps) if (matchesRead(i)) mReadFilteredSystem.add(i);
+            for (AppItem i : mReadCoreApps)   if (matchesRead(i)) mReadFilteredCore.add(i);
+        }
+
+        if (mReadAdapter != null) mReadAdapter.notifyDataSetChanged();
+        if (!mReadCurrentQuery.isEmpty() && mReadExpandableListView != null) {
+            mReadExpandableListView.expandGroup(GROUP_USER);
+            mReadExpandableListView.expandGroup(GROUP_SYSTEM);
+            mReadExpandableListView.expandGroup(GROUP_CORE);
+        }
+    }
+
+    private boolean matchesRead(AppItem item) {
+        return item.appName.toLowerCase(Locale.ROOT).contains(mReadCurrentQuery)
+                || item.packageName.toLowerCase(Locale.ROOT).contains(mReadCurrentQuery);
+    }
+
+    private AppItem getReadItem(int group, int child) {
+        if (group == GROUP_USER   && child < mReadFilteredUser.size())   return mReadFilteredUser.get(child);
+        if (group == GROUP_SYSTEM && child < mReadFilteredSystem.size()) return mReadFilteredSystem.get(child);
+        if (group == GROUP_CORE   && child < mReadFilteredCore.size())   return mReadFilteredCore.get(child);
+        return null;
+    }
+
+    private void setAllWriteApps(boolean blocked) {
+        int perm = blocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        for (AppItem i : mWriteUserApps)   { i.isBlockedWrite = blocked; mWritePendingChanges.put(i.packageName, perm); }
+        for (AppItem i : mWriteSystemApps) { i.isBlockedWrite = blocked; mWritePendingChanges.put(i.packageName, perm); }
+        applyWriteFilter();
+    }
+
+    private void toggleWriteGroupSelection(int groupPos, boolean select) {
         int perm = select ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
         List<AppItem> list;
         if (groupPos == GROUP_USER) {
-            list = mFilteredUser;
+            list = mWriteFilteredUser;
         } else if (groupPos == GROUP_SYSTEM) {
-            list = mFilteredSystem;
+            list = mWriteFilteredSystem;
         } else {
-            return; // CORE 组不支持全选
+            return;
         }
 
         for (AppItem item : list) {
-            if (!item.isCore) { // 跳过核心包
-                item.isBlocked = select;
-                mPendingChanges.put(item.packageName, perm);
+            if (!item.isCore) {
+                item.isBlockedWrite = select;
+                mWritePendingChanges.put(item.packageName, perm);
             }
         }
-        mAdapter.notifyDataSetChanged();
+        mWriteAdapter.notifyDataSetChanged();
     }
 
-    // ──────────────────────────── 保存 ────────────────────────────
-
-    private void saveChanges() {
-        // 全量写入方案：保存前先清空，再写入所有 App 的当前状态
-        // 确保文件里记录的 = App界面显示的 = Hook实际拦截的
-
-        // 空变更检查
-        if (mPendingChanges.isEmpty()) {
+    private void saveWriteChanges() {
+        if (mWritePendingChanges.isEmpty()) {
             Toast.makeText(this, "没有更改需要保存", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // 1. 收集所有 App 的权限到一个 Map
-        java.util.Map<String, Integer> allPerms = new java.util.HashMap<>();
-        for (AppItem i : mUserApps) {
-            allPerms.put(i.packageName,
-                i.isBlocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+        Map<String, Integer> allWritePerms = new HashMap<>();
+        for (AppItem i : mWriteUserApps) {
+            allWritePerms.put(i.packageName,
+                    i.isBlockedWrite ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
         }
-        for (AppItem i : mSystemApps) {
-            allPerms.put(i.packageName,
-                i.isBlocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+        for (AppItem i : mWriteSystemApps) {
+            allWritePerms.put(i.packageName,
+                    i.isBlockedWrite ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
         }
 
-        // 2. 清空所有旧数据
-        PermissionProvider.clearAllPermissions(this);
+        PermissionProvider.saveAllWritePermissions(this, allWritePerms);
+        PermissionProvider.sendBlocklistBroadcast(this);
 
-        // 3. 批量写入（只发一次广播）
-        PermissionProvider.saveAllPermissions(this, allPerms);
+        mWritePendingChanges.clear();
 
-        // 4. 发送一次广播通知 Hook 侧刷新
-        PermissionProvider.sendPermissionChangedBroadcastStatic(this);
-
-        // 5. 清空待保存变更
-        mPendingChanges.clear();
-
-        // 6. 统计并提示
-        int blocked = 0;
-        for (AppItem i : mUserApps)   if (i.isBlocked) blocked++;
-        for (AppItem i : mSystemApps) if (i.isBlocked) blocked++;
+        int writeblocked = 0;
+        for (AppItem i : mWriteUserApps)   if (i.isBlockedWrite) writeblocked++;
+        for (AppItem i : mWriteSystemApps) if (i.isBlockedWrite) writeblocked++;
 
         Toast.makeText(this,
-                blocked > 0 ? getString(R.string.save_success, blocked) : getString(R.string.save_no_block),
+                writeblocked > 0 ? getString(R.string.save_success, writeblocked) : getString(R.string.save_no_block),
                 Toast.LENGTH_SHORT).show();
     }
 
-    // ──────────────────────────── 日志 ────────────────────────────
-
-    private void loadLogs() {
-        new Thread(() -> {
-            List<String[]> raw = PermissionProvider.getLogs(this, 100);
-            List<LogEntry> logs = new ArrayList<>(raw.size());
-            for (String[] row : raw) {
-                if (row.length >= 4) logs.add(new LogEntry(row[0], row[1], row[2], Long.parseLong(row[3])));
-            }
-            runOnUiThread(() -> {
-                mLogAdapter.setLogs(logs);
-                View tvEmpty = mPageLog.findViewById(R.id.tv_empty);
-                if (tvEmpty != null) tvEmpty.setVisibility(logs.isEmpty() ? View.VISIBLE : View.GONE);
-            });
-        }).start();
+    private void setAllReadApps(boolean blocked) {
+        int perm = blocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        for (AppItem i : mReadUserApps)   { i.isBlockedRead = blocked; mReadPendingChanges.put(i.packageName, perm); }
+        for (AppItem i : mReadSystemApps) { i.isBlockedRead = blocked; mReadPendingChanges.put(i.packageName, perm); }
+        applyReadFilter();
     }
 
-    // ──────────────────────────── 数据模型 ────────────────────────────
+    private void toggleReadGroupSelection(int groupPos, boolean select) {
+        int perm = select ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        List<AppItem> list;
+        if (groupPos == GROUP_USER) {
+            list = mReadFilteredUser;
+        } else if (groupPos == GROUP_SYSTEM) {
+            list = mReadFilteredSystem;
+        } else {
+            return;
+        }
+
+        for (AppItem item : list) {
+            if (!item.isCore) {
+                item.isBlockedRead = select;
+                mReadPendingChanges.put(item.packageName, perm);
+            }
+        }
+        if (mReadAdapter != null) mReadAdapter.notifyDataSetChanged();
+    }
+
+    private void saveReadChanges() {
+        if (mReadPendingChanges.isEmpty()) {
+            Toast.makeText(this, "没有更改需要保存", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Map<String, Integer> allReadPerms = new HashMap<>();
+        for (AppItem i : mReadUserApps) {
+            allReadPerms.put(i.packageName,
+                    i.isBlockedRead ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+        }
+        for (AppItem i : mReadSystemApps) {
+            allReadPerms.put(i.packageName,
+                    i.isBlockedRead ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+        }
+
+        PermissionProvider.saveAllReadPermissions(this, allReadPerms);
+        PermissionProvider.sendBlocklistBroadcast(this);
+        mReadPendingChanges.clear();
+
+        int readblocked = 0;
+        for (AppItem i : mReadUserApps)   if (i.isBlockedRead) readblocked++;
+        for (AppItem i : mReadSystemApps) if (i.isBlockedRead) readblocked++;
+
+        Toast.makeText(this,
+                readblocked > 0 ? getString(R.string.save_success, readblocked) : getString(R.string.save_no_block),
+                Toast.LENGTH_SHORT).show();
+    }
+
+    @SuppressLint("SdCardPath")
+    private void initRuleFiles() {
+        // 使用 Context.getFilesDir().getPath() 代替硬编码 /data/
+        String filesDir = getFilesDir().getPath();
+        PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt");
+        PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt");
+
+        ensureEmptyJsonFile("write_rules.json");
+        ensureEmptyJsonFile("read_rules.json");
+        ensureEmptyJsonFile("write_default_rules.json");
+        ensureEmptyJsonFile("read_default_rules.json");
+    }
+
+    private void ensureEmptyJsonFile(String fileName) {
+        File file = new File(getFilesDir(), fileName);
+        if (!file.exists()) {
+            try {
+                writeFile(file, "[]");
+            } catch (Exception e) {
+                Log.e("ClipboardGuard", "initRuleFiles: failed to create " + fileName, e);
+            }
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private String readFile(File file) throws Exception {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] buffer = new byte[(int) file.length()];
+            int offset = 0;
+            while (offset < buffer.length) {
+                int bytesRead = fis.read(buffer, offset, buffer.length - offset);
+                if (bytesRead == -1) break;
+                offset += bytesRead;
+            }
+            return new String(buffer, 0, offset, StandardCharsets.UTF_8);
+        }
+    }
+
+    @SuppressWarnings("SameParameterValue")
+    private void writeFile(File file, String content) throws Exception {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(content.getBytes(StandardCharsets.UTF_8));
+            fos.flush();
+        }
+    }
+
+    // ──────────────────── 数据模型 ────────────────────────────
 
     static class AppItem {
-        String   packageName;
-        String   appName;
-        Drawable icon;
-        boolean  isSystem;
-        boolean  isCore;
-        boolean  isBlocked;
-    }
-
-    // ──────────────────────────── Adapter ────────────────────────────
-
-    class AppGroupAdapter extends BaseExpandableListAdapter {
-
-        @Override public int  getGroupCount()                        { return 3; }
-        @Override public int  getChildrenCount(int g)                {
-            if (g == GROUP_USER)   return mFilteredUser.size();
-            if (g == GROUP_SYSTEM) return mFilteredSystem.size();
-            return mFilteredCore.size();
-        }
-        @Override public Object  getGroup(int g)                     { return g; }
-        @Override public Object  getChild(int g, int c)              { return getItem(g, c); }
-        @Override public long    getGroupId(int g)                   { return g; }
-        @Override public long    getChildId(int g, int c)            { return c; }
-        @Override public boolean hasStableIds()                      { return false; }
-        @Override public boolean isChildSelectable(int g, int c)     { return g != GROUP_CORE; }
-
-        @Override
-        public View getGroupView(int g, boolean expanded, View convert, ViewGroup parent) {
-            GroupViewHolder h;
-            if (convert == null) {
-                convert = getLayoutInflater().inflate(R.layout.item_group_header, parent, false);
-                h = new GroupViewHolder(convert);
-                convert.setTag(h);
-            } else {
-                h = (GroupViewHolder) convert.getTag();
-            }
-            boolean isUser = (g == GROUP_USER);
-            boolean isCore = (g == GROUP_CORE);
-            List<AppItem> list = isCore ? mFilteredCore : isUser ? mFilteredUser : mFilteredSystem;
-            int blocked = 0;
-            for (AppItem i : list) if (i.isBlocked) blocked++;
-
-            h.tvArrow.setText(expanded ? "▲" : "▼");
-
-            // 点击标题行（除 CheckBox 外）展开/折叠
-            final int groupPos = g;
-            convert.setOnClickListener(v -> {
-                if (mExpandableListView.isGroupExpanded(groupPos)) {
-                    mExpandableListView.collapseGroup(groupPos);
-                } else {
-                    mExpandableListView.expandGroup(groupPos);
-                }
-                resetFabAutoHide(); // 触摸操作显示 FAB
-            });
-
-            if (isCore) {
-                h.tvTitle.setText(getString(R.string.group_core_apps) + "  " + list.size() + " 个（不可更改）🔒");
-                h.cbSelectAll.setVisibility(View.GONE); // CORE 组不显示全选
-            } else {
-                h.tvTitle.setText((isUser ? getString(R.string.group_user_apps)
-                                          : getString(R.string.group_system_apps))
-                        + "  " + list.size() + " 个"
-                        + (blocked > 0 ? "（拦截 " + blocked + "）" : ""));
-                h.cbSelectAll.setVisibility(View.VISIBLE);
-
-                // 根据是否全选设置 CheckBox 状态
-                boolean allBlocked = blocked == list.size();
-                boolean noneBlocked = blocked == 0;
-
-                // 三态：全选(checked)、部分选中(selected)、不选(unchecked)
-                if (list.size() > 0 && allBlocked) {
-                    h.cbSelectAll.setChecked(true);
-                    h.cbSelectAll.setSelected(false); // 取消 selected 状态
-                } else if (list.size() > 0 && noneBlocked) {
-                    h.cbSelectAll.setChecked(false);
-                    h.cbSelectAll.setSelected(false); // 取消 selected 状态
-                } else {
-                    // 部分选中：checked=false + selected=true（触发 drawable 的 selected 状态）
-                    h.cbSelectAll.setChecked(false);
-                    h.cbSelectAll.setSelected(true);
-                }
-
-                // 全选 CheckBox 点击事件：只切换选择状态，不触发行的展开/折叠
-                h.cbSelectAll.setOnClickListener(v -> {
-                    // 先阻止事件冒泡到父布局（行点击）
-                    v.post(() -> {
-                        boolean currentChecked = h.cbSelectAll.isChecked();
-                        // 点击切换：全选/取消全选
-                        toggleGroupSelection(groupPos, currentChecked);
-                        resetFabAutoHide();
-                    });
-                });
-                // 重要：阻止 CheckBox 焦点导致父布局响应
-                h.cbSelectAll.setFocusable(false);
-            }
-            return convert;
-        }
-
-        @Override
-        public View getChildView(int g, int c, boolean last, View convert, ViewGroup parent) {
-            ChildViewHolder h;
-            if (convert == null) {
-                convert = getLayoutInflater().inflate(R.layout.item_app_permission, parent, false);
-                h = new ChildViewHolder(convert);
-                convert.setTag(h);
-            } else {
-                h = (ChildViewHolder) convert.getTag();
-            }
-            AppItem item = getItem(g, c);
-            if (item == null) return convert;
-
-            h.ivIcon.setImageDrawable(item.icon);
-            h.tvName.setText(item.appName);
-            h.cbBlock.setChecked(item.isBlocked);
-            // CORE 组不显示 CheckBox
-            h.cbBlock.setVisibility(item.isCore ? View.GONE : View.VISIBLE);
-            h.tvName.setEnabled(!item.isCore);
-            h.tvPkg.setEnabled(!item.isCore);
-            h.tvPkg.setText(item.isCore ? item.packageName + "  🔒" : item.packageName);
-            return convert;
-        }
+        String  packageName;
+        String  appName;
+        boolean isSystem;
+        boolean isCore;
+        boolean isBlockedWrite;
+        boolean isBlockedRead;
     }
 
     static class GroupViewHolder {
@@ -1071,6 +1089,149 @@ public class MainActivity extends AppCompatActivity {
             tvName  = v.findViewById(R.id.tv_app_name);
             tvPkg   = v.findViewById(R.id.tv_package_name);
             cbBlock = v.findViewById(R.id.cb_block);
+        }
+    }
+
+    // ──────────────────── Adapter ────────────────────────────
+
+    class AppGroupAdapter extends BaseExpandableListAdapter {
+
+        private final boolean mIsReadPage;
+
+        AppGroupAdapter(boolean isReadPage) {
+            mIsReadPage = isReadPage;
+        }
+
+        @Override public int  getGroupCount()                        { return 3; }
+        @Override public int  getChildrenCount(int g)                {
+            if (mIsReadPage) {
+                if (g == GROUP_USER)   return mReadFilteredUser.size();
+                if (g == GROUP_SYSTEM) return mReadFilteredSystem.size();
+                return mReadFilteredCore.size();
+            } else {
+                if (g == GROUP_USER)   return mWriteFilteredUser.size();
+                if (g == GROUP_SYSTEM) return mWriteFilteredSystem.size();
+                return mWriteFilteredCore.size();
+            }
+        }
+        @Override public Object  getGroup(int g)                     { return g; }
+        @Override public Object  getChild(int g, int c)              {
+            if (mIsReadPage) return getReadItem(g, c);
+            else             return getWriteItem(g, c);
+        }
+        @Override public long    getGroupId(int g)                   { return g; }
+        @Override public long    getChildId(int g, int c)            { return c; }
+        @Override public boolean hasStableIds()                      { return false; }
+        @Override public boolean isChildSelectable(int g, int c)     { return g != GROUP_CORE; }
+        @SuppressLint("SetTextI18n")
+        @Override
+        public View getGroupView(int g, boolean expanded, View convert, ViewGroup parent) {
+            GroupViewHolder h;
+            if (convert == null) {
+                convert = getLayoutInflater().inflate(R.layout.item_group_header, parent, false);
+                h = new GroupViewHolder(convert);
+                convert.setTag(h);
+            } else {
+                h = (GroupViewHolder) convert.getTag();
+            }
+            boolean isUser = (g == GROUP_USER);
+            boolean isCore = (g == GROUP_CORE);
+
+            List<AppItem> list;
+            if (mIsReadPage) {
+                list = isCore ? mReadFilteredCore : isUser ? mReadFilteredUser : mReadFilteredSystem;
+            } else {
+                list = isCore ? mWriteFilteredCore : isUser ? mWriteFilteredUser : mWriteFilteredSystem;
+            }
+
+            int blocked = 0;
+            for (AppItem i : list) {
+                if (mIsReadPage ? i.isBlockedRead : i.isBlockedWrite) blocked++;
+            }
+
+            h.tvArrow.setText(expanded ? "▲" : "▼");
+
+            final int groupPos = g;
+            ExpandableListView elv = mIsReadPage ? mReadExpandableListView : mWriteExpandableListView;
+            convert.setOnClickListener(v -> {
+                if (elv.isGroupExpanded(groupPos)) {
+                    elv.collapseGroup(groupPos);
+                } else {
+                    elv.expandGroup(groupPos);
+                }
+                resetFabAutoHide();
+            });
+
+            if (isCore) {
+                h.tvTitle.setText(getString(R.string.group_core_apps) + "  " + list.size() + " 个（不可更改）🔒");
+                h.cbSelectAll.setVisibility(View.GONE);
+            } else {
+                h.tvTitle.setText((isUser ? getString(R.string.group_user_apps)
+                        : getString(R.string.group_system_apps))
+                        + "  " + list.size() + " 个"
+                        + (blocked > 0 ? "（拦截 " + blocked + "）" : ""));
+                h.cbSelectAll.setVisibility(View.VISIBLE);
+
+                boolean allBlocked = blocked == list.size();
+                boolean noneBlocked = blocked == 0;
+
+                if (!list.isEmpty() && allBlocked) {
+                    h.cbSelectAll.setChecked(true);
+                    h.cbSelectAll.setSelected(false);
+                } else if (!list.isEmpty() && noneBlocked) {
+                    h.cbSelectAll.setChecked(false);
+                    h.cbSelectAll.setSelected(false);
+                } else {
+                    h.cbSelectAll.setChecked(false);
+                    h.cbSelectAll.setSelected(true);
+                }
+
+                h.cbSelectAll.setOnClickListener(v -> v.post(() -> {
+                    boolean currentChecked = h.cbSelectAll.isChecked();
+                    if (mIsReadPage) {
+                        toggleReadGroupSelection(groupPos, currentChecked);
+                    } else {
+                        toggleWriteGroupSelection(groupPos, currentChecked);
+                    }
+                    resetFabAutoHide();
+                }));
+                h.cbSelectAll.setFocusable(false);
+            }
+            return convert;
+        }
+
+        @Override
+        public View getChildView(int g, int c, boolean last, View convert, ViewGroup parent) {
+            ChildViewHolder h;
+            if (convert == null) {
+                convert = getLayoutInflater().inflate(R.layout.item_app_permission, parent, false);
+                h = new ChildViewHolder(convert);
+                convert.setTag(h);
+            } else {
+                h = (ChildViewHolder) convert.getTag();
+            }
+            AppItem item = mIsReadPage ? getReadItem(g, c) : getWriteItem(g, c);
+            if (item == null) return convert;
+
+            Drawable icon = mIconCache.get(item.packageName);
+            if (icon == null) {
+                try {
+                    icon = getPackageManager().getApplicationIcon(item.packageName);
+                    mIconCache.put(item.packageName, icon);
+                } catch (PackageManager.NameNotFoundException e) {
+                    icon = ContextCompat.getDrawable(MainActivity.this, R.drawable.ic_app_default);
+                }
+            }
+            h.ivIcon.setImageDrawable(icon);
+
+            h.tvName.setText(item.appName);
+            boolean isBlocked = mIsReadPage ? item.isBlockedRead : item.isBlockedWrite;
+            h.cbBlock.setChecked(isBlocked);
+            h.cbBlock.setVisibility(item.isCore ? View.GONE : View.VISIBLE);
+            h.tvName.setEnabled(!item.isCore);
+            h.tvPkg.setEnabled(!item.isCore);
+            h.tvPkg.setText(item.isCore ? item.packageName + "  🔒" : item.packageName);
+            return convert;
         }
     }
 }

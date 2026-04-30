@@ -1,7 +1,0 @@
-com.android.clipboardguard.app-pngs-0 E:\AndroidStudioProjects\ClipboardGuard\app\build\generated\res\pngs\debug
-com.android.clipboardguard.app-updated_navigation_xml-1 E:\AndroidStudioProjects\ClipboardGuard\app\build\generated\updated_navigation_xml\debug
-com.android.clipboardguard.app-packageDebugResources-2 E:\AndroidStudioProjects\ClipboardGuard\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.android.clipboardguard.app-packageDebugResources-3 E:\AndroidStudioProjects\ClipboardGuard\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.android.clipboardguard.app-debug-4 E:\AndroidStudioProjects\ClipboardGuard\app\build\intermediates\merged_res\debug\mergeDebugResources
-com.android.clipboardguard.app-debug-5 E:\AndroidStudioProjects\ClipboardGuard\app\src\debug\res
-com.android.clipboardguard.app-main-6 E:\AndroidStudioProjects\ClipboardGuard\app\src\main\res

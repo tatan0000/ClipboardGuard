@@ -87,12 +87,16 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
             tvTime.setText(SDF_TIME.format(new Date(log.timestamp)));
 
             // 尝试显示应用名，fallback 包名
-            try {
-                PackageManager pm = itemView.getContext().getPackageManager();
-                ApplicationInfo ai = pm.getApplicationInfo(log.packageName, 0);
-                tvAppName.setText(pm.getApplicationLabel(ai));
-            } catch (PackageManager.NameNotFoundException e) {
-                tvAppName.setText(log.packageName);
+            if (log.packageName != null) {
+                try {
+                    PackageManager pm = itemView.getContext().getPackageManager();
+                    ApplicationInfo ai = pm.getApplicationInfo(log.packageName, 0);
+                    tvAppName.setText(pm.getApplicationLabel(ai));
+                } catch (PackageManager.NameNotFoundException e) {
+                    tvAppName.setText(log.packageName);
+                }
+            } else {
+                tvAppName.setText("未知");
             }
 
             // 动作标签颜色

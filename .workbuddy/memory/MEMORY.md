@@ -77,8 +77,122 @@ t=20:   scheduleBootInit(1) - 重试
 - key = `"blocklist"`，类型 `ArrayList<String>`
 - PermissionCache.updateFromBlockList() 解析
 
+## UI 结构（四栏底部导航）
+- **首页**：模块激活状态、版本信息、使用说明
+- **写入**：应用权限管理（勾选 = 拦截写入），标题 "写入拦截"
+- **读取**：应用权限管理（勾选 = 拦截读取），标题 "读取拦截"，独立黑名单
+- **设置**：主题切换、关于
+
+### 读取页（2026-04-30 新增）
+- 读取页与写入页结构相同，独立维护 `isBlockedRead` 状态
+- UI 独立：独立搜索框、独立全选/反选按钮、独立 ExpandableListView
+- 数据独立：`mReadUserApps`、`mReadSystemApps`、`mReadCoreApps` 独立副本
+
+### 写入页变量命名（*Write* 后缀）
+| 变量 | 说明 |
+|------|------|
+| `mWriteAdapter` | 写入页适配器 |
+| `mWriteUserApps` | 用户应用列表 |
+| `mWriteSystemApps` | 系统应用列表 |
+| `mWriteCoreApps` | 核心应用列表 |
+| `mWriteFilteredUser` | 过滤后用户列表 |
+| `mWriteFilteredSystem` | 过滤后系统列表 |
+| `mWriteFilteredCore` | 过滤后核心列表 |
+| `mWriteCurrentQuery` | 当前搜索关键词 |
+| `mWritePendingChanges` | 未保存变更 |
+
+### 写入页方法命名（*Write* 后缀）
+| 方法 | 说明 |
+|------|------|
+| `refreshWritePermissions()` | 刷新权限 |
+| `applyWritePermToItem()` | 应用权限到单项 |
+| `applyWriteFilter()` | 应用过滤 |
+| `matchesWrite()` | 匹配搜索 |
+| `getWriteItem()` | 获取列表项 |
+| `setAllWriteApps()` | 全选/反选 |
+| `toggleWriteGroupSelection()` | 分组全选切换 |
+| `sortWriteApps()` | 排序（基于 isBlocked）|
+
+### 写入页布局ID（*_write 后缀）
+- `et_search_write`
+- `btn_select_all_write`
+- `btn_deselect_all_write`
+- `tv_tip_write`
+- `expandable_list_write`
+
+### 读取页 Bug 修复（2026-05-01）
+1. **ClassCastException 崩溃修复**：`applyReadBlockFilter()` 移除 `runOnUiThread()` + `getAdapter()` 错误组合，改为直接持有 `mReadBlockAdapter` 引用调用 `notifyDataSetChanged()`
+2. **排序修复**：新增 `sortAppsRead()` 方法基于 `isBlockedRead` 排序，与写入页 `sortApps()` 对称
+3. **系统性重命名**：所有读取页变量/方法/布局ID 统一使用 `*ReadBlock*` 命名模式
+
+### 读取页变量命名（*Read* 后缀）
+| 变量 | 说明 |
+|------|------|
+| `mReadAdapter` | 读取页适配器 |
+| `mReadUserApps` | 用户应用列表 |
+| `mReadSystemApps` | 系统应用列表 |
+| `mReadCoreApps` | 核心应用列表 |
+| `mReadFilteredUser` | 过滤后用户列表 |
+| `mReadFilteredSystem` | 过滤后系统列表 |
+| `mReadFilteredCore` | 过滤后核心列表 |
+| `mReadCurrentQuery` | 当前搜索关键词 |
+| `mReadPendingChanges` | 未保存变更 |
+
+### 读取页方法命名（*Read* 后缀）
+| 方法 | 说明 |
+|------|------|
+| `refreshReadPermissions()` | 刷新权限 |
+| `applyReadPermToItem()` | 应用权限到单项 |
+| `applyReadFilter()` | 应用过滤 |
+| `matchesRead()` | 匹配搜索 |
+| `getReadItem()` | 获取列表项 |
+| `setAllReadApps()` | 全选/反选 |
+| `toggleReadGroupSelection()` | 分组全选切换 |
+| `saveReadChanges()` | 保存变更 |
+| `sortReadApps()` | 排序（基于 isBlockedRead）|
+
+### 读取页布局ID（*_read 后缀）
+- `et_search_read`
+- `btn_select_all_read`
+- `btn_deselect_all_read`
+- `tv_tip_read`
+- `expandable_list_read`
+
+### 规则管理命名规范（2026-05-01 补充）
+
+**适配器类**：
+- `WriteRulesAdapter`：写入规则列表适配器
+- `ReadRulesAdapter`：读取规则列表适配器
+- 不再使用带 `isReadRules` 参数的单一 `RulesAdapter`
+
+**批量选择方法**：
+| 写入方法 | 读取方法 | 说明 |
+|---------|---------|------|
+| `enterWriteSelectionMode()` | `enterReadSelectionMode()` | 进入批量选择 |
+| `exitWriteSelectionMode()` | `exitReadSelectionMode()` | 退出批量选择 |
+| `deleteWriteSelectedRules()` | `deleteReadSelectedRules()` | 删除选中的规则 |
+| `deleteWriteRule()` | `deleteReadRule()` | 删除单条规则 |
+| `updateWriteSelectedCount()` | `updateReadSelectedCount()` | 更新选中计数 |
+
+**数据模型**：
+- `ContentRule`：规则数据模型（写入/读取共用，结构相同）
+- `mWriteRules` / `mReadRules`：规则列表
+- `mWriteRulesAdapter` / `mReadRulesAdapter`：适配器实例
+- `mWriteSelectedRules` / `mReadSelectedRules`：选中的规则集合
+- `mWriteRulesSelectionMode` / `mReadRulesSelectionMode`：选择模式标志
+
 ## 待开发功能
 1. 日志功能完善（XposedBridge.log 输出）
 2. 正则规则配置 UI
-3. 读取剪贴板权限控制
+3. 读取剪贴板权限控制 - ✅ UI 和存储均已完成
 4. Magisk 模块版（Zygisk + C++ Hook）
+
+## 2026-05-01 代码审查修复记录
+
+### 清理调试日志
+- 删除了所有 `Log.d` 语句（WriteHook.java、ReadHook.java、MainActivity.java、PermissionStorage.java、ContentRulesManager.java）
+- 最终验证：全项目 0 处 Log.d
+
+### Bug 修复
+1. **LogAdapter NPE**：修复 `log.packageName` 可能为 null 时 `NameNotFoundException` 无法捕获的问题，增加 null 检查
+2. **AlertDialog 内存泄漏**：WriteRulesDetailActivity 和 ReadRulesDetailActivity 的 `mCurrentRuleDialog` 在 Activity destroy 时未 dismiss，增加 `onDestroy()` 处理

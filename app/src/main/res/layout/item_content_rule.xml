@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground">
+
+    <LinearLayout
+        android:id="@+id/layout_normal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp">
+
+        <!-- 启用开关 -->
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switch_rule_enabled"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <!-- 规则信息 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_rule_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_rule_pattern"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+        </LinearLayout>
+
+        <!-- 编辑按钮 -->
+        <ImageButton
+            android:id="@+id/btn_rule_edit"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_edit"
+            android:contentDescription="@string/rules_btn_edit"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
+        <!-- 删除按钮 -->
+        <ImageButton
+            android:id="@+id/btn_rule_delete"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_delete"
+            android:contentDescription="@string/rules_btn_delete"
+            app:tint="?attr/colorError" />
+
+    </LinearLayout>
+
+    <!-- 批量选择模式布局 -->
+    <LinearLayout
+        android:id="@+id/layout_selection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:visibility="gone">
+
+        <!-- 选择复选框 -->
+        <CheckBox
+            android:id="@+id/cb_rule_selected"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="false" />
+
+        <!-- 规则信息 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_rule_name_sel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_rule_pattern_sel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+        </LinearLayout>
+
+        <!-- 开关状态指示 -->
+        <TextView
+            android:id="@+id/tv_rule_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+    </LinearLayout>
+
+</FrameLayout>

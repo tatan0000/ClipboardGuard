@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
+    <!-- 开机自启动权限 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    
+    <!-- 发送通知权限（Android 13+） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!--
         TYPE_APPLICATION_OVERLAY 不需要 SYSTEM_ALERT_WINDOW 权限（Android 8.0+）
         因此移除此权限声明
@@ -33,7 +39,20 @@
             </intent-filter>
         </activity>
 
+        <!-- 写入规则详情页 -->
+        <activity
+            android:name=".WriteRulesDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ClipboardGuard" />
+
+        <!-- 读取规则详情页 -->
+        <activity
+            android:name=".ReadRulesDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ClipboardGuard" />
+
         <!--
+            写入默认规则页（预留）
             权限弹窗Activity（已废弃）
             现在使用 InlineDialogManager 在 system_server 内直接弹窗
             此 Activity 保留用于兼容性和调试
@@ -80,6 +99,18 @@
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
+
+        <!-- 开机自启动接收器 -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

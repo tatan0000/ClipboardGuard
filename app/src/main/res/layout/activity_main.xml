@@ -16,7 +16,7 @@
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="30dp"
+            android:layout_height="48dp"
             app:title="@string/app_name"
             app:titleTextColor="?attr/colorOnSurface"
             app:contentInsetStartWithNavigation="0dp"
@@ -396,9 +396,9 @@
 
         </androidx.core.widget.NestedScrollView>
 
-        <!-- ===== 第二页：应用选择页 ===== -->
+        <!-- ===== 第二页：写入拦截页 ===== -->
         <LinearLayout
-            android:id="@+id/page_apps"
+            android:id="@+id/page_write"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
@@ -410,7 +410,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="16dp"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="8dp"
                 android:layout_marginRight="16dp"
                 android:layout_marginBottom="1dp"
                 app:cardBackgroundColor="?attr/colorSurface"
@@ -433,7 +433,7 @@
                         app:tint="?attr/colorOnSurfaceVariant" />
 
                     <EditText
-                        android:id="@+id/et_search"
+                        android:id="@+id/et_search_write"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginStart="12dp"
@@ -451,6 +451,56 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 写入规则入口卡片 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_write_rules"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="16dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="?attr/colorSurface"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeColor="?attr/colorOutlineVariant"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_rules"
+                        app:tint="?attr/colorPrimary" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:text="@string/write_rules_title"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="15sp" />
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginStart="8dp"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 全选/全不选按钮 -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -461,65 +511,224 @@
                 android:paddingBottom="4dp"
                 android:gravity="end|center_vertical">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_select_all"
-                    style="?attr/materialButtonOutlinedStyle"
+                <TextView
+                    android:id="@+id/btn_select_all_write"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:layout_marginEnd="8dp"
-                    android:minWidth="0dp"
-                    android:paddingHorizontal="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:gravity="center"
                     android:text="@string/btn_select_all"
-                    android:textSize="13sp"
-                    app:cornerRadius="18dp"
-                    app:strokeWidth="1dp" />
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="14sp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_deselect_all"
-                    style="?attr/materialButtonOutlinedStyle"
+                <TextView
+                    android:id="@+id/btn_deselect_all_write"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:minWidth="0dp"
-                    android:paddingHorizontal="16dp"
+                    android:gravity="center"
                     android:text="@string/btn_deselect_all"
-                    android:textSize="13sp"
-                    app:cornerRadius="18dp"
-                    app:strokeWidth="1dp" />
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="14sp" />
 
             </LinearLayout>
 
             <!-- 提示条 -->
             <TextView
-                android:id="@+id/tv_tip"
+                android:id="@+id/tv_tip_write"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="?attr/colorPrimaryContainer"
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="10dp"
-                android:text="@string/apps_tip"
+                android:text="@string/write_tip"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="13sp" />
 
-            <!-- 应用列表 -->
-            <ExpandableListView
-                android:id="@+id/expandable_list"
+            <!-- 下拉刷新 + 应用列表 -->
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipe_refresh_write"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:childDivider="@android:color/transparent"
-                android:divider="@android:color/transparent"
-                android:dividerHeight="0dp"
-                android:groupIndicator="@null" />
+                android:layout_height="match_parent">
+
+                <ExpandableListView
+                    android:id="@+id/expandable_list_write"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:childDivider="@android:color/transparent"
+                    android:divider="@android:color/transparent"
+                    android:dividerHeight="0dp"
+                    android:groupIndicator="@null" />
+
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         </LinearLayout>
 
-        <!-- ===== 第三页：日志页 ===== -->
-        <include
-            android:id="@+id/page_log"
-            layout="@layout/page_log"
+        <!-- ===== 第三页：读取拦截页 ===== -->
+        <LinearLayout
+            android:id="@+id/page_read"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginBottom="62dp"
-            android:visibility="gone" />
+            android:orientation="vertical"
+            android:paddingBottom="62dp"
+            android:visibility="gone">
+
+            <!-- 搜索框 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="16dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="1dp"
+                app:cardBackgroundColor="?attr/colorSurface"
+                app:cardCornerRadius="28dp"
+                app:cardElevation="0dp"
+                app:strokeColor="?attr/colorOutlineVariant"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_search"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                    <EditText
+                        android:id="@+id/et_search_read"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:hint="@string/search_hint"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:singleLine="true"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant"
+                        android:textSize="15sp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 读取规则入口卡片 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_read_rules"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="16dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="?attr/colorSurface"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeColor="?attr/colorOutlineVariant"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_rules"
+                        app:tint="?attr/colorPrimary" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:text="@string/read_rules_title"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="15sp" />
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginStart="8dp"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 全选/全不选按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:gravity="end|center_vertical">
+
+                <TextView
+                    android:id="@+id/btn_select_all_read"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="16dp"
+                    android:gravity="center"
+                    android:text="@string/btn_select_all"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/btn_deselect_all_read"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center"
+                    android:text="@string/btn_deselect_all"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+            <!-- 提示条 -->
+            <TextView
+                android:id="@+id/tv_tip_read"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/colorPrimaryContainer"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="10dp"
+                android:text="@string/read_tip"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="13sp" />
+
+            <!-- 下拉刷新 + 应用列表 -->
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipe_refresh_read"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ExpandableListView
+                    android:id="@+id/expandable_list_read"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:childDivider="@android:color/transparent"
+                    android:divider="@android:color/transparent"
+                    android:dividerHeight="0dp"
+                    android:groupIndicator="@null" />
+
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        </LinearLayout>
 
         <!-- ===== 第四页：设置页 ===== -->
         <include
@@ -588,7 +797,7 @@
                 android:textColor="?attr/colorPrimary" />
         </LinearLayout>
 
-        <!-- 应用 -->
+        <!-- 写入 -->
         <LinearLayout
             android:id="@+id/nav_apps"
             android:layout_width="0dp"
@@ -601,19 +810,19 @@
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_nav_apps"
+                android:src="@drawable/ic_nav_write"
                 app:tint="?attr/colorOnSurfaceVariant" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="应用"
+                android:text="@string/nav_write"
                 android:textSize="11sp"
                 android:textColor="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
 
-        <!-- 日志 -->
+        <!-- 读取 -->
         <LinearLayout
-            android:id="@+id/nav_log"
+            android:id="@+id/nav_read"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -624,12 +833,12 @@
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_nav_log"
+                android:src="@drawable/ic_nav_read"
                 app:tint="?attr/colorOnSurfaceVariant" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="日志"
+                android:text="@string/nav_read"
                 android:textSize="11sp"
                 android:textColor="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
