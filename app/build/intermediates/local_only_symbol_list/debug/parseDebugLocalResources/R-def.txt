@@ -10,6 +10,7 @@ color btn_allow_text
 color btn_deny_text
 color btn_pressed_bg
 color card_shadow
+color checkbox_select_all_tint
 color color_background
 color color_error
 color color_error_container
@@ -65,6 +66,7 @@ drawable bg_item_app
 drawable btn_allow_bg
 drawable btn_deny_bg
 drawable checkbox_custom
+drawable checkbox_select_all
 drawable ic_app_default
 drawable ic_arrow_right
 drawable ic_autostart
@@ -97,6 +99,7 @@ id card_float_permission
 id card_permission
 id card_status
 id cb_block
+id cb_select_all
 id et_search
 id expandable_list
 id fab_save
@@ -148,6 +151,7 @@ id tv_message
 id tv_model
 id tv_module_version
 id tv_package_name
+id tv_permission_title
 id tv_status_desc
 id tv_status_title
 id tv_time
@@ -220,6 +224,7 @@ string permission_message
 string save_no_block
 string save_success
 string search_hint
+string select_all
 string settings_about
 string settings_about_module
 string settings_appearance

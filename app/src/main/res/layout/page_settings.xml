@@ -159,8 +159,9 @@
 
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- 权限管理入口 -->
+    <!-- 权限管理入口（暂时隐藏，代码保留供免 Root 版复用） -->
     <TextView
+        android:id="@+id/tv_permission_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="16dp"
@@ -169,7 +170,8 @@
         android:text="@string/settings_permission"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"
-        android:textStyle="bold" />
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_permission"
@@ -179,6 +181,7 @@
         android:layout_marginBottom="16dp"
         android:clickable="true"
         android:focusable="true"
+        android:visibility="gone"
         xmlns:app="http://schemas.android.com/apk/res-auto"
         app:cardBackgroundColor="?attr/colorSurface"
         app:cardCornerRadius="16dp"

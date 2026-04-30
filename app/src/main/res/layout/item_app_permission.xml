@@ -56,11 +56,15 @@
         勾选(checked) = 拦截(BLOCK)，弹窗询问
         未勾选        = 放行(IGNORE)，不拦截
     -->
+    <!-- marginEnd 补偿标题行右侧箭头宽度，使两个 CheckBox 垂直对齐 -->
     <CheckBox
         android:id="@+id/cb_block"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
         android:button="@drawable/checkbox_custom"
         android:clickable="false"
         android:focusable="false" />
