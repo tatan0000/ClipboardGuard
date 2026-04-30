@@ -3,21 +3,21 @@
   "sessions": {
     "02d882ce1218439781295039b6c695b6": [
       {
+        "expertId": "MobileApplicationDeveloper",
+        "name": "掌中灵",
+        "profession": "移动应用开发工程师",
+        "avatarUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/avatars/02-Engineering/MobileApplicationDeveloper/MobileApplicationDeveloper.png",
+        "promptUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/experts/02-Engineering/MobileApplicationDeveloper/MobileApplicationDeveloper_zh.md",
+        "usedAt": 1777462196797,
+        "industryId": "02-Engineering"
+      },
+      {
         "expertId": "CodeReviewExpert",
         "name": "火眼眼",
         "profession": "代码审查专家",
         "avatarUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/avatars/02-Engineering/CodeReviewExpert/CodeReviewExpert.png",
         "promptUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/experts/02-Engineering/CodeReviewExpert/CodeReviewExpert_zh.md",
         "usedAt": 1776753099116,
-        "industryId": "02-Engineering"
-      },
-      {
-        "expertId": "MobileApplicationDeveloper",
-        "name": "掌中灵",
-        "profession": "移动应用开发工程师",
-        "avatarUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/avatars/02-Engineering/MobileApplicationDeveloper/MobileApplicationDeveloper.png",
-        "promptUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/experts/02-Engineering/MobileApplicationDeveloper/MobileApplicationDeveloper_zh.md",
-        "usedAt": 1776752481691,
         "industryId": "02-Engineering"
       },
       {
@@ -32,6 +32,15 @@
     ],
     "03bfdbbb6ab44c50bbfeac79ce6f5ad7": [
       {
+        "expertId": "GitWorkflowExpert",
+        "name": "分支通",
+        "profession": "Git工作流专家",
+        "avatarUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/avatars/02-Engineering/GitWorkflowExpert/GitWorkflowExpert.png",
+        "promptUrl": "https://acc-1258344699.cos.accelerate.myqcloud.com/workbuddy/experts/experts/02-Engineering/GitWorkflowExpert/GitWorkflowExpert_zh.md",
+        "usedAt": 1777277373415,
+        "industryId": "all"
+      },
+      {
         "expertId": "SeniorDeveloper",
         "name": "Will",
         "profession": "高级开发工程师",
@@ -42,5 +51,5 @@
       }
     ]
   },
-  "lastUpdated": 1776755495710
+  "lastUpdated": 1777463302733
 }

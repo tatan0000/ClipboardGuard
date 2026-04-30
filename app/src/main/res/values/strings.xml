@@ -55,6 +55,7 @@
     <string name="apps_tip">勾选 = 拦截（写剪贴板时弹窗询问），未勾选 = 放行</string>
     <string name="btn_select_all">全选</string>
     <string name="btn_deselect_all">全不选</string>
+    <string name="select_all">全选</string>
     <string name="search_hint">搜索应用名或包名…</string>
     <string name="group_user_apps">用户应用</string>
     <string name="group_system_apps">系统应用</string>

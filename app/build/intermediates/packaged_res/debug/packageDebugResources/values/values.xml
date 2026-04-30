@@ -242,6 +242,7 @@
     <string name="save_no_block">已保存，未拦截任何应用</string>
     <string name="save_success">已保存，拦截 %d 个应用</string>
     <string name="search_hint">搜索应用名或包名…</string>
+    <string name="select_all">全选</string>
     <string name="settings_about">关于</string>
     <string name="settings_about_module">关于模块</string>
     <string name="settings_appearance">外观</string>

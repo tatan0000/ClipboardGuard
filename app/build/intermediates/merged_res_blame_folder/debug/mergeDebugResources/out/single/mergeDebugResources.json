@@ -1,270 +1,222 @@
 [
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_item_log.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\item_log.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_shield_on.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_shield_on.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_item_app_permission.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\item_app_permission.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_check.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_check.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_content_preview.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_content_preview.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_btn_allow_bg.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/btn_allow_bg.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-xxhdpi_ic_launcher.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-xxhdpi\\ic_launcher.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_launcher_background.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_nav_apps.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_nav_apps.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_item_log.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/item_log.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_save.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_save.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-hdpi/ic_launcher.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_icon_circle.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_icon_circle.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_bg_item_app.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/bg_item_app.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_dialog_card.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_dialog_card.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-xhdpi/ic_launcher.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_app_default.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_app_default.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_dialog_first_launch_guide.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/dialog_first_launch_guide.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_radio_checked.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\radio_checked.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_page_permission_detail.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/page_permission_detail.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_selector_radio_theme.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\selector_radio_theme.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-mdpi_ic_launcher_round.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-mdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\anim_dialog_exit.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\anim\\dialog_exit.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_activity_permission_dialog.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/activity_permission_dialog.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_search_box.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_search_box.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_nav_home.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_nav_home.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-hdpi_ic_launcher.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-hdpi\\ic_launcher.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_search.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_search.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_activity_permission_dialog.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\activity_permission_dialog.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_item_app_permission.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/item_app_permission.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_shield_off.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_shield_off.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_checkbox_select_all.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/checkbox_select_all.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_page_settings.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\page_settings.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_page_log.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/page_log.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-xhdpi_ic_launcher.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-xhdpi\\ic_launcher.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_btn_deny_bg.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/btn_deny_bg.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_btn_reset_bg.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\btn_reset_bg.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/xml_data_extraction_rules.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/xml/data_extraction_rules.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_float_window.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_float_window.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_system.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_system.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_btn_go_settings.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_btn_go_settings.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_launcher_foreground.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_search.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_search.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_page_settings.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/page_settings.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-hdpi_ic_launcher_round.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-hdpi\\ic_launcher_round.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_bg_dialog_card.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/bg_dialog_card.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_launcher_background.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_launcher_background.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-xxxhdpi/ic_launcher.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_btn_deny_bg.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\btn_deny_bg.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_bg_icon_circle.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/bg_icon_circle.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-xxxhdpi_ic_launcher.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-xxxhdpi\\ic_launcher.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/menu_bottom_nav_menu.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/menu/bottom_nav_menu.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_item_group_header.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\item_group_header.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/anim_dialog_enter.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/anim/dialog_enter.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\color_bottom_nav_color.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\color\\bottom_nav_color.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_moon.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_moon.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_back.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_back.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-mdpi/ic_launcher.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_radio_unchecked.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\radio_unchecked.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_permission.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_permission.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-xhdpi_ic_launcher_round.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-xhdpi\\ic_launcher_round.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/xml_backup_rules.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/xml/backup_rules.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\xml_data_extraction_rules.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\xml\\data_extraction_rules.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_shield_on.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_shield_on.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_card.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_card.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-xxxhdpi_ic_launcher_round.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-xxxhdpi\\ic_launcher_round.webp"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_nav_settings.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_nav_settings.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_system.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_system.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_page_about.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\page_about.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_btn_allow_bg.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\btn_allow_bg.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_nav_home.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_nav_home.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-mdpi_ic_launcher.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-mdpi\\ic_launcher.webp"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\menu_bottom_nav_menu.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\menu\\bottom_nav_menu.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-anydpi_ic_launcher.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-anydpi\\ic_launcher.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_arrow_right.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_arrow_right.xml"
     },
     {
         "merged": "com.android.clipboardguard.app-debug-30:/drawable_checkbox_custom.xml.flat",
         "source": "com.android.clipboardguard.app-main-32:/drawable/checkbox_custom.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_arrow_right.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_arrow_right.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_sun.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_sun.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-anydpi_ic_launcher_round.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-anydpi\\ic_launcher_round.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/color_checkbox_select_all_tint.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/color/checkbox_select_all_tint.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_arrow_drop_down.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_arrow_drop_down.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-hdpi_ic_launcher_round.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-hdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_page_log.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\page_log.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-xxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-xxhdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_permission.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_permission.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_back.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_back.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-mdpi_ic_launcher_round.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-mdpi\\ic_launcher_round.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_page_about.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/page_about.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_autostart.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_autostart.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_activity_main.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/activity_main.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\anim_dialog_enter.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\anim\\dialog_enter.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-xxhdpi/ic_launcher.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_checkbox_custom.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\checkbox_custom.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/layout_item_group_header.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/layout/item_group_header.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\xml_backup_rules.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\xml\\backup_rules.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-anydpi_ic_launcher_round.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-anydpi/ic_launcher_round.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\mipmap-xxhdpi_ic_launcher_round.webp.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\mipmap-xxhdpi\\ic_launcher_round.webp"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-xxxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-xxxhdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_check.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_check.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_autostart.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_autostart.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_dialog_first_launch_guide.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\dialog_first_launch_guide.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_bg_content_preview.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/bg_content_preview.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_page_permission_detail.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\page_permission_detail.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_float_window.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_float_window.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_moon.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_moon.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_nav_log.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_nav_log.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_nav_log.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_nav_log.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_app_default.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_app_default.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_search_box2.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_search_box2.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/anim_dialog_exit.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/anim/dialog_exit.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_launcher_foreground.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_launcher_foreground.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-xhdpi_ic_launcher_round.webp.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-xhdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_xposed.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_xposed.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_nav_settings.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_nav_settings.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\color-night_bottom_nav_color.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\color-night\\bottom_nav_color.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/mipmap-anydpi_ic_launcher.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/mipmap-anydpi/ic_launcher.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_bg_item_app.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\bg_item_app.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_nav_apps.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_nav_apps.xml"
     },
     {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\drawable_ic_sun.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\drawable\\ic_sun.xml"
-    },
-    {
-        "merged": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-debug-30:\\layout_activity_main.xml.flat",
-        "source": "C:\\Users\\Administrator\\.gradle\\daemon\\9.3.1\\com.android.clipboardguard.app-main-32:\\layout\\activity_main.xml"
+        "merged": "com.android.clipboardguard.app-debug-30:/drawable_ic_shield_off.xml.flat",
+        "source": "com.android.clipboardguard.app-main-32:/drawable/ic_shield_off.xml"
     }
 ]

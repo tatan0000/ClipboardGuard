@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 勾选状态：白色方框 + 蓝色对勾 -->
+    <!-- 勾选状态：蓝色边框 + 蓝色对勾 -->
     <item android:state_checked="true">
         <layer-list>
-            <!-- 白色方框 -->
+            <!-- 蓝色边框方框 -->
             <item>
                 <shape android:shape="rectangle">
-                    <stroke android:width="2dp" android:color="#FFFFFF" />
+                    <stroke android:width="2dp" android:color="#2196F3" />
                     <corners android:radius="4dp" />
                     <solid android:color="@android:color/transparent" />
                     <size android:width="24dp" android:height="24dp" />
                 </shape>
             </item>
-            <!-- 蓝色对勾：包在 vector 里 -->
+            <!-- 蓝色对勾 -->
             <item android:gravity="center">
                 <vector
                     android:width="24dp"
@@ -26,19 +26,45 @@
             </item>
         </layer-list>
     </item>
-    <!-- 未勾选状态：白色方框 + 灰色对勾 -->
-    <item>
+    <!-- 部分选中状态：蓝色边框 + 灰色减号 -->
+    <item android:state_selected="true">
         <layer-list>
-            <!-- 白色方框 -->
+            <!-- 蓝色边框方框 -->
             <item>
                 <shape android:shape="rectangle">
-                    <stroke android:width="2dp" android:color="#FFFFFF" />
+                    <stroke android:width="2dp" android:color="#2196F3" />
                     <corners android:radius="4dp" />
                     <solid android:color="@android:color/transparent" />
                     <size android:width="24dp" android:height="24dp" />
                 </shape>
             </item>
-            <!-- 灰色对勾：包在 vector 里 -->
+            <!-- 灰色减号 -->
+            <item android:gravity="center">
+                <vector
+                    android:width="24dp"
+                    android:height="24dp"
+                    android:viewportWidth="24"
+                    android:viewportHeight="24">
+                    <path
+                        android:fillColor="#BDBDBD"
+                        android:pathData="M19,13H5v-2h14v2z" />
+                </vector>
+            </item>
+        </layer-list>
+    </item>
+    <!-- 未勾选状态：灰色边框 + 灰色对勾 -->
+    <item>
+        <layer-list>
+            <!-- 灰色边框方框 -->
+            <item>
+                <shape android:shape="rectangle">
+                    <stroke android:width="2dp" android:color="#BDBDBD" />
+                    <corners android:radius="4dp" />
+                    <solid android:color="@android:color/transparent" />
+                    <size android:width="24dp" android:height="24dp" />
+                </shape>
+            </item>
+            <!-- 灰色对勾 -->
             <item android:gravity="center">
                 <vector
                     android:width="24dp"

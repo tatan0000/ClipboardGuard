@@ -6,8 +6,10 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
-    <!-- 请求悬浮窗权限，用于在后台弹出权限询问窗口 -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!--
+        TYPE_APPLICATION_OVERLAY 不需要 SYSTEM_ALERT_WINDOW 权限（Android 8.0+）
+        因此移除此权限声明
+    -->
 
     <application
         android:name=".ClipboardGuardApp"
@@ -32,11 +34,9 @@
         </activity>
 
         <!--
-            权限弹窗Activity
-            主题透明，模拟iOS弹窗浮层
-            excludeFromRecents：不出现在最近任务列表
-            taskAffinity=""：独立任务栈，不抢占前台应用
-            launchMode="singleInstance"：确保每次都创建新实例
+            权限弹窗Activity（已废弃）
+            现在使用 InlineDialogManager 在 system_server 内直接弹窗
+            此 Activity 保留用于兼容性和调试
         -->
         <activity
             android:name=".PermissionDialogActivity"
@@ -48,28 +48,15 @@
 
         <!--
             权限数据ContentProvider
-            用于Hook代码（运行在目标应用进程）跨进程读取本模块存储的权限数据
+            用于Hook代码（运行在 system_server 进程）跨进程读取本模块存储的权限数据
             android:exported="true" 必须为true以允许跨进程访问
             android:grantUriPermissions="true" 允许授予临时URI权限
-            android:multiprocess="true" 让Provider在每个进程都有实例，避免跨进程调用失败
         -->
         <provider
             android:name=".PermissionProvider"
             android:authorities="com.android.clipboardguard.provider"
             android:exported="true"
             android:grantUriPermissions="true" />
-
-        <!-- 广播接收器：App自己启动弹窗 -->
-        <receiver
-            android:name=".DialogLaunchReceiver"
-            android:exported="true"
-            android:priority="2147483647"
-            android:directBootAware="false">
-            <intent-filter android:priority="2147483647">
-                <action android:name="com.android.clipboardguard.ACTION_SHOW_DIALOG" />
-            </intent-filter>
-        </receiver>
-
 
         <!-- ======= Xposed 模块声明 ======= -->
         <meta-data
