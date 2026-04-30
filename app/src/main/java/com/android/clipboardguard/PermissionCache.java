@@ -225,7 +225,11 @@ public class PermissionCache {
                     PermissionProvider.ACTION_PERMISSION_CHANGED);
             long identity = Binder.clearCallingIdentity();
             try {
-                context.registerReceiver(receiver, filter);
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+                } else {
+                    context.registerReceiver(receiver, filter);
+                }
                 sRefreshReceiver = receiver; // 保存引用
                 Log.i(TAG, "权限变更广播接收器注册成功");
             } finally {
@@ -265,7 +269,11 @@ public class PermissionCache {
             IntentFilter filter = new IntentFilter(PermissionProvider.ACTION_PERMISSION_CHANGED);
             long identity = Binder.clearCallingIdentity();
             try {
-                context.registerReceiver(sRefreshReceiver, filter);
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(sRefreshReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+                } else {
+                    context.registerReceiver(sRefreshReceiver, filter);
+                }
                 Log.i(TAG, "刷新接收器重新注册成功");
             } finally {
                 Binder.restoreCallingIdentity(identity);
