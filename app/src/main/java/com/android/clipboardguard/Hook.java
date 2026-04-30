@@ -35,7 +35,6 @@ public class Hook implements IXposedHookLoadPackage {
     private static final String TAG = "ClipboardGuard";
     private static final String MODULE_PKG = "com.android.clipboardguard";
     private static final long DEBOUNCE_MS = 1500;
-    private static final long INIT_WAIT_MS = 5000; // 等待初始化超时
 
     // 防抖：记录上次用户做出决策的时间 和 决策结果
     private static final Map<String, Long>    sLastDecisionTime = new HashMap<>();
@@ -44,10 +43,6 @@ public class Hook implements IXposedHookLoadPackage {
 
     // 防止 afterHookedMethod 清空剪贴板时递归触发 hook
     private static final ThreadLocal<Boolean> sInAfterHook = ThreadLocal.withInitial(() -> false);
-
-    // 日志开关
-    private static final String PREF_CLIP_PREFS = "clipboardguard_prefs";
-    private static final String KEY_ENABLE_LOG   = "enable_log";
 
     // ──────────────────────────────────────────────────────────────────────────
 

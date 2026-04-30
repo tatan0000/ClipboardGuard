@@ -1,5 +1,6 @@
 package com.android.clipboardguard;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,9 +11,6 @@ import android.util.Log;
 
 import de.robv.android.xposed.XposedHelpers;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
@@ -192,6 +190,7 @@ public class PermissionCache {
      * 注册广播接收器（在 Hook 初始化时调用）
      * 监听 App 侧保存权限后发出的 ACTION_PERMISSION_CHANGED 广播（数据推送）
      */
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public static synchronized void registerRefreshReceiver(Context context) {
         // 检查是否已注册
         if (sRefreshReceiver != null) {
@@ -237,49 +236,6 @@ public class PermissionCache {
             }
         } catch (Throwable e) {
             Log.e(TAG, "注册权限变更广播接收器失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 内部方法：重新注册刷新接收器
-     */
-    private static void refreshReceiverInternal(Context context) {
-        if (context == null) return;
-        try {
-            // 解注册旧的
-            if (sRefreshReceiver != null) {
-                try {
-                    long identity = Binder.clearCallingIdentity();
-                    try {
-                        context.unregisterReceiver(sRefreshReceiver);
-                    } finally {
-                        Binder.restoreCallingIdentity(identity);
-                    }
-                } catch (Throwable ignored) {}
-                sRefreshReceiver = null;
-            }
-            // 重新注册
-            sRefreshReceiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context ctx, Intent intent) {
-                    Log.i(TAG, "收到权限变更广播，刷新 ignoreSet...");
-                    refreshIgnoreSet();
-                }
-            };
-            IntentFilter filter = new IntentFilter(PermissionProvider.ACTION_PERMISSION_CHANGED);
-            long identity = Binder.clearCallingIdentity();
-            try {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(sRefreshReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-                } else {
-                    context.registerReceiver(sRefreshReceiver, filter);
-                }
-                Log.i(TAG, "刷新接收器重新注册成功");
-            } finally {
-                Binder.restoreCallingIdentity(identity);
-            }
-        } catch (Throwable e) {
-            Log.e(TAG, "重新注册刷新接收器失败: " + e.getMessage());
         }
     }
 

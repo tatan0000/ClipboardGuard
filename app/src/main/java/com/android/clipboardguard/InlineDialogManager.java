@@ -139,10 +139,9 @@ public class InlineDialogManager {
         }
 
         // 等待用户选择或超时
-        boolean latchAwaited = false;
         try {
             // 使用较短的超时，避免主线程阻塞太久
-            latchAwaited = mCurrentLatch.await(TIMEOUT_MS + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
+            mCurrentLatch.await(TIMEOUT_MS + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -150,11 +149,10 @@ public class InlineDialogManager {
         // 清理弹窗
         dismissCurrentDialog();
 
-        // 如果超时没被倒计时触发，手动设置结果
-        if (!latchAwaited || mCurrentLatch.getCount() > 0) {
+        // 如果用户没选择（latch 未 countdown），设置默认拒绝
+        if (mCurrentLatch.getCount() > 0) {
             synchronized (mLock) {
-                if (mCurrentResult != null && mCurrentResult.get() == 0) {
-                    // 还没收到结果，默认拒绝
+                if (mCurrentResult != null) {
                     mCurrentResult.set(PermissionStorage.PERMISSION_BLOCK);
                 }
             }
@@ -164,13 +162,6 @@ public class InlineDialogManager {
                 (decision.get() == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
 
         return true;
-    }
-
-    /**
-     * 创建并显示弹窗（必须在主线程调用）
-     */
-    private void createAndShowDialog(String pkgName, String contentPreview) {
-        createAndShowDialog(pkgName, contentPreview, null);
     }
 
     /**
