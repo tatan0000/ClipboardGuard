@@ -5,7 +5,6 @@ import android.content.Context;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -23,13 +22,11 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 /**
  * ClipboardGuard - Xposed 写入拦截 Hook
  *
- * 初始化策略（稳定版）：
- * 1. Hook 成功后，立即加载一次本地文件（可能为空）。
- * 2. 延迟 8 秒注册广播接收器 + 再次加载文件（覆盖 App 开机广播）。
- * 3. 首次复制时执行 ensureInitialized()：
- *    - 如果广播尚未注册，尝试注册。
- *    - 如果缓存尚未加载，从文件加载。
- * 4. 之后完全依赖广播和 FileObserver 被动更新。
+ * 初始化策略（v5 - 2026-05-05）：
+ * - 开机立即注册广播接收器必定失败（AMS 未就绪），不再尝试。
+ * - 改为两级延迟注册：5s 第一次尝试，8s 第二次兜底。
+ * - 配置依赖 App 侧推送：BootReceiver 自启动（12s/15s）、打开 App、保存配置时。
+ * - 首次复制时 ensureInitialized() 确保广播接收器已注册。
  */
 public class WriteHook implements IXposedHookLoadPackage {
 
@@ -50,14 +47,25 @@ public class WriteHook implements IXposedHookLoadPackage {
     @Override
     @SuppressWarnings("RedundantThrows")
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        if (MODULE_PKG.equals(lpparam.packageName)) {
-            if (!"android".equals(lpparam.processName)) {
-                hookSelfForActiveStatus(lpparam);
+        try {
+            if (MODULE_PKG.equals(lpparam.packageName)) {
+                if (!"android".equals(lpparam.processName)) {
+                    hookSelfForActiveStatus(lpparam);
+                }
+                return;
             }
-            return;
-        }
-        if ("android".equals(lpparam.packageName)) {
-            hookClipboardService(lpparam);
+            if ("android".equals(lpparam.packageName)) {
+                // 初始化 XLog：传入 XposedBridge.log(String) 方法引用
+                try {
+                    XLog.init(XposedBridge.class.getMethod("log", String.class));
+                } catch (NoSuchMethodException e) {
+                    XLog.e(TAG, "获取 XposedBridge.log 方法失败: " + e.getMessage());
+                }
+                hookClipboardService(lpparam);
+            }
+        } catch (Throwable t) {
+            XLog.e(TAG, "handleLoadPackage 异常: " + t.getMessage());
+            XposedBridge.log(t);
         }
     }
 
@@ -77,17 +85,23 @@ public class WriteHook implements IXposedHookLoadPackage {
                             p.setResult(XposedBridge.getXposedVersion());
                         }
                     });
-            Log.i(TAG, "自身Hook成功");
+            XLog.i(TAG, "WriteHook自身Hook成功");
         } catch (Throwable e) {
-            Log.e(TAG, "自身Hook失败: " + e.getMessage());
+            XLog.e(TAG, "WriteHook自身Hook失败: " + e.getMessage());
         }
     }
 
     private void hookClipboardService(XC_LoadPackage.LoadPackageParam lpparam) {
         String[] candidates = {
+                // Android 14+ (API 34+): Google 重命名为 ClipboardManagerService
+                "com.android.server.clipboard.ClipboardManagerService",
+                "com.android.server.clipboard.ClipboardManagerService$Impl",
+                "com.android.server.clipboard.ClipboardManagerService$BinderService",
+                "com.android.server.clipboard.ClipboardManagerService$ClipboardImpl",
+                // Android 13 及以下 (API 33-): 原始 ClipboardService
+                "com.android.server.clipboard.ClipboardService",
                 "com.android.server.clipboard.ClipboardService$ClipboardImpl",
                 "com.android.server.clipboard.ClipboardService$BinderService",
-                "com.android.server.clipboard.ClipboardService",
         };
         for (String className : candidates) {
             try {
@@ -96,43 +110,79 @@ public class WriteHook implements IXposedHookLoadPackage {
                     if ("setPrimaryClip".equals(m.getName())) {
                         m.setAccessible(true);
                         XposedBridge.hookMethod(m, new ClipboardServiceHook());
-                        Log.i(TAG, "Hook成功: " + className);
+                        XLog.i(TAG, "WriteHook成功: " + className);
 
-                        // 立即加载一次本地文件（可能为空）
-                        PermissionCache.loadWriteBlockSet();
-                        PermissionCache.loadReadBlockSet();
-                        ContentRulesManager.loadRules();
-                        ContentRulesManager.loadReadRules();
+                        // ★ 初始化代码必须用 try-catch 包裹！
+                        // 如果这里抛出未捕获的异常，会导致 handleLoadPackage 整体失败，
+                        // LSPosed 会标记模块为异常状态并禁用 Hook
+                        try {
+                            // 开机立即注册必定失败（AMS 未就绪），不再尝试
+                            // 改为两级延迟注册：5s → 8s
+                            final Handler initHandler = new Handler(Looper.getMainLooper());
 
-                        // 延迟 8 秒再注册广播（等待 AMS 就绪）并重新加载文件
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            if (!sReceiverRegistered) {
-                                Context ctx = getSystemServerContextStatic();
-                                if (ctx != null) {
-                                    try {
-                                        PermissionCache.registerRefreshReceiver(ctx);
-                                        sReceiverRegistered = true;
-                                        Log.i(TAG, "延迟注册广播接收器成功");
-                                    } catch (Throwable e) {
-                                        Log.e(TAG, "延迟注册广播失败: " + e.getMessage());
+                            // 第一级：延迟 5s 注册
+                            initHandler.postDelayed(() -> {
+                                try {
+                                    if (tryRegisterReceiver("延迟5s")) {
+                                        XLog.i(TAG, "延迟5s注册成功，等待 App 广播推送配置");
                                     }
+                                } catch (Throwable t) {
+                                    XLog.e(TAG, "延迟5s初始化异常: " + t.getMessage());
                                 }
-                            }
-                            // 无论广播是否注册成功，再次尝试从文件加载（BootReceiver 已运行）
-                            if (!PermissionCache.isWriteLoaded()) {
-                                PermissionCache.loadWriteBlockSet();
-                                PermissionCache.loadReadBlockSet();
-                                ContentRulesManager.loadRules();
-                                ContentRulesManager.loadReadRules();
-                                Log.i(TAG, "延迟加载完成，writeBlockSet.size=" + PermissionCache.getWriteBlockSetSize());
-                            }
-                        }, 8000);
+                            }, 5000);
+
+                            // 第二级：延迟 8s 注册（兜底，5s 失败时补上）
+                            initHandler.postDelayed(() -> {
+                                try {
+                                    if (tryRegisterReceiver("延迟8s")) {
+                                        XLog.i(TAG, "延迟8s注册成功，等待 App 广播推送配置");
+                                    }
+                                } catch (Throwable t) {
+                                    XLog.e(TAG, "延迟8s初始化异常: " + t.getMessage());
+                                }
+                            }, 8000);
+                        } catch (Throwable t) {
+                            XLog.e(TAG, "Hook后初始化异常（不影响Hook本身）: " + t.getMessage());
+                        }
                         return;
                     }
                 }
-            } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                XLog.w(TAG, "候选类未找到: " + className + " - " + t.getMessage());
+            }
         }
-        Log.e(TAG, "Hook失败：未找到 setPrimaryClip");
+        XLog.e(TAG, "WriteHook失败：未找到 setPrimaryClip");
+    }
+
+    /**
+     * 尝试注册广播接收器。
+     * @param tag 日志标签
+     * @return true 注册成功或已注册过，false 注册失败
+     */
+    private static boolean tryRegisterReceiver(String tag) {
+        if (sReceiverRegistered) return true;
+        Context ctx = getSystemServerContextStatic();
+        if (ctx == null) {
+            XLog.w(TAG, "[" + tag + "] 获取 Context 失败，跳过注册");
+            return false;
+        }
+        boolean ok = PermissionCache.registerRefreshReceiver(ctx);
+        if (ok) {
+            sReceiverRegistered = true;
+            XLog.i(TAG, "[" + tag + "] 广播接收器注册成功");
+        } else {
+            XLog.w(TAG, "[" + tag + "] 广播接收器注册失败，将稍后重试");
+        }
+        return ok;
+    }
+
+    /** 一次性加载全部配置（写入/读取拦截列表 + 内容规则） */
+    private static void loadAllConfig(String tag) {
+        PermissionCache.loadWriteBlockSet();
+        PermissionCache.loadReadBlockSet();
+        ContentRulesManager.loadRules();
+        ContentRulesManager.loadReadRules();
+        XLog.i(TAG, "[" + tag + "] 配置加载完成，writeBlockSet.size=" + PermissionCache.getWriteBlockSetSize());
     }
 
     private static class ClipboardServiceHook extends XC_MethodHook {
@@ -150,13 +200,13 @@ public class WriteHook implements IXposedHookLoadPackage {
 
                 boolean initialized = ensureInitialized();
                 if (!initialized) {
-                    Log.w(TAG, "PermissionCache 未初始化，保守放行");
+                    XLog.w(TAG, "PermissionCache 未初始化，保守放行");
                     return;
                 }
 
                 String pkgName = getCallingPackageNameWithRetry();
                 if (pkgName == null || pkgName.isEmpty()) {
-                    Log.w(TAG, "无法获取调用者包名，保守放行");
+                    XLog.w(TAG, "无法获取调用者包名，保守放行");
                     return;
                 }
 
@@ -164,7 +214,7 @@ public class WriteHook implements IXposedHookLoadPackage {
 
                 Context ctx = getSystemServerContextWithRetry();
                 if (ctx == null) {
-                    Log.e(TAG, "获取Context失败，保守放行: " + pkgName);
+                    XLog.e(TAG, "获取Context失败，保守放行: " + pkgName);
                     return;
                 }
 
@@ -226,10 +276,10 @@ public class WriteHook implements IXposedHookLoadPackage {
 
             String matchedRule = ContentRulesManager.matchesAdContent(preview);
             if (matchedRule != null) {
-                Log.i(TAG, "内容命中规则 [" + matchedRule + "]，弹窗");
+                XLog.i(TAG, "内容命中规则 [" + matchedRule + "]，弹窗");
                 return true;
             }
-            Log.i(TAG, "内容未命中正则规则，放行");
+            XLog.i(TAG, "内容未命中正则规则，放行");
             return false;
         }
 
@@ -291,7 +341,7 @@ public class WriteHook implements IXposedHookLoadPackage {
                 boolean shown = dialogManager.showDialog(pkgName, preview, result);
                 if (!shown) return PermissionStorage.PERMISSION_BLOCK;
             } catch (Throwable e) {
-                Log.e(TAG, "弹窗异常: " + e.getMessage());
+                XLog.e(TAG, "弹窗异常: " + e.getMessage());
                 return PermissionStorage.PERMISSION_BLOCK;
             }
             return result.get();
@@ -303,11 +353,10 @@ public class WriteHook implements IXposedHookLoadPackage {
     }
 
     private static void writeLog(Context ctx, String pkgName, String action, String content) {
-        if (ctx == null || pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
+        // 只输出到 LSPosed 日志，不保存到数据库
+        if (pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
             return;
-        try {
-            PermissionProvider.writeLog(ctx, pkgName, action, content);
-        } catch (Throwable ignored) {}
+        XLog.i(TAG, "[" + pkgName + "] " + action + ": " + content);
     }
 
     private static Context getSystemServerContextStatic() {
@@ -331,33 +380,15 @@ public class WriteHook implements IXposedHookLoadPackage {
     }
 
     /**
-     * 确保缓存和广播已就绪。
-     * 首次复制时调用，执行一次性的兜底注册与加载。
+     * 确保广播接收器已注册。
+     * Hook 侧（system_server）无法直接读取 App 私有目录文件，
+     * 配置只能靠 App 通过广播推送（BootReceiver / 打开App / 保存配置时）。
      */
     private static boolean ensureInitialized() {
-        // 若广播尚未注册，尝试注册
         if (!sReceiverRegistered) {
-            Context ctx = getSystemServerContextStatic();
-            if (ctx != null) {
-                try {
-                    PermissionCache.registerRefreshReceiver(ctx);
-                    sReceiverRegistered = true;
-                    Log.i(TAG, "兜底注册广播接收器成功");
-                } catch (Throwable e) {
-                    Log.e(TAG, "兜底注册广播失败: " + e.getMessage());
-                }
-            }
+            tryRegisterReceiver("兜底");
         }
-
-        // 如果缓存从未加载过，从文件加载
-        if (!PermissionCache.isWriteLoaded()) {
-            Log.w(TAG, "缓存未加载，尝试从文件加载配置...");
-            PermissionCache.loadWriteBlockSet();
-            PermissionCache.loadReadBlockSet();
-            ContentRulesManager.loadRules();
-            ContentRulesManager.loadReadRules();
-        }
-        return true;
+        return PermissionCache.isWriteLoaded();
     }
 
     private static boolean isSystemCorePackage(String pkgName) {

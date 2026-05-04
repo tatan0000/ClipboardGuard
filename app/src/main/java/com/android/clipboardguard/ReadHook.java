@@ -1,8 +1,6 @@
 package com.android.clipboardguard;
 
 import android.content.Context;
-import android.util.Log;
-
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -20,20 +18,37 @@ public class ReadHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        if (MODULE_PKG.equals(lpparam.packageName)) {
-            return;
-        }
-        if ("android".equals(lpparam.packageName)) {
-            hookGetPrimaryClip(lpparam);
+        try {
+            if (MODULE_PKG.equals(lpparam.packageName)) {
+                return;
+            }
+            if ("android".equals(lpparam.packageName)) {
+                // 初始化 XLog（如果 WriteHook 尚未初始化）
+                try {
+                    XLog.init(XposedBridge.class.getMethod("log", String.class));
+                } catch (NoSuchMethodException e) {
+                    XLog.e(TAG, "获取 XposedBridge.log 方法失败: " + e.getMessage());
+                }
+                hookGetPrimaryClip(lpparam);
+            }
+        } catch (Throwable t) {
+            XLog.e(TAG, "handleLoadPackage 异常: " + t.getMessage());
+            XposedBridge.log(t);
         }
     }
 
     /** Hook ClipboardService.getPrimaryClip 方法。 */
     private void hookGetPrimaryClip(XC_LoadPackage.LoadPackageParam lpparam) {
         String[] candidates = {
+                // Android 14+ (API 34+): Google 重命名为 ClipboardManagerService
+                "com.android.server.clipboard.ClipboardManagerService",
+                "com.android.server.clipboard.ClipboardManagerService$Impl",
+                "com.android.server.clipboard.ClipboardManagerService$BinderService",
+                "com.android.server.clipboard.ClipboardManagerService$ClipboardImpl",
+                // Android 13 及以下 (API 33-): 原始 ClipboardService
+                "com.android.server.clipboard.ClipboardService",
                 "com.android.server.clipboard.ClipboardService$ClipboardImpl",
                 "com.android.server.clipboard.ClipboardService$BinderService",
-                "com.android.server.clipboard.ClipboardService",
         };
         for (String className : candidates) {
             try {
@@ -42,14 +57,15 @@ public class ReadHook implements IXposedHookLoadPackage {
                     if ("getPrimaryClip".equals(method.getName())) {
                         method.setAccessible(true);
                         XposedBridge.hookMethod(method, new GetPrimaryClipHook());
-                        Log.i(TAG, "ReadHook成功: " + className);
+                        XLog.i(TAG, "ReadHook成功: " + className);
                         return;
                     }
                 }
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
+                XLog.w(TAG, "Read候选类未找到: " + className + " - " + t.getMessage());
             }
         }
-        Log.e(TAG, "ReadHook失败：未找到 getPrimaryClip");
+        XLog.e(TAG, "ReadHook失败：未找到 getPrimaryClip");
     }
 
     /**
@@ -64,7 +80,7 @@ public class ReadHook implements IXposedHookLoadPackage {
                 return (Context) XposedHelpers.callMethod(at, "getApplication");
             }
         } catch (Throwable e) {
-            Log.e(TAG, "getSystemServerContext 失败: " + e.getMessage());
+            XLog.e(TAG, "getSystemServerContext 失败: " + e.getMessage());
         }
         return null;
     }

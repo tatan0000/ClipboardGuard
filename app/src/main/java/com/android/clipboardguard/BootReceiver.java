@@ -1,110 +1,65 @@
 package com.android.clipboardguard;
 
-import android.Manifest;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Build;
-import android.util.Log;
-
-import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
+import android.os.Handler;
+import android.os.Looper;
 
 /**
  * 开机自启动接收器
  *
  * 功能：
- * - 开机后在后台静默运行，不显示任何界面
- * - 延迟等待系统稳定后，发送配置刷新广播通知 Hook 侧
- * - 发送自启动成功通知
+ * - 监听多个系统广播作为自启动触发（国产 ROM 常拦截 BOOT_COMPLETED）
+ * - 收到广播后启动 ConfigSyncService（前台服务）来完成配置同步
+ * - 前台服务比 BroadcastReceiver.goAsync() 更可靠（goAsync 最多 10 秒）
+ * - 60 秒内只启动一次服务（防止 USER_PRESENT 等多次触发）
+ *
+ * 触发 Intent 列表（任一触发均有效）：
+ * - BOOT_COMPLETED / QUICKBOOT_POWERON：标准开机广播（可能被拦截）
+ * - USER_PRESENT：用户首次解锁屏幕（最可靠，国产 ROM 通常不会拦截）
+ * - TIME_SET / TIMEZONE_CHANGED：时间/时区变化（开机时常触发）
  */
 public class BootReceiver extends BroadcastReceiver {
     private static final String TAG = "ClipboardGuard.Boot";
 
-    private static final long INITIAL_DELAY_MS = 3000L;
-    private static final String CHANNEL_ID = "clipboardguard_boot";
-    private static final int NOTIFICATION_ID = 1001;
+    // 防抖：60 秒内不重复启动服务
+    private static volatile long sLastTriggerTime = 0;
+    private static final long COOLDOWN_MS = 60_000L;
 
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
         if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
-                && !"android.intent.action.QUICKBOOT_POWERON".equals(action)) {
+                && !"android.intent.action.QUICKBOOT_POWERON".equals(action)
+                && !Intent.ACTION_USER_PRESENT.equals(action)
+                && !Intent.ACTION_TIME_CHANGED.equals(action)
+                && !Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
             return;
         }
 
-        Log.i(TAG, "收到开机广播: " + action);
+        XLog.i(TAG, "收到触发广播: " + action);
 
-        PendingResult pendingResult = goAsync();
-        Context appContext = context.getApplicationContext();
+        // 防抖：短时间内不重复启动
+        long now = System.currentTimeMillis();
+        if (now - sLastTriggerTime < COOLDOWN_MS) {
+            XLog.i(TAG, "防抖：距上次启动不足 " + (COOLDOWN_MS / 1000) + "s，跳过");
+            return;
+        }
+        sLastTriggerTime = now;
 
-        new Thread(() -> {
-            try {
-                Log.i(TAG, "等待 " + (INITIAL_DELAY_MS / 1000) + " 秒后发送刷新广播...");
-                Thread.sleep(INITIAL_DELAY_MS);
-
-                // 发送完整配置广播（包含 blocklist + 写入规则 + 读取规则）
-                PermissionProvider.sendFullConfigBroadcast(appContext);
-
-                Log.i(TAG, "已发送配置刷新广播");
-                sendSuccessNotification(appContext);
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                Log.w(TAG, "初始化被中断");
-            } catch (Throwable e) {
-                Log.e(TAG, "开机初始化异常: " + e.getMessage(), e);
-            } finally {
-                pendingResult.finish();
-            }
-        }, "ClipboardGuard-BootInit").start();
-    }
-
-    /**
-     * 发送自启动成功通知
-     */
-    private void sendSuccessNotification(Context context) {
+        // 启动前台服务来同步配置（比 goAsync 更可靠）
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED) {
-                    Log.w(TAG, "未授予通知权限，跳过");
-                    return;
-                }
-            }
-
-            NotificationManager nm =
-                    (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-
-            if (nm == null) return;
-
+            Intent serviceIntent = new Intent(context, ConfigSyncService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationChannel channel = new NotificationChannel(
-                        CHANNEL_ID,
-                        "剪贴板护卫",
-                        NotificationManager.IMPORTANCE_LOW
-                );
-                channel.setDescription("剪贴板护卫服务状态通知");
-                channel.setShowBadge(false);
-                nm.createNotificationChannel(channel);
+                context.startForegroundService(serviceIntent);
+            } else {
+                context.startService(serviceIntent);
             }
-
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setContentTitle("ClipboardGuard")
-                    .setContentText("剪贴板保护服务已启动")
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setAutoCancel(true)
-                    .setVisibility(NotificationCompat.VISIBILITY_SECRET);
-
-            nm.notify(NOTIFICATION_ID, builder.build());
-            Log.i(TAG, "已发送自启动通知");
-
+            XLog.i(TAG, "已启动 ConfigSyncService 前台服务");
         } catch (Throwable e) {
-            Log.e(TAG, "发送通知失败: " + e.getMessage());
+            XLog.e(TAG, "启动 ConfigSyncService 失败: " + e.getMessage(), e);
         }
     }
 }

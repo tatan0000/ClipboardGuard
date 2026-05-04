@@ -33,7 +33,6 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.util.Log;
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -45,7 +44,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -633,14 +631,6 @@ public class MainActivity extends AppCompatActivity {
             itemPermission.setVisibility(View.GONE);
         }
 
-        SwitchMaterial switchLog = findViewById(R.id.switch_enable_log);
-        if (switchLog != null) {
-            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
-            switchLog.setChecked(prefs.getBoolean("enable_log", false));
-            switchLog.setOnCheckedChangeListener((btn, checked) ->
-                    prefs.edit().putBoolean("enable_log", checked).apply());
-        }
-
         View itemAbout = findViewById(R.id.item_about);
         if (itemAbout != null) {
             itemAbout.setOnClickListener(v ->
@@ -1032,7 +1022,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 writeFile(file, "[]");
             } catch (Exception e) {
-                Log.e("ClipboardGuard", "initRuleFiles: failed to create " + fileName, e);
+                XLog.e("ClipboardGuard", "initRuleFiles: failed to create " + fileName, e);
             }
         }
     }

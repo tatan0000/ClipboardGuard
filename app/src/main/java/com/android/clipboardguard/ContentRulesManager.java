@@ -1,58 +1,33 @@
 package com.android.clipboardguard;
 
-import android.annotation.SuppressLint;
-import android.util.Log;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * ContentRulesManager - 广告内容过滤规则管理器（写入 + 读取）
  *
- * 改造说明（2026-05-03）：
- * - 加载规则时自动合并启用的默认规则（write_default_rules.json / read_default_rules.json）
- * - 添加 isLoaded / isReadLoaded 标记，区分“加载完成”与“列表非空”
- * - 广播/FileObserver 触发刷新时重新合并默认规则
+ * 改造说明（2026-05-05）：
+ * - 移除所有硬编码文件路径，system_server 进程无法访问 App 私有目录
+ * - loadRules / loadReadRules 改为空操作（sLoaded=true），实际数据由广播推送
+ * - App 端通过 Activity.getFilesDir() 直接操作文件，不经过此类
+ * - 所有规则数据仅通过广播中的 JSON 字符串更新（updateRulesFromJson / updateReadRulesFromJson）
  */
 public class ContentRulesManager {
 
     private static final String TAG = "ClipboardGuard.ContentRules";
 
-    // 配置文件路径（自定义规则）
-    @SuppressLint("SdCardPath") // Xposed 环境无 Context 可用
-    private static final String CONFIG_FILE = "/data/data/com.android.clipboardguard/files/write_rules.json";
-    @SuppressLint("SdCardPath")
-    private static final String READ_CONFIG_FILE = "/data/data/com.android.clipboardguard/files/read_rules.json";
-
-    // 默认规则文件
-    @SuppressLint("SdCardPath")
-    private static final String WRITE_DEFAULT_FILE = "/data/data/com.android.clipboardguard/files/write_default_rules.json";
-    @SuppressLint("SdCardPath")
-    private static final String READ_DEFAULT_FILE = "/data/data/com.android.clipboardguard/files/read_default_rules.json";
-
     // ── 写入规则缓存 ──
     private static final List<RulePattern> sRulePatterns = new ArrayList<>();
     private static volatile boolean sEnabled = true;
     private static volatile boolean sLoaded = false;
-    private static long sLastModified = 0;
-    private static long sLastLoadTime = 0;
 
     // ── 读取规则缓存 ──
     private static final List<ReadRulePattern> sReadRulePatterns = new ArrayList<>();
     private static volatile boolean sReadEnabled = false;
     private static volatile boolean sReadLoaded = false;
-    private static long sReadLastModified = 0;
-    private static long sReadLastLoadTime = 0;
-
-    private static final long CACHE_TTL_MS = 5000;
 
     // ──────────────────────────── 数据类 ────────────────────────────
 
@@ -66,7 +41,7 @@ public class ContentRulesManager {
             try {
                 this.pattern = java.util.regex.Pattern.compile(regex);
             } catch (Exception e) {
-                Log.e(TAG, "正则编译失败: " + regex + " -> " + e.getMessage());
+                XLog.e(TAG, "正则编译失败: " + regex + " -> " + e.getMessage());
                 this.pattern = null;
             }
         }
@@ -82,201 +57,32 @@ public class ContentRulesManager {
             try {
                 this.pattern = java.util.regex.Pattern.compile(regex);
             } catch (Exception e) {
-                Log.e(TAG, "正则编译失败: " + regex + " -> " + e.getMessage());
+                XLog.e(TAG, "正则编译失败: " + regex + " -> " + e.getMessage());
                 this.pattern = null;
             }
         }
     }
 
-    // ──────────────────────────── 加载方法 ────────────────────────────
+    // ──────────────────────────── 加载方法（system_server 中为空操作） ────────────────────────────
 
     /**
-     * 加载写入规则（自定义 + 默认启用规则）
+     * 加载写入规则。
+     * 在 system_server 进程中无法直接读取 App 私有目录的文件，
+     * 所以这里只标记为已加载（sLoaded=true），实际数据通过广播推送。
      */
     public static synchronized void loadRules() {
-        long now = System.currentTimeMillis();
-        File file = new File(CONFIG_FILE);
-
-        if (sLastModified == file.lastModified() && (now - sLastLoadTime) < CACHE_TTL_MS && sLoaded) {
-            return;
-        }
-
-        Log.i(TAG, "开始加载写入规则（合并默认）...");
-        sRulePatterns.clear();
-
-        // 1. 加载自定义规则文件
-        if (file.exists()) {
-            sLastModified = file.lastModified();
-            loadRulesFromFile(file);
-        }
-
-        // 2. 加载默认规则文件（只取启用的）
-        File defaultFile = new File(WRITE_DEFAULT_FILE);
-        if (defaultFile.exists()) {
-            appendEnabledDefaultRules(defaultFile);
-        }
-
         sLoaded = true;
-        sLastLoadTime = System.currentTimeMillis();
-        Log.i(TAG, "写入规则加载完成: " + getEnabledRuleCount() + " 条启用，耗时=" + (sLastLoadTime - now) + "ms");
+        XLog.i(TAG, "loadRules: system_server 中跳过文件读取，等待广播推送规则数据");
     }
 
     /**
-     * 加载读取规则（自定义 + 默认启用规则）
+     * 加载读取规则。
+     * 在 system_server 进程中无法直接读取 App 私有目录的文件，
+     * 所以这里只标记为已加载（sReadLoaded=true），实际数据通过广播推送。
      */
     public static synchronized void loadReadRules() {
-        long now = System.currentTimeMillis();
-        File file = new File(READ_CONFIG_FILE);
-
-        if (sReadLastModified == file.lastModified() && (now - sReadLastLoadTime) < CACHE_TTL_MS && sReadLoaded) {
-            return;
-        }
-
-        Log.i(TAG, "开始加载读取规则（合并默认）...");
-        sReadRulePatterns.clear();
-
-        if (file.exists()) {
-            sReadLastModified = file.lastModified();
-            loadReadRulesFromFile(file);
-        }
-
-        File defaultFile = new File(READ_DEFAULT_FILE);
-        if (defaultFile.exists()) {
-            appendEnabledDefaultReadRules(defaultFile);
-        }
-
         sReadLoaded = true;
-        sReadLastLoadTime = System.currentTimeMillis();
-        Log.i(TAG, "读取规则加载完成: " + getReadEnabledRuleCount() + " 条启用");
-    }
-
-    /**
-     * 从 JSON 文件解析写入规则并放入 sRulePatterns
-     */
-    private static void loadRulesFromFile(File file) {
-        try {
-            JSONObject root = parseJsonObject(file);
-            if (root == null) return;
-            sEnabled = root.optBoolean("enabled", true);
-            JSONArray arr = root.optJSONArray("content_rules");
-            if (arr == null) arr = root.optJSONArray("rules");
-            if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject r = arr.getJSONObject(i);
-                    String name = r.optString("name", "未命名");
-                    String regex = r.optString("pattern", "");
-                    if (regex.isEmpty()) regex = r.optString("regex", "");
-                    boolean enabled = r.optBoolean("enabled", true);
-                    if (!regex.isEmpty()) {
-                        sRulePatterns.add(new RulePattern(name, regex, enabled));
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "解析写入规则失败", e);
-            sRulePatterns.clear();
-        }
-    }
-
-    /**
-     * 从 JSON 文件解析读取规则并放入 sReadRulePatterns
-     */
-    private static void loadReadRulesFromFile(File file) {
-        try {
-            JSONObject root = parseJsonObject(file);
-            if (root == null) return;
-            sReadEnabled = root.optBoolean("enabled", false);
-            JSONArray arr = root.optJSONArray("content_rules");
-            if (arr == null) arr = root.optJSONArray("read_rules");
-            if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject r = arr.getJSONObject(i);
-                    String name = r.optString("name", "未命名");
-                    String regex = r.optString("pattern", "");
-                    if (regex.isEmpty()) regex = r.optString("regex", "");
-                    boolean enabled = r.optBoolean("enabled", true);
-                    if (!regex.isEmpty()) {
-                        sReadRulePatterns.add(new ReadRulePattern(name, regex, enabled));
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "解析读取规则失败", e);
-            sReadRulePatterns.clear();
-        }
-    }
-
-    /**
-     * 从默认规则文件中读取启用的规则，追加到写入列表
-     */
-    private static void appendEnabledDefaultRules(File defaultFile) {
-        try {
-            JSONArray arr = parseJsonArray(defaultFile);
-            if (arr == null) return;
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject r = arr.getJSONObject(i);
-                boolean enabled = r.optBoolean("enabled", false);
-                if (!enabled) continue;
-                String name = r.optString("name", "未命名");
-                String regex = r.optString("pattern", "");
-                if (regex.isEmpty()) regex = r.optString("regex", "");
-                if (!regex.isEmpty()) {
-                    sRulePatterns.add(new RulePattern(name, regex, true));
-                }
-            }
-            Log.i(TAG, "追加启用默认写入规则");
-        } catch (Exception e) {
-            Log.e(TAG, "解析默认写入规则失败", e);
-        }
-    }
-
-    /**
-     * 从默认读取规则文件中读取启用的规则，追加到读取列表
-     */
-    private static void appendEnabledDefaultReadRules(File defaultFile) {
-        try {
-            JSONArray arr = parseJsonArray(defaultFile);
-            if (arr == null) return;
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject r = arr.getJSONObject(i);
-                boolean enabled = r.optBoolean("enabled", false);
-                if (!enabled) continue;
-                String name = r.optString("name", "未命名");
-                String regex = r.optString("pattern", "");
-                if (regex.isEmpty()) regex = r.optString("regex", "");
-                if (!regex.isEmpty()) {
-                    sReadRulePatterns.add(new ReadRulePattern(name, regex, true));
-                }
-            }
-            Log.i(TAG, "追加启用默认读取规则");
-        } catch (Exception e) {
-            Log.e(TAG, "解析默认读取规则失败", e);
-        }
-    }
-
-    // ──────────────────────────── JSON 解析工具 ────────────────────────────
-
-    private static JSONObject parseJsonObject(File file) throws Exception {
-        String content = readFileContent(file);
-        if (content == null || content.isEmpty()) return null;
-        return new JSONObject(content);
-    }
-
-    private static JSONArray parseJsonArray(File file) throws Exception {
-        String content = readFileContent(file);
-        if (content == null || content.isEmpty()) return null;
-        return new JSONArray(content);
-    }
-
-    private static String readFileContent(File file) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            return sb.toString();
-        } catch (IOException e) {
-            return null;
-        }
+        XLog.i(TAG, "loadReadRules: system_server 中跳过文件读取，等待广播推送规则数据");
     }
 
     // ──────────────────────────── 查询接口 ────────────────────────────
@@ -296,7 +102,7 @@ public class ContentRulesManager {
             try {
                 if (rule.pattern.matcher(text).find()) return rule.name;
             } catch (Exception e) {
-                Log.e(TAG, "正则匹配异常: " + rule.name);
+                XLog.e(TAG, "正则匹配异常: " + rule.name);
             }
         }
         return null;
@@ -371,10 +177,10 @@ public class ContentRulesManager {
                 }
                 sLoaded = true;
             }
-            Log.d(TAG, (isReadRules ? "读取" : "写入") + "规则通过广播更新完成: "
+            XLog.d(TAG, (isReadRules ? "读取" : "写入") + "规则通过广播更新完成: "
                     + (isReadRules ? getReadEnabledRuleCount() : getEnabledRuleCount()) + " 条启用");
         } catch (Exception e) {
-            Log.e(TAG, "解析规则 JSON 失败", e);
+            XLog.e(TAG, "解析规则 JSON 失败", e);
             if (isReadRules) {
                 sReadRulePatterns.clear();
                 sReadEnabled = false;
@@ -409,7 +215,7 @@ public class ContentRulesManager {
             try {
                 if (rule.pattern.matcher(text).find()) return rule.name;
             } catch (Exception e) {
-                Log.e(TAG, "正则匹配异常: " + rule.name);
+                XLog.e(TAG, "正则匹配异常: " + rule.name);
             }
         }
         return null;
@@ -430,99 +236,6 @@ public class ContentRulesManager {
     }
     @SuppressWarnings("unused")
     public static boolean isReadLoaded() { return sReadLoaded; }
-
-    // ──────────────────────────── 持久化（App 端调用） ────────────────────────────
-
-    @SuppressWarnings("unused") // 由 App 端 WriteRulesDetailActivity 间接调用
-    public static boolean saveRules(String rulesJson) {
-        File file = new File(CONFIG_FILE);
-        try {
-            File dir = file.getParentFile();
-            if (dir != null && !dir.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                dir.mkdirs();
-            }
-            new JSONObject(rulesJson);
-            try (FileWriter writer = new FileWriter(file)) {
-                writer.write(rulesJson);
-            }
-            sLastModified = file.lastModified();
-            loadRules();
-            Log.i(TAG, "写入规则保存成功");
-            return true;
-        } catch (Exception e) {
-            Log.e(TAG, "保存写入规则失败", e);
-            return false;
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public static String getRulesJson() {
-        File file = new File(CONFIG_FILE);
-        if (!file.exists()) return getDefaultRulesJson();
-        try {
-            return readFileContent(file);
-        } catch (Exception e) {
-            return getDefaultRulesJson();
-        }
-    }
-
-    private static String getDefaultRulesJson() {
-        try {
-            JSONObject root = new JSONObject();
-            root.put("version", 1);
-            root.put("enabled", true);
-            root.put("content_rules", new JSONArray());
-            return root.toString(4);
-        } catch (Exception e) {
-            return "{\"version\":1,\"enabled\":true,\"content_rules\":[]}";
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public static boolean saveReadRules(String rulesJson) {
-        File file = new File(READ_CONFIG_FILE);
-        try {
-            File dir = file.getParentFile();
-            if (dir != null && !dir.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                dir.mkdirs();
-            }
-            new JSONObject(rulesJson);
-            try (FileWriter writer = new FileWriter(file)) {
-                writer.write(rulesJson);
-            }
-            sReadLastModified = file.lastModified();
-            loadReadRules();
-            return true;
-        } catch (Exception e) {
-            Log.e(TAG, "保存读取规则失败", e);
-            return false;
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public static String getReadRulesJson() {
-        File file = new File(READ_CONFIG_FILE);
-        if (!file.exists()) return getDefaultReadRulesJson();
-        try {
-            return readFileContent(file);
-        } catch (Exception e) {
-            return getDefaultReadRulesJson();
-        }
-    }
-
-    private static String getDefaultReadRulesJson() {
-        try {
-            JSONObject root = new JSONObject();
-            root.put("version", 1);
-            root.put("enabled", false);
-            root.put("read_rules", new JSONArray());
-            return root.toString(4);
-        } catch (Exception e) {
-            return "{\"version\":1,\"enabled\":false,\"read_rules\":[]}";
-        }
-    }
 
     @SuppressWarnings("unused") // 可能由外部设置
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }

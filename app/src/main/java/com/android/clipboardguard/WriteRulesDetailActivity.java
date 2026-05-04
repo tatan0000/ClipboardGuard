@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -242,7 +241,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
                     oldEnabledStates.put(obj.getString("name"), obj.getBoolean("enabled"));
                 }
             } catch (Exception e) {
-                Log.e("ClipboardGuard-Rules", "loadDefaultWriteRules failed", e);
+                XLog.e("ClipboardGuard-Rules", "loadDefaultWriteRules failed", e);
             }
         }
 
@@ -320,9 +319,9 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             writeFile(file, root.toString(2));
 
             sendMergedWriteRulesBroadcast();
-            Log.i("ClipboardGuard-Rules", "已保存写入规则，自定义规则数=" + arr.length());
+            XLog.i("ClipboardGuard-Rules", "已保存写入规则，自定义规则数=" + arr.length());
         } catch (Exception e) {
-            Log.e("ClipboardGuard-Rules", "saveWriteRules failed", e);
+            XLog.e("ClipboardGuard-Rules", "saveWriteRules failed", e);
         }
     }
 
@@ -330,7 +329,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     private void saveDefaultWriteRules() {
         saveDefaultWriteRulesToFile();
         sendMergedWriteRulesBroadcast();
-        Log.i("ClipboardGuard-Rules", "已保存并广播默认写入规则更新");
+        XLog.i("ClipboardGuard-Rules", "已保存并广播默认写入规则更新");
     }
 
     /** 仅写入文件，不广播（用于首次初始化） */
@@ -340,9 +339,9 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             for (ContentRule rule : mWriteDefaultRules) arr.put(rule.toJson());
             File file = new File(getFilesDir(), "write_default_rules.json");
             writeFile(file, arr.toString());
-            Log.i("ClipboardGuard-Rules", "已写入默认写入规则文件");
+            XLog.i("ClipboardGuard-Rules", "已写入默认写入规则文件");
         } catch (Exception e) {
-            Log.e("ClipboardGuard-Rules", "saveDefaultWriteRulesToFile failed", e);
+            XLog.e("ClipboardGuard-Rules", "saveDefaultWriteRulesToFile failed", e);
         }
     }
 
@@ -367,9 +366,9 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             intent.putExtra("write_rules_json", mergedRoot.toString());
             sendBroadcast(intent);
 
-            Log.i("ClipboardGuard-Rules", "已发送合并写入规则广播，总规则数=" + mergedArr.length());
+            XLog.i("ClipboardGuard-Rules", "已发送合并写入规则广播，总规则数=" + mergedArr.length());
         } catch (Exception e) {
-            Log.e("ClipboardGuard-Rules", "sendMergedWriteRulesBroadcast failed", e);
+            XLog.e("ClipboardGuard-Rules", "sendMergedWriteRulesBroadcast failed", e);
         }
     }
 
@@ -538,7 +537,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
                         }
                     }
                 }
-            } catch (Exception e) { Log.e("ClipboardGuard-Rules", "loadWriteRulesSync failed", e); }
+            } catch (Exception e) { XLog.e("ClipboardGuard-Rules", "loadWriteRulesSync failed", e); }
 
             final boolean fe = enabled;
             final List<ContentRule> fr = new ArrayList<>(rules);
@@ -578,7 +577,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     private void writeFile(File file, String content) {
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
             fos.write(content.getBytes(StandardCharsets.UTF_8)); fos.flush();
-        } catch (Exception e) { Log.e("ClipboardGuard", "writeFile failed: " + file.getName(), e); }
+        } catch (Exception e) { XLog.e("ClipboardGuard", "writeFile failed: " + file.getName(), e); }
     }
 
     // ═══════════════════════════════════════════════════════════════

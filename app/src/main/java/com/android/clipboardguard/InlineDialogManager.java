@@ -132,7 +132,7 @@ public class InlineDialogManager {
             try {
                 createAndShowDialog(pkgName, contentPreview, matchedRule);
             } catch (Throwable e) {
-                android.util.Log.e(TAG, "创建弹窗异常: " + e.getMessage());
+                XLog.e(TAG, "创建弹窗异常: " + e.getMessage());
                 // 异常情况下也要释放 latch
                 synchronized (mLock) {
                     if (mCurrentLatch != null) {
@@ -169,7 +169,7 @@ public class InlineDialogManager {
             }
         } catch (Throwable ignored) {}
 
-        android.util.Log.i(TAG, "弹窗结果: " + pkgName + " -> " +
+        XLog.i(TAG, "弹窗结果: " + pkgName + " -> " +
                 (decision.get() == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
 
         return true;
@@ -191,7 +191,7 @@ public class InlineDialogManager {
             appName = pm.getApplicationLabel(appInfo).toString();
             appIcon = pm.getApplicationIcon(pkgName);
         } catch (PackageManager.NameNotFoundException e) {
-            android.util.Log.w(TAG, "应用不存在: " + pkgName);
+            XLog.w(TAG, "应用不存在: " + pkgName);
         }
 
         // 创建弹窗根布局
@@ -226,9 +226,9 @@ public class InlineDialogManager {
             // 启动倒计时
             startCountdown(pkgName);
 
-            android.util.Log.i(TAG, "弹窗已显示: " + pkgName + (matchedRule != null ? " [匹配: " + matchedRule + "]" : ""));
+            XLog.i(TAG, "弹窗已显示: " + pkgName + (matchedRule != null ? " [匹配: " + matchedRule + "]" : ""));
         } catch (Exception e) {
-            android.util.Log.e(TAG, "添加弹窗失败: " + e.getMessage());
+            XLog.e(TAG, "添加弹窗失败: " + e.getMessage());
         }
     }
 
@@ -438,7 +438,7 @@ public class InlineDialogManager {
 
             @Override
             public void onFinish() {
-                android.util.Log.i(TAG, "倒计时结束，超时拒绝: " + pkgName);
+                XLog.i(TAG, "倒计时结束，超时拒绝: " + pkgName);
                 onResult(pkgName, PermissionStorage.PERMISSION_BLOCK);
             }
         };
@@ -463,7 +463,7 @@ public class InlineDialogManager {
     private void onResult(String pkgName, int decision) {
         // 验证是否是当前包名的弹窗
         if (!pkgName.equals(mCurrentPackageName)) {
-            android.util.Log.w(TAG, "忽略过期结果: " + pkgName + " (当前: " + mCurrentPackageName + ")");
+            XLog.w(TAG, "忽略过期结果: " + pkgName + " (当前: " + mCurrentPackageName + ")");
             return;
         }
 
@@ -483,7 +483,7 @@ public class InlineDialogManager {
             }
         }
 
-        android.util.Log.i(TAG, "用户选择: " + pkgName + " -> " +
+        XLog.i(TAG, "用户选择: " + pkgName + " -> " +
                 (decision == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
     }
 
@@ -519,7 +519,7 @@ public class InlineDialogManager {
                     } catch (IllegalArgumentException e) {
                         // 视图已经被移除，忽略
                     } catch (Throwable e) {
-                        android.util.Log.w(TAG, "移除弹窗失败: " + e.getMessage());
+                        XLog.w(TAG, "移除弹窗失败: " + e.getMessage());
                     }
                 });
             } catch (Throwable ignored) {}

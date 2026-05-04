@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.CountDownTimer;
-import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -73,10 +72,10 @@ public class PermissionDialogActivity extends AppCompatActivity {
         mPackageName = getIntent().getStringExtra(EXTRA_PACKAGE_NAME);
         String contentPreview = getIntent().getStringExtra(EXTRA_CONTENT_PREVIEW);
 
-        Log.i(TAG, "弹窗创建: " + mPackageName + ", 内容: " + contentPreview);
+        XLog.i(TAG, "弹窗创建: " + mPackageName + ", 内容: " + contentPreview);
 
         if (mPackageName == null) {
-            Log.w(TAG, "packageName为空，关闭");
+            XLog.w(TAG, "packageName为空，关闭");
             finish();
             return;
         }
@@ -102,7 +101,7 @@ public class PermissionDialogActivity extends AppCompatActivity {
             ivAppIcon.setImageDrawable(icon);
         } catch (PackageManager.NameNotFoundException e) {
             ivAppIcon.setImageResource(R.drawable.ic_app_default);
-            Log.w(TAG, "应用不存在: " + mPackageName);
+            XLog.w(TAG, "应用不存在: " + mPackageName);
         }
 
         tvAppName.setText(appName);
@@ -133,7 +132,7 @@ public class PermissionDialogActivity extends AppCompatActivity {
 
             @Override
             public void onFinish() {
-                Log.i(TAG, "超时，自动拒绝: " + mPackageName);
+                XLog.i(TAG, "超时，自动拒绝: " + mPackageName);
                 sendResult(PermissionStorage.PERMISSION_BLOCK);
             }
         };
@@ -148,7 +147,7 @@ public class PermissionDialogActivity extends AppCompatActivity {
             mCountDownTimer.cancel();
         }
 
-        Log.i(TAG, "发送结果: " + mPackageName + " -> " +
+        XLog.i(TAG, "发送结果: " + mPackageName + " -> " +
                 (decision == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
 
         // 写入 pending 表（不保存永久状态，由主界面管理）

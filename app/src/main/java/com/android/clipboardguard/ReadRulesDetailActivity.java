@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -230,7 +229,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                     oldEnabledStates.put(obj.getString("name"), obj.getBoolean("enabled"));
                 }
             } catch (Exception e) {
-                Log.e("ClipboardGuard-Rules", "loadDefaultReadRules failed", e);
+                XLog.e("ClipboardGuard-Rules", "loadDefaultReadRules failed", e);
             }
         }
         mReadDefaultRules.clear();
@@ -314,9 +313,9 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             writeFile(file, root.toString(2));
 
             sendMergedReadRulesBroadcast();
-            Log.i("ClipboardGuard-Rules", "已保存读取规则，自定义规则数=" + arr.length());
+            XLog.i("ClipboardGuard-Rules", "已保存读取规则，自定义规则数=" + arr.length());
         } catch (Exception e) {
-            Log.e("ClipboardGuard-Rules", "saveReadRules failed", e);
+            XLog.e("ClipboardGuard-Rules", "saveReadRules failed", e);
         }
     }
 
@@ -324,7 +323,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     private void saveDefaultReadRules() {
         saveDefaultReadRulesToFile();
         sendMergedReadRulesBroadcast();
-        Log.i("ClipboardGuard-Rules", "已保存并广播默认读取规则更新");
+        XLog.i("ClipboardGuard-Rules", "已保存并广播默认读取规则更新");
     }
 
     /** 仅写入文件，不广播（首次初始化等场景） */
@@ -334,9 +333,9 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             for (ContentRule rule : mReadDefaultRules) arr.put(rule.toJson());
             File file = new File(getFilesDir(), "read_default_rules.json");
             writeFile(file, arr.toString());
-            Log.i("ClipboardGuard-Rules", "已写入默认读取规则文件");
+            XLog.i("ClipboardGuard-Rules", "已写入默认读取规则文件");
         } catch (Exception e) {
-            Log.e("ClipboardGuard-Rules", "saveDefaultReadRulesToFile failed", e);
+            XLog.e("ClipboardGuard-Rules", "saveDefaultReadRulesToFile failed", e);
         }
     }
 
@@ -361,9 +360,9 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             intent.putExtra("read_rules_json", mergedRoot.toString());
             sendBroadcast(intent);
 
-            Log.i("ClipboardGuard-Rules", "已发送合并读取规则广播，总规则数=" + mergedArr.length());
+            XLog.i("ClipboardGuard-Rules", "已发送合并读取规则广播，总规则数=" + mergedArr.length());
         } catch (Exception e) {
-            Log.e("ClipboardGuard-Rules", "sendMergedReadRulesBroadcast failed", e);
+            XLog.e("ClipboardGuard-Rules", "sendMergedReadRulesBroadcast failed", e);
         }
     }
 
@@ -552,7 +551,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                     }
                 }
             } catch (Exception e) {
-                Log.e("ClipboardGuard-Rules", "loadReadRulesSync failed", e);
+                XLog.e("ClipboardGuard-Rules", "loadReadRulesSync failed", e);
             }
             final boolean fe = enabled;
             final List<ContentRule> fr = new ArrayList<>(rules);
@@ -597,7 +596,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             fos.write(content.getBytes(StandardCharsets.UTF_8));
             fos.flush();
         } catch (Exception e) {
-            Log.e("ClipboardGuard", "writeFile failed", e);
+            XLog.e("ClipboardGuard", "writeFile failed", e);
         }
     }
 

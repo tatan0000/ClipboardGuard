@@ -12,6 +12,10 @@
     <!-- 发送通知权限（Android 13+） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- 前台服务权限（Android 14+ 要求） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!--
         TYPE_APPLICATION_OVERLAY 不需要 SYSTEM_ALERT_WINDOW 权限（Android 8.0+）
         因此移除此权限声明
@@ -66,6 +70,19 @@
             android:launchMode="singleInstance" />
 
         <!--
+            配置同步前台服务
+            由 BootReceiver 启动，延迟发配置广播给 Hook 侧。
+            前台服务比 BroadcastReceiver.goAsync() 更可靠。
+        -->
+        <service
+            android:name=".ConfigSyncService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="clipboard_guard_config_sync" />
+        </service>
+
+        <!--
             权限数据ContentProvider
             用于Hook代码（运行在 system_server 进程）跨进程读取本模块存储的权限数据
             android:exported="true" 必须为true以允许跨进程访问
@@ -101,14 +118,21 @@
             android:resource="@array/xposed_scope" />
 
         <!-- 开机自启动接收器 -->
+        <!-- 注册多个 Intent 作为兜底，国产 ROM 常拦截 BOOT_COMPLETED -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
+                <!-- 标准开机广播（可能被国产 ROM 拦截） -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- 一加/OPPO 等机型使用 -->
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <!-- 用户首次解锁屏幕（最可靠，国产 ROM 通常不拦截） -->
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <!-- 时间/时区变化（开机时常触发，作为额外兜底） -->
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 
