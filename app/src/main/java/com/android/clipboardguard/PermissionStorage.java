@@ -1,8 +1,6 @@
 package com.android.clipboardguard;
 
 import android.content.Context;
-import android.util.Log;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -46,7 +44,7 @@ public class PermissionStorage {
      */
     public static void setPermission(Context context, String packageName, int permission) {
         PermissionProvider.saveWritePermission(context, packageName, permission);
-        Log.i(TAG, "保存权限: " + packageName + " -> " + permissionText(permission));
+        XLog.i(TAG, "保存权限: " + packageName + " -> " + permissionText(permission));
     }
 
     /**
@@ -56,7 +54,7 @@ public class PermissionStorage {
         if (permissions == null || permissions.isEmpty()) return;
         PermissionProvider.saveAllWritePermissions(context, permissions);
         PermissionProvider.sendPermissionChangedBroadcastStatic(context);
-        Log.i(TAG, "批量保存权限: " + permissions.size() + " 条");
+        XLog.i(TAG, "批量保存权限: " + permissions.size() + " 条");
     }
 
     /**
@@ -87,7 +85,7 @@ public class PermissionStorage {
         if (permissions == null || permissions.isEmpty()) return;
         PermissionProvider.saveAllWritePermissions(context, permissions);
         PermissionProvider.sendPermissionChangedBroadcastStatic(context);
-        Log.i(TAG, "批量保存写入权限: " + permissions.size() + " 条");
+        XLog.i(TAG, "批量保存写入权限: " + permissions.size() + " 条");
     }
 
     /**
@@ -97,7 +95,7 @@ public class PermissionStorage {
         if (permissions == null || permissions.isEmpty()) return;
         PermissionProvider.saveAllReadPermissions(context, permissions);
         PermissionProvider.sendPermissionChangedBroadcastStatic(context);
-        Log.i(TAG, "批量保存读取权限: " + permissions.size() + " 条");
+        XLog.i(TAG, "批量保存读取权限: " + permissions.size() + " 条");
     }
 
     public static String permissionText(int permission) {

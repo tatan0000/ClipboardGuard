@@ -8,8 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.util.Log;
-
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 
@@ -17,14 +15,21 @@ import androidx.core.app.NotificationCompat;
  * 开机自启动接收器
  *
  * 功能：
- * - 开机后在后台静默运行，不显示任何界面
- * - 延迟等待系统稳定后，发送配置刷新广播通知 Hook 侧
- * - 发送自启动成功通知
+ * - 收到开机广播后延迟发送配置广播，等 Hook 侧广播接收器注册好
+ * - 15s 发送第一次，18s 第二次（兜底，防止 Hook 侧广播接收器还没注册）
+ * - 仅开机时发送通知，App 正常打开和保存配置只发广播不弹通知
+ *
+ * 时序说明：
+ * - Hook 侧在延迟 5s 和 8s 注册广播接收器
+ * - BootReceiver 在 15s 后发广播，确保 Hook 侧已注册
  */
 public class BootReceiver extends BroadcastReceiver {
     private static final String TAG = "ClipboardGuard.Boot";
 
-    private static final long INITIAL_DELAY_MS = 3000L;
+    // 第一次发送延迟（等 Hook 侧广播接收器注册好）
+    private static final long FIRST_BROADCAST_DELAY_MS = 15000L;
+    // 第二次发送的间隔（兜底）
+    private static final long SECOND_BROADCAST_DELAY_MS = 3000L;
     private static final String CHANNEL_ID = "clipboardguard_boot";
     private static final int NOTIFICATION_ID = 1001;
 
@@ -36,27 +41,33 @@ public class BootReceiver extends BroadcastReceiver {
             return;
         }
 
-        Log.i(TAG, "收到开机广播: " + action);
+        XLog.i(TAG, "收到开机广播: " + action);
 
         PendingResult pendingResult = goAsync();
         Context appContext = context.getApplicationContext();
 
         new Thread(() -> {
             try {
-                Log.i(TAG, "等待 " + (INITIAL_DELAY_MS / 1000) + " 秒后发送刷新广播...");
-                Thread.sleep(INITIAL_DELAY_MS);
+                // 等待 Hook 侧广播接收器注册好（Hook 在 5s 和 8s 注册，我们等 15s）
+                XLog.i(TAG, "等待 " + (FIRST_BROADCAST_DELAY_MS / 1000) + "s 后发送第一次广播...");
+                Thread.sleep(FIRST_BROADCAST_DELAY_MS);
 
-                // 发送完整配置广播（包含 blocklist + 写入规则 + 读取规则）
+                // 发送第一次完整配置广播
                 PermissionProvider.sendFullConfigBroadcast(appContext);
+                XLog.i(TAG, "已发送第一次配置刷新广播");
 
-                Log.i(TAG, "已发送配置刷新广播");
+                // 3s 后第二次（兜底）+ 发送通知
+                Thread.sleep(SECOND_BROADCAST_DELAY_MS);
+                PermissionProvider.sendFullConfigBroadcast(appContext);
+                XLog.i(TAG, "已发送第二次配置刷新广播（兜底）");
+
                 sendSuccessNotification(appContext);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                Log.w(TAG, "初始化被中断");
+                XLog.w(TAG, "初始化被中断");
             } catch (Throwable e) {
-                Log.e(TAG, "开机初始化异常: " + e.getMessage(), e);
+                XLog.e(TAG, "开机初始化异常: " + e.getMessage(), e);
             } finally {
                 pendingResult.finish();
             }
@@ -71,7 +82,7 @@ public class BootReceiver extends BroadcastReceiver {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
                         != PackageManager.PERMISSION_GRANTED) {
-                    Log.w(TAG, "未授予通知权限，跳过");
+                    XLog.w(TAG, "未授予通知权限，跳过");
                     return;
                 }
             }
@@ -101,10 +112,10 @@ public class BootReceiver extends BroadcastReceiver {
                     .setVisibility(NotificationCompat.VISIBILITY_SECRET);
 
             nm.notify(NOTIFICATION_ID, builder.build());
-            Log.i(TAG, "已发送自启动通知");
+            XLog.i(TAG, "已发送自启动通知");
 
         } catch (Throwable e) {
-            Log.e(TAG, "发送通知失败: " + e.getMessage());
+            XLog.e(TAG, "发送通知失败: " + e.getMessage());
         }
     }
 }

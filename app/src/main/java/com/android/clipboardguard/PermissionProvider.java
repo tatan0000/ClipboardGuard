@@ -12,7 +12,6 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
-import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -37,6 +36,8 @@ import java.util.Map;
  *
  * 跨进程通道：ContentProvider call()
  * Hook 侧缓存：PermissionCache（启动时全量加载，变更时广播刷新）
+ *
+ * 日志方案：日志只输出到 XLog（LSPosed Manager），不保存到数据库。
  */
 public class PermissionProvider extends ContentProvider {
 
@@ -51,17 +52,11 @@ public class PermissionProvider extends ContentProvider {
     private static final int URI_PENDING_PKG    = 3;
     private static final int URI_QUERY_ALL      = 4;
     private static final int URI_DELETE_ALL     = 5;
-    private static final int URI_LOG_ALL        = 6;
-    private static final int URI_LOG_INSERT     = 7;
-    private static final int URI_LOG_CLEAR      = 8;
 
     public static final String COL_PACKAGE    = "package_name";
     public static final String COL_PERMISSION = "permission";
     public static final String COL_DECISION   = "decision";
     public static final String COL_REMEMBER   = "remember";
-    public static final String COL_ACTION     = "action";
-    public static final String COL_CONTENT    = "content";
-    public static final String COL_TIMESTAMP  = "timestamp";
 
     public static final String CALL_METHOD_GET         = "getPermission";
     public static final String CALL_METHOD_SET         = "setPermission";
@@ -86,14 +81,11 @@ public class PermissionProvider extends ContentProvider {
         sUriMatcher.addURI(AUTHORITY, "pending/*",        URI_PENDING_PKG);
         sUriMatcher.addURI(AUTHORITY, "permission_all",   URI_QUERY_ALL);
         sUriMatcher.addURI(AUTHORITY, "permission_reset", URI_DELETE_ALL);
-        sUriMatcher.addURI(AUTHORITY, "log_all",          URI_LOG_ALL);
-        sUriMatcher.addURI(AUTHORITY, "log",              URI_LOG_INSERT);
-        sUriMatcher.addURI(AUTHORITY, "log_clear",        URI_LOG_CLEAR);
     }
 
     private static class LogDbHelper extends SQLiteOpenHelper {
         private static final String DB_NAME    = "clipboardguard.db";
-        private static final int    DB_VERSION = 2;
+        private static final int    DB_VERSION = 3;
 
         LogDbHelper(Context context) {
             super(context, "/data/data/" + PACKAGE_NAME + "/databases/" + DB_NAME, null, DB_VERSION);
@@ -104,17 +96,16 @@ public class PermissionProvider extends ContentProvider {
             db.execSQL("CREATE TABLE IF NOT EXISTS pending (" +
                     "package_name TEXT PRIMARY KEY, decision INTEGER NOT NULL, " +
                     "remember INTEGER NOT NULL DEFAULT 0, timestamp INTEGER NOT NULL)");
-            db.execSQL("CREATE TABLE IF NOT EXISTS clipboard_log (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, package_name TEXT NOT NULL, " +
-                    "`action` TEXT NOT NULL, content TEXT, timestamp INTEGER NOT NULL)");
         }
 
         @Override
         public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            if (oldVersion < 2) {
+            if (oldVersion < 3) {
+                // v3: 移除 clipboard_log 表，只保留 pending
+                db.execSQL("DROP TABLE IF EXISTS clipboard_log");
                 db.execSQL("DROP TABLE IF EXISTS permission");
-                onCreate(db);
             }
+            onCreate(db);
         }
     }
 
@@ -123,7 +114,7 @@ public class PermissionProvider extends ContentProvider {
     @Override
     public boolean onCreate() {
         mDbHelper = new LogDbHelper(getContext());
-        Log.i(TAG, "PermissionProvider 初始化完成");
+        XLog.i(TAG, "PermissionProvider 初始化完成");
         return true;
     }
 
@@ -162,7 +153,7 @@ public class PermissionProvider extends ContentProvider {
                         } else {
                             savePermissionsToFile(WRITE_BLOCKLIST_FILE, perms);
                         }
-                        Log.i(TAG, "批量保存 " + blocklistType + " 完成: " + perms.size() + " 条");
+                        XLog.i(TAG, "批量保存 " + blocklistType + " 完成: " + perms.size() + " 条");
                     }
                     return new Bundle();
                 }
@@ -201,7 +192,7 @@ public class PermissionProvider extends ContentProvider {
                 }
             }
         } catch (Throwable e) {
-            Log.e(TAG, "call()失败: " + e.getMessage());
+            XLog.e(TAG, "call()失败: " + e.getMessage());
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -240,11 +231,6 @@ public class PermissionProvider extends ContentProvider {
             return null;
         }
 
-        if (match == URI_LOG_ALL) {
-            return mDbHelper.getReadableDatabase()
-                    .query("clipboard_log", null, null, null, null, null, "timestamp DESC LIMIT 100");
-        }
-
         return null;
     }
 
@@ -267,21 +253,6 @@ public class PermissionProvider extends ContentProvider {
                         .insertWithOnConflict("pending", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
             }
         }
-
-        if (match == URI_LOG_INSERT) {
-            String pkg     = values.getAsString("package_name");
-            String action  = values.getAsString("action");
-            String content = values.getAsString("content");
-            if (pkg != null && action != null) {
-                ContentValues cv = new ContentValues();
-                cv.put("package_name", pkg);
-                cv.put("action", action);
-                cv.put("content", content);
-                Long ts = values.getAsLong("timestamp");
-                cv.put("timestamp", ts != null ? ts : System.currentTimeMillis());
-                mDbHelper.getWritableDatabase().insert("clipboard_log", null, cv);
-            }
-        }
         return null;
     }
 
@@ -299,10 +270,6 @@ public class PermissionProvider extends ContentProvider {
         if (match == URI_PENDING_PKG && pkg != null) {
             return mDbHelper.getWritableDatabase()
                     .delete("pending", "package_name = ?", new String[]{pkg});
-        }
-
-        if (match == URI_LOG_CLEAR) {
-            return mDbHelper.getWritableDatabase().delete("clipboard_log", null, null);
         }
         return 0;
     }
@@ -337,7 +304,7 @@ public class PermissionProvider extends ContentProvider {
             }
             reader.close();
         } catch (IOException e) {
-            Log.e(TAG, "loadBlocklistFromFile 失败: " + filePath + " -> " + e.getMessage());
+            XLog.e(TAG, "loadBlocklistFromFile 失败: " + filePath + " -> " + e.getMessage());
         }
         return result;
     }
@@ -364,7 +331,7 @@ public class PermissionProvider extends ContentProvider {
             writer.flush();
             writer.close();
         } catch (IOException e) {
-            Log.e(TAG, "savePermissionsToFile 失败: " + filePath + " -> " + e.getMessage());
+            XLog.e(TAG, "savePermissionsToFile 失败: " + filePath + " -> " + e.getMessage());
         }
     }
 
@@ -375,7 +342,7 @@ public class PermissionProvider extends ContentProvider {
                 new FileWriter(file).close();
             }
         } catch (IOException e) {
-            Log.e(TAG, "clearBlocklistFile 失败: " + filePath + " -> " + e.getMessage());
+            XLog.e(TAG, "clearBlocklistFile 失败: " + filePath + " -> " + e.getMessage());
         }
     }
 
@@ -395,7 +362,7 @@ public class PermissionProvider extends ContentProvider {
                 writer.flush();
                 writer.close();
             } catch (IOException e) {
-                Log.e(TAG, "ensureBlocklistFile 失败: " + filePath + " -> " + e.getMessage());
+                XLog.e(TAG, "ensureBlocklistFile 失败: " + filePath + " -> " + e.getMessage());
             }
         }
     }
@@ -413,7 +380,7 @@ public class PermissionProvider extends ContentProvider {
             context.getContentResolver().call(uri, CALL_METHOD_SET, null, args);
             sendBlocklistBroadcast(context);
         } catch (Throwable e) {
-            Log.e(TAG, "savePermission 失败: " + e.getMessage());
+            XLog.e(TAG, "savePermission 失败: " + e.getMessage());
         }
     }
 
@@ -427,7 +394,7 @@ public class PermissionProvider extends ContentProvider {
             args.putStringArray(CALL_KEY_ALL_DATA, flat);
             context.getContentResolver().call(uri, CALL_METHOD_SET_ALL, null, args);
         } catch (Throwable e) {
-            Log.e(TAG, "saveAllWritePermissions 失败: " + e.getMessage());
+            XLog.e(TAG, "saveAllWritePermissions 失败: " + e.getMessage());
         }
     }
 
@@ -441,7 +408,7 @@ public class PermissionProvider extends ContentProvider {
             args.putStringArray(CALL_KEY_ALL_DATA, flat);
             context.getContentResolver().call(uri, CALL_METHOD_SET_ALL, null, args);
         } catch (Throwable e) {
-            Log.e(TAG, "saveAllReadPermissions 失败: " + e.getMessage());
+            XLog.e(TAG, "saveAllReadPermissions 失败: " + e.getMessage());
         }
     }
 
@@ -460,7 +427,7 @@ public class PermissionProvider extends ContentProvider {
             Uri uri = Uri.parse("content://" + AUTHORITY + "/permission_reset");
             context.getContentResolver().delete(uri, null, null);
         } catch (Throwable e) {
-            Log.e(TAG, "clearAllPermissions 失败: " + e.getMessage());
+            XLog.e(TAG, "clearAllPermissions 失败: " + e.getMessage());
         }
     }
 
@@ -481,20 +448,18 @@ public class PermissionProvider extends ContentProvider {
             Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
 
+            // ★ 重要：无论列表是否为空，都必须携带 key
+            // 这样 Hook 侧才能区分"没有数据"和"数据被清空"两种情况
             List<String> writeBlocklist = loadBlocklistFromFile(WRITE_BLOCKLIST_FILE);
-            if (!writeBlocklist.isEmpty()) {
-                intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
-            }
+            intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
 
             List<String> readBlocklist = loadBlocklistFromFile(READ_BLOCKLIST_FILE);
-            if (!readBlocklist.isEmpty()) {
-                intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
-            }
+            intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
 
             context.sendBroadcast(intent);
-            Log.d(TAG, "已发送 blocklist 广播");
+            XLog.d(TAG, "已发送 blocklist 广播，写入=" + writeBlocklist.size() + " 读取=" + readBlocklist.size());
         } catch (Throwable e) {
-            Log.w(TAG, "发送 blocklist 广播失败: " + e.getMessage());
+            XLog.w(TAG, "发送 blocklist 广播失败: " + e.getMessage());
         }
     }
 
@@ -505,17 +470,13 @@ public class PermissionProvider extends ContentProvider {
             Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
 
-            // 写入 blocklist
+            // ★ 写入 blocklist：无论是否为空都携带 key
             List<String> writeBlocklist = loadBlocklistFromFile(WRITE_BLOCKLIST_FILE);
-            if (!writeBlocklist.isEmpty()) {
-                intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
-            }
+            intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
 
-            // 读取 blocklist
+            // ★ 读取 blocklist：无论是否为空都携带 key
             List<String> readBlocklist = loadBlocklistFromFile(READ_BLOCKLIST_FILE);
-            if (!readBlocklist.isEmpty()) {
-                intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
-            }
+            intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
 
             // 写入规则 JSON（合并默认规则中启用的规则）
             String writeRulesJson = buildMergedRulesJson(context, "write_rules.json", "write_default_rules.json");
@@ -530,9 +491,9 @@ public class PermissionProvider extends ContentProvider {
             }
 
             context.sendBroadcast(intent);
-            Log.d(TAG, "已发送完整配置广播");
+            XLog.d(TAG, "已发送完整配置广播");
         } catch (Throwable e) {
-            Log.w(TAG, "发送完整配置广播失败: " + e.getMessage());
+            XLog.w(TAG, "发送完整配置广播失败: " + e.getMessage());
         }
     }
 
@@ -587,7 +548,7 @@ public class PermissionProvider extends ContentProvider {
             mergedRoot.put("content_rules", mergedArr);
             return mergedRoot.toString();
         } catch (Exception e) {
-            Log.e(TAG, "buildMergedRulesJson failed: " + rulesFileName, e);
+            XLog.e(TAG, "buildMergedRulesJson failed: " + rulesFileName, e);
             return null;
         }
     }
@@ -671,50 +632,7 @@ public class PermissionProvider extends ContentProvider {
         try {
             context.getContentResolver().insert(uri, cv);
         } catch (Throwable e) {
-            Log.e(TAG, "写入pending结果失败: " + e.getMessage());
-        }
-    }
-
-    public static void writeLog(Context context, String packageName, String action, String content) {
-        try {
-            Uri uri = Uri.parse("content://" + AUTHORITY + "/log");
-            ContentValues cv = new ContentValues();
-            cv.put("package_name", packageName);
-            cv.put("action", action);
-            cv.put("content", content);
-            cv.put("timestamp", System.currentTimeMillis());
-            context.getContentResolver().insert(uri, cv);
-        } catch (Throwable e) {
-            Log.e(TAG, "写入日志失败: " + e.getMessage());
-        }
-    }
-
-    public static List<String[]> getLogs(Context context, int limit) {
-        List<String[]> result = new ArrayList<>();
-        Uri uri = Uri.parse("content://" + AUTHORITY + "/log_all");
-        try (Cursor c = context.getContentResolver()
-                .query(uri, null, null, null, "timestamp DESC LIMIT " + limit)) {
-            if (c != null) {
-                while (c.moveToNext()) {
-                    String pkg       = c.getString(c.getColumnIndexOrThrow("package_name"));
-                    String action    = c.getString(c.getColumnIndexOrThrow("action"));
-                    String content   = c.getString(c.getColumnIndexOrThrow("content"));
-                    long   timestamp = c.getLong(c.getColumnIndexOrThrow("timestamp"));
-                    result.add(new String[]{pkg, action, content != null ? content : "", String.valueOf(timestamp)});
-                }
-            }
-        } catch (Throwable e) {
-            Log.e(TAG, "获取日志失败: " + e.getMessage());
-        }
-        return result;
-    }
-
-    public static void clearLogs(Context context) {
-        try {
-            Uri uri = Uri.parse("content://" + AUTHORITY + "/log_clear");
-            context.getContentResolver().delete(uri, null, null);
-        } catch (Throwable e) {
-            Log.e(TAG, "清空日志失败: " + e.getMessage());
+            XLog.e(TAG, "写入pending结果失败: " + e.getMessage());
         }
     }
 }

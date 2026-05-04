@@ -4,7 +4,7 @@
 Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`，实现剪贴板写入权限管理。
 
 ## 技术架构
-- **Hook点**：`ClipboardService$ClipboardImpl.setPrimaryClip(ClipData)`（在 system_server 进程）
+- **Hook点**：`setPrimaryClip(ClipData)`（在 system_server 进程），兼容 `ClipboardService` 和 `ClipboardManagerService`（Android 14+ 重命名）
 - **弹窗方式**：InlineDialogManager（使用 WindowManager.addView() 直接在 system_server 内渲染浮窗）
 - **数据存储**：纯文本文件 `/data/data/com.android.clipboardguard/files/blocklist.txt`
 - **跨进程通道（关键）**：
@@ -26,24 +26,40 @@ Xposed 模块，Hook system_server 进程的 `ClipboardManager.setPrimaryClip`�
 - 两处各持有一份：arrays.xml 资源 + Hook.java 静态 HashSet
 - 匹配逻辑：精确匹配 + 子包前缀匹配
 
-## 开机初始化策略（2026-04-30 最终版）
-- **Hook 成功后延迟 10s 初始化**：Hook 加载时用 `postDelayed` 延迟 10s 再调用 `scheduleBootInit(0)`
-- **失败重试一次**：首次失败后 10s 重试（`scheduleBootInit(1)`），再失败放弃
-- **首次复制时按需初始化**：`ensureInitialized()` 在用户首次复制时触发，逻辑同开机初始化
-- **广播正常注册**：不加延时，Hook 初始化完成后直接注册
+## 开机初始化策略（v4 - 2026-05-04）
+- **开机立即注册必定失败**（AMS 未就绪），不再尝试
+- **5s 后第一次延迟注册** + 注册成功后尝试 ContentProvider 加载
+- **8s 后第二次延迟注册**（兜底）+ 重新加载配置
+- **首次复制时按需初始化**：`ensureInitialized()` 兜底
+- **BootReceiver 等 15s 再发广播**（预留充足缓冲应对开机拥堵）
+- **BootReceiver 发两次广播**：第 15s 和第 18s 各发一次（兜底）
+- **通知仅在开机自启动时发送**（BootReceiver 内），App 打开和保存配置只发广播不弹通知
 
-### 开机时序
+### 推送职责分工
+| 触发时机 | 调用方法 | 携带内容 |
+|---------|---------|---------|
+| 开机自启动 | BootReceiver → `sendFullConfigBroadcast` | blocklist + 规则 JSON |
+| 打开 App | MainActivity.onCreate → `sendFullConfigBroadcast` | blocklist + 规则 JSON |
+| 保存写入黑名单 | MainActivity → `sendBlocklistBroadcast` | 仅 write_blocklist |
+| 保存读取黑名单 | MainActivity → `sendBlocklistBroadcast` | 仅 read_blocklist |
+| 保存写入规则 | WriteRulesDetailActivity → `sendMergedWriteRulesBroadcast` | 仅 write_rules_json |
+| 保存读取规则 | ReadRulesDetailActivity → `sendMergedReadRulesBroadcast` | 仅 read_rules_json |
+
+### 开机时序（v5）
 ```
-t=0:    Hook 加载
-        └─ postDelayed 10s → scheduleBootInit(0)
+t=0:    Hook 加载（不注册，不加载，只 Hook）
+        └─ postDelayed 5s, postDelayed 8s
 
-t=10:   scheduleBootInit(0)
-        ├─ 成功 → 完成 ✅
-        └─ 失败 → postDelayed 10s → scheduleBootInit(1)
+t=5:    tryRegisterReceiver("延迟5s")
+        └─ 成功 → loadAllConfig()（可能为0，等广播兜底）
 
-t=20:   scheduleBootInit(1) - 重试
-        ├─ 成功 → 完成 ✅
-        └─ 失败 → 放弃
+t=8:    tryRegisterReceiver("延迟8s")（兜底）
+        └─ 成功 → loadAllConfig()
+
+BootReceiver 收到开机广播：
+  └─ 立即发送广播 → Hook 侧收到配置 ✅
+  └─ 3s 后第二次发广播（兜底）✅
+  └─ 发通知「剪贴板保护服务已启动」（仅开机时）✅
 
 用户复制时：
   └─ ensureInitialized() → 按需初始化 → 弹窗 ✅
@@ -60,22 +76,32 @@ t=20:   scheduleBootInit(1) - 重试
 - **SharedPreferences MODE_WORLD_READABLE** 在 Android 10+ 失效 → 改用文件 + ContentProvider
 - **system_server 无法直接读 App 私有目录文件**：`/data/data/com.android.clipboardguard/files/blocklist.txt` 对 system_server 不可见，直接读导致 blockSet.size=0，所有 App 都放行 → **正确方案**：App 保存权限时把 blocklist 放入广播 Intent 推送，system_server 接收并更新内存缓存
 - **ContentProvider 在 user unlock 前不可用**：开机后 5 秒第一次初始化时，App 进程未启动，ContentProvider 返回 "Failed to find provider info (user not unlocked)"，此时获取到 0 条数据但 sLoaded 仍为 true → **修复**：ContentProvider 查询失败时设置 `loadSuccess = false`，只有真正成功才标记 `sLoaded = true`，否则 isIgnored() 返回 false（保守拦截）直到后续初始化成功
+- **RECEIVER_NOT_EXPORTED 跨进程广播完全失效**：在 system_server 中用 `Context.RECEIVER_NOT_EXPORTED` 注册广播接收器，App 进程 sendBroadcast 发的广播**完全收不到**（Android 14+ 静默丢弃）→ **必须用 `RECEIVER_EXPORTED`**（2026-05-05 最关键修复）
 
 ### 2. ContentProvider 注意事项
 - **ContentProvider.call()** 需用 `clearCallingIdentity()` 绕过 uid 校验
 - **system_server 禁止同步出站 Binder 调用**：会收到 "Outgoing transactions must be FLAG_ONEWAY" 警告，但不影响功能 → 改用广播推送规避
 
-### 3. 日志写入
-- **writeLog 用 system_server context + getSharedPreferences 失败**："No data directory found for package android" → system_server context 对应 android 包，无数据目录。修复：去掉 getSharedPreferences，直接通过 PermissionProvider.writeLog() 走 ContentProvider
-- **日志方案后续需更换**：当前 writeLog 静默忽略异常，不打印任何信息
+### 3. 日志方案
+- **日志只输出到 XLog（XposedBridge.log）**，在 LSPosed Manager 日志页查看，不保存到数据库
+- 2026-05-04 移除了 SQLite `clipboard_log` 表和所有 `writeLog/getLogs/clearLogs` 方法
+- 数据库升级到 v3，自动 DROP 掉旧的 `clipboard_log` 表
+- `WriteHook.writeLog()` 现在直接调用 `XLog.i()` 输出到 LSPosed
 
 ### 4. Hook 机制
 - **弹窗"允许"按钮不应永久放行**：只记录日志，不调用 savePermission()
 - **嵌套 setPrimaryClip 会崩溃**：HostClipboardMonitor 回调再次调用 setPrimaryClipInternal 会触发 `RemoteCallbackList.beginBroadcast()` 嵌套 → 用 ThreadLocal `sInClipboardOp` 标记防递归
+- **`handleLoadPackage` 中 `hookMethod()` 之后的任何代码都必须 try-catch**：即使 Hook 已注册，如果后续初始化代码抛异常，LSPosed 会标记模块为异常并禁用
+- **`ContentRulesManager.loadRules/loadReadRules` 必须有 try-catch**：文件解析/JSON 操作可能抛异常，缺少保护会导致整个 handleLoadPackage 失败
 
 ### 5. 广播 Intent 数据传递
 - key = `"blocklist"`，类型 `ArrayList<String>`
 - PermissionCache.updateFromBlockList() 解析
+
+### 6. 开机广播时序竞争（2026-05-04 新增）
+- **症状**：开机后 Hook 不生效，需手动打开 App 才生效
+- **根因**：广播接收器 postDelayed(8s) 注册，但 BootReceiver 在 t=6s 就发广播 → 广播丢失
+- **修复**：Hook 加载后立即注册广播接收器（不延迟），BootReceiver 延迟从 3s 改为 12s 再发广播，并发两次兜底
 
 ## UI 结构（四栏底部导航）
 - **首页**：模块激活状态、版本信息、使用说明
@@ -182,7 +208,7 @@ t=20:   scheduleBootInit(1) - 重试
 - `mWriteRulesSelectionMode` / `mReadRulesSelectionMode`：选择模式标志
 
 ## 待开发功能
-1. 日志功能完善（XposedBridge.log 输出）
+1. ~~日志功能完善~~ ✅ XLog + XposedBridge.log，LSPosed Manager 查看
 2. 正则规则配置 UI
 3. 读取剪贴板权限控制 - ✅ UI 和存储均已完成
 4. Magisk 模块版（Zygisk + C++ Hook）
