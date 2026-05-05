@@ -161,13 +161,17 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="58c79809-c6c9-44ea-ac57-69a67ae0e8aa" name="更改" comment="修复真机开机自启动通知">
+    <list default="true" id="58c79809-c6c9-44ea-ac57-69a67ae0e8aa" name="更改" comment="修复真机开机自启动">
       <change beforePath="$PROJECT_DIR$/.github/workflows/release.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/release.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/resourceHashesCache.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/resourceHashesCache.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/app/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/BootReceiver.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/BootReceiver.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteHook.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteHook.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/reports/problems/problems-report.html" beforeDir="false" afterPath="$PROJECT_DIR$/build/reports/problems/problems-report.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/release-key.b64" beforeDir="false" afterPath="$PROJECT_DIR$/release-key.b64" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -498,7 +502,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777960850873</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="修复真机开机自启动">
+      <option name="closed" value="true" />
+      <created>1777964356902</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1777964356902</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -540,7 +552,9 @@
     <MESSAGE value="修复真机开机自启动问题" />
     <MESSAGE value="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.gradle/9.3.1/executionHistory/executionHistory.bin&#10;#&#9;.gradle/9.3.1/executionHistory/executionHistory.lock&#10;#&#9;.gradle/9.3.1/fileHashes/fileHashes.bin&#10;#&#9;.gradle/9.3.1/fileHashes/fileHashes.lock&#10;#&#9;.gradle/9.3.1/fileHashes/resourceHashesCache.bin&#10;#&#9;.gradle/buildOutputCleanup/buildOutputCleanup.lock&#10;#&#9;.gradle/file-system.probe&#10;#&#9;.idea/workspace.xml&#10;#&#9;.workbuddy/memory/MEMORY.md&#10;#&#9;app/src/main/java/com/android/clipboardguard/BootReceiver.java&#10;#&#9;app/src/main/java/com/android/clipboardguard/WriteHook.java" />
     <MESSAGE value="修复真机开机自启动通知" />
-    <option name="LAST_COMMIT_MESSAGE" value="修复真机开机自启动通知" />
+    <MESSAGE value="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.gradle/9.3.1/executionHistory/executionHistory.bin&#10;#&#9;.gradle/9.3.1/executionHistory/executionHistory.lock&#10;#&#9;.gradle/9.3.1/fileHashes/fileHashes.bin&#10;#&#9;.gradle/9.3.1/fileHashes/fileHashes.lock&#10;#&#9;.gradle/9.3.1/fileHashes/resourceHashesCache.bin&#10;#&#9;.gradle/buildOutputCleanup/buildOutputCleanup.lock&#10;#&#9;.idea/workspace.xml&#10;#&#9;app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" />
+    <MESSAGE value="修复真机开机自启动" />
+    <option name="LAST_COMMIT_MESSAGE" value="修复真机开机自启动" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>
