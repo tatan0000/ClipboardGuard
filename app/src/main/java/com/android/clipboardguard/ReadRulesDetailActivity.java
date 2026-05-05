@@ -1,6 +1,5 @@
 package com.android.clipboardguard;
 
-import androidx.appcompat.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -13,12 +12,12 @@ import android.view.WindowInsetsController;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.TextView;
-import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
-import androidx.activity.OnBackPressedCallback;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -75,6 +74,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
     private final android.os.Handler mHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final java.util.concurrent.ExecutorService mExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private volatile boolean mDestroyed = false;
 
     private AlertDialog mCurrentRuleDialog;
 
@@ -556,6 +556,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             final boolean fe = enabled;
             final List<ContentRule> fr = new ArrayList<>(rules);
             mHandler.post(() -> {
+                if (mDestroyed || isFinishing() || isDestroyed()) return;
                 mReadRulesEnabled = fe;
                 mReadRules.clear();
                 mReadRules.addAll(fr);
@@ -707,6 +708,9 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        mDestroyed = true;
+        mHandler.removeCallbacksAndMessages(null);
+        mExecutor.shutdownNow();
         if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) mCurrentRuleDialog.dismiss();
         super.onDestroy();
     }

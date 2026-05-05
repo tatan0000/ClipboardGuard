@@ -53,6 +53,7 @@ public class ConfigSyncService extends Service {
 
     private Handler mainHandler;
     private NotificationManager notificationManager;
+    private Thread syncThread;
 
     @Override
     public void onCreate() {
@@ -76,7 +77,7 @@ public class ConfigSyncService extends Service {
 
         XLog.i(TAG, "ConfigSyncService onStartCommand，开始同步配置");
 
-        new Thread(() -> {
+        syncThread = new Thread(() -> {
             try {
                 // ★ 等 App 进程完全初始化好，延迟 2s 发第一次广播
                 XLog.i(TAG, "等待 App 进程初始化，延迟 " + (FIRST_BROADCAST_DELAY_MS/1000) + "s 后发第一次广播...");
@@ -105,11 +106,12 @@ public class ConfigSyncService extends Service {
                 // 延迟 STOP_DELAY_MS 后停止服务（通知保留，不自动移除）
                 mainHandler.postDelayed(() -> {
                     stopForeground(STOP_FOREGROUND_DETACH);   // 保留通知，但脱离前台服务
-                    stopSelf();
+                    stopSelf(startId);
                     XLog.i(TAG, "ConfigSyncService 已停止，通知保留");
                 }, STOP_DELAY_MS);
             }
-        }, "ClipboardGuard-SyncService").start();
+        }, "ClipboardGuard-SyncService");
+        syncThread.start();
 
         return START_NOT_STICKY;
     }
@@ -117,6 +119,13 @@ public class ConfigSyncService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (syncThread != null) {
+            syncThread.interrupt();
+            syncThread = null;
+        }
+        if (mainHandler != null) {
+            mainHandler.removeCallbacksAndMessages(null);
+        }
         // ★ 服务销毁时重置标志位，允许下次启动重新同步
         sSyncStarted = false;
     }

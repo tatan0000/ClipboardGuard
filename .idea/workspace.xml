@@ -162,16 +162,30 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="58c79809-c6c9-44ea-ac57-69a67ae0e8aa" name="更改" comment="修复真机开机自启动">
-      <change beforePath="$PROJECT_DIR$/.github/workflows/release.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/release.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/checksums/checksums.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/checksums/checksums.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/resourceHashesCache.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/resourceHashesCache.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gradle/file-system.probe" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/file-system.probe" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/reports/problems/problems-report.html" beforeDir="false" afterPath="$PROJECT_DIR$/build/reports/problems/problems-report.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/release-key.b64" beforeDir="false" afterPath="$PROJECT_DIR$/release-key.b64" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ContentRulesManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ContentRulesManager.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/InlineDialogManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/InlineDialogManager.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/MainActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/MainActivity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionCache.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionCache.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionProvider.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionProvider.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionStorage.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/PermissionStorage.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ReadHook.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ReadHook.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ReadRulesDetailActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ReadRulesDetailActivity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteHook.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteHook.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteRulesDetailActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteRulesDetailActivity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/res/layout/page_settings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/res/layout/page_settings.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -299,9 +313,11 @@
     &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
     &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
     &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;com.android.tools.idea.streaming.emulator.frame.visible&quot;: &quot;false&quot;,
+    &quot;com.android.tools.idea.streaming.zoom.toolbar.visible&quot;: &quot;false&quot;,
     &quot;com.google.services.firebase.aqiPopupShown&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
@@ -389,6 +405,13 @@
         <option name="Android.Gradle.BeforeRunTask" enabled="true" />
       </method>
     </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.26830.84" />
+      </set>
+    </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="默认任务">
@@ -510,7 +533,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777964356902</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="修复真机开机自启动">
+      <option name="closed" value="true" />
+      <created>1777965203155</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1777965203155</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -554,7 +585,8 @@
     <MESSAGE value="修复真机开机自启动通知" />
     <MESSAGE value="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.gradle/9.3.1/executionHistory/executionHistory.bin&#10;#&#9;.gradle/9.3.1/executionHistory/executionHistory.lock&#10;#&#9;.gradle/9.3.1/fileHashes/fileHashes.bin&#10;#&#9;.gradle/9.3.1/fileHashes/fileHashes.lock&#10;#&#9;.gradle/9.3.1/fileHashes/resourceHashesCache.bin&#10;#&#9;.gradle/buildOutputCleanup/buildOutputCleanup.lock&#10;#&#9;.idea/workspace.xml&#10;#&#9;app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" />
     <MESSAGE value="修复真机开机自启动" />
-    <option name="LAST_COMMIT_MESSAGE" value="修复真机开机自启动" />
+    <MESSAGE value="fix(ci): improve keystore decode error messages and validate all secrets&#10;&#10;- Add pre-checks for all 4 required secrets (KEYSTORE_BASE64, KEY_STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD)&#10;- Add KEY_ALIAS and KEY_PASSWORD to env block for use in script&#10;- Provide clear error messages pointing to GitHub Settings when secrets are missing&#10;- Separate base64 decode error from keystore password verification error&#10;- Remove fallback to debug build when secrets are missing (fail fast instead)" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix(ci): improve keystore decode error messages and validate all secrets&#10;&#10;- Add pre-checks for all 4 required secrets (KEYSTORE_BASE64, KEY_STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD)&#10;- Add KEY_ALIAS and KEY_PASSWORD to env block for use in script&#10;- Provide clear error messages pointing to GitHub Settings when secrets are missing&#10;- Separate base64 decode error from keystore password verification error&#10;- Remove fallback to debug build when secrets are missing (fail fast instead)" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>
@@ -569,12 +601,12 @@
       <map>
         <entry key="com.android.clipboardguard">
           <value>
-            <CheckInfo lastCheckTimestamp="1777953410319" />
+            <CheckInfo lastCheckTimestamp="1778674832282" />
           </value>
         </entry>
         <entry key="com.android.clipboardguard.test">
           <value>
-            <CheckInfo lastCheckTimestamp="1777953410319" />
+            <CheckInfo lastCheckTimestamp="1778674832282" />
           </value>
         </entry>
       </map>

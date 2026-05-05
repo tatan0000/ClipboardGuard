@@ -5,7 +5,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
@@ -29,6 +31,8 @@ public class PermissionCache {
 
     private static final Set<String> sReadBlockSet = new HashSet<>();
     private static boolean sReadLoaded = false;
+    private static volatile boolean sReadBlockedToastEnabled = true;
+    private static volatile boolean sLsposedLogEnabled = true;
 
     // ── 广播接收器 ──
     private static BroadcastReceiver sRefreshReceiver;
@@ -109,6 +113,52 @@ public class PermissionCache {
         loadReadBlockSet();
     }
 
+    public static synchronized boolean loadFullConfigFromProvider(Context context) {
+        if (context == null) return false;
+        long identity = Binder.clearCallingIdentity();
+        try {
+            Uri uri = Uri.parse("content://" + PermissionProvider.AUTHORITY + "/permission_all");
+            Bundle result = context.getContentResolver().call(
+                    uri, PermissionProvider.CALL_METHOD_GET_FULL_CONFIG, null, new Bundle());
+            if (result == null) {
+                XLog.w(TAG, "loadFullConfigFromProvider: Provider 返回空结果");
+                return false;
+            }
+
+            updateFromWriteBlockList(result.getStringArrayList(PermissionProvider.CALL_KEY_WRITE_BLOCKLIST));
+            updateFromReadBlockList(result.getStringArrayList(PermissionProvider.CALL_KEY_READ_BLOCKLIST));
+
+            String writeRulesJson = result.getString(PermissionProvider.CALL_KEY_WRITE_RULES_JSON);
+            if (writeRulesJson != null && !writeRulesJson.isEmpty()) {
+                ContentRulesManager.updateWriteRulesFromJson(writeRulesJson);
+            } else {
+                ContentRulesManager.loadWriteRules();
+            }
+
+            String readRulesJson = result.getString(PermissionProvider.CALL_KEY_READ_RULES_JSON);
+            if (readRulesJson != null && !readRulesJson.isEmpty()) {
+                ContentRulesManager.updateReadRulesFromJson(readRulesJson);
+            } else {
+                ContentRulesManager.loadReadRules();
+            }
+
+            sReadBlockedToastEnabled = result.getBoolean(
+                    PermissionProvider.CALL_KEY_READ_BLOCKED_TOAST_ENABLED, true);
+            sLsposedLogEnabled = result.getBoolean(
+                    PermissionProvider.CALL_KEY_LSPOSED_LOG_ENABLED, true);
+            XLog.i(TAG, "loadFullConfigFromProvider 完成，write=" + sWriteBlockSet.size()
+                    + " read=" + sReadBlockSet.size()
+                    + " toast=" + sReadBlockedToastEnabled
+                    + " lsposedLog=" + sLsposedLogEnabled);
+            return true;
+        } catch (Throwable e) {
+            XLog.w(TAG, "loadFullConfigFromProvider 失败: " + e.getMessage());
+            return false;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
     // ──────────────────────────── 广播接收器注册 ────────────────────────────
 
     /**
@@ -142,7 +192,7 @@ public class PermissionCache {
                     // 处理写入规则 JSON
                     String writeRulesJson = intent.getStringExtra("write_rules_json");
                     if (intent.hasExtra("write_rules_json") && writeRulesJson != null && !writeRulesJson.isEmpty()) {
-                        ContentRulesManager.updateRulesFromJson(writeRulesJson, false);
+                        ContentRulesManager.updateWriteRulesFromJson(writeRulesJson);
                     }
 
                     // 处理读取规则 JSON
@@ -151,9 +201,21 @@ public class PermissionCache {
                         ContentRulesManager.updateReadRulesFromJson(readRulesJson);
                     }
 
+                    if (intent.hasExtra("read_blocked_toast_enabled")) {
+                        sReadBlockedToastEnabled = intent.getBooleanExtra("read_blocked_toast_enabled", true);
+                        XLog.i(TAG, "updateReadBlockedToastEnabled: " + sReadBlockedToastEnabled);
+                    }
+
+                    if (intent.hasExtra("lsposed_log_enabled")) {
+                        sLsposedLogEnabled = intent.getBooleanExtra("lsposed_log_enabled", true);
+                        XLog.i(TAG, "updateLsposedLogEnabled: " + sLsposedLogEnabled);
+                    }
+
                     // 如果广播中没有有效数据，尝试基于 ContentProvider 刷新
                     if (!intent.hasExtra("write_blocklist") && !intent.hasExtra("read_blocklist")
-                            && !intent.hasExtra("write_rules_json") && !intent.hasExtra("read_rules_json")) {
+                            && !intent.hasExtra("write_rules_json") && !intent.hasExtra("read_rules_json")
+                            && !intent.hasExtra("read_blocked_toast_enabled")
+                            && !intent.hasExtra("lsposed_log_enabled")) {
                         refreshWriteBlockSet();
                         refreshReadBlockSet();
                     }
@@ -208,6 +270,15 @@ public class PermissionCache {
 
     @SuppressWarnings("unused")
     public static boolean isWriteLoaded() { return sWriteLoaded; }
+
+    @SuppressWarnings("unused")
+    public static boolean isReadLoaded() { return sReadLoaded; }
+
+    @SuppressWarnings("unused")
+    public static boolean isReadBlockedToastEnabled() { return sReadBlockedToastEnabled; }
+
+    @SuppressWarnings("unused")
+    public static boolean isLsposedLogEnabled() { return sLsposedLogEnabled; }
 
     @SuppressWarnings("unused")
     public static int getWriteBlockSetSize() { return sWriteBlockSet.size(); }

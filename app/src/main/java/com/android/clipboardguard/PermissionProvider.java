@@ -63,11 +63,18 @@ public class PermissionProvider extends ContentProvider {
     public static final String CALL_METHOD_GET_ALL     = "getAllPermissions";
     public static final String CALL_METHOD_SET_ALL     = "setAllPermissions";
     public static final String CALL_METHOD_GET_PENDING = "getPending";
+    public static final String CALL_METHOD_GET_FULL_CONFIG = "getFullConfig";
     public static final String CALL_KEY_PACKAGE        = "pkg";
     public static final String CALL_KEY_PERMISSION     = "perm";
     public static final String CALL_KEY_RESULT         = "result";
     public static final String CALL_KEY_DECISION       = "decision";
     public static final String CALL_KEY_ALL_DATA       = "all_data";
+    public static final String CALL_KEY_WRITE_BLOCKLIST = "write_blocklist";
+    public static final String CALL_KEY_READ_BLOCKLIST = "read_blocklist";
+    public static final String CALL_KEY_WRITE_RULES_JSON = "write_rules_json";
+    public static final String CALL_KEY_READ_RULES_JSON = "read_rules_json";
+    public static final String CALL_KEY_READ_BLOCKED_TOAST_ENABLED = "read_blocked_toast_enabled";
+    public static final String CALL_KEY_LSPOSED_LOG_ENABLED = "lsposed_log_enabled";
 
     private static final String WRITE_BLOCKLIST_FILE = "/data/data/com.android.clipboardguard/files/write_blocklist.txt";
     private static final String READ_BLOCKLIST_FILE  = "/data/data/com.android.clipboardguard/files/read_blocklist.txt";
@@ -146,7 +153,13 @@ public class PermissionProvider extends ContentProvider {
                     if (allData != null) {
                         Map<String, Integer> perms = new HashMap<>();
                         for (int i = 0; i < allData.length - 1; i += 2) {
-                            perms.put(allData[i], Integer.parseInt(allData[i + 1]));
+                            String pkg = allData[i];
+                            String perm = allData[i + 1];
+                            if (pkg == null || pkg.isEmpty() || perm == null) continue;
+                            try {
+                                perms.put(pkg, Integer.parseInt(perm));
+                            } catch (NumberFormatException ignored) {
+                            }
                         }
                         if ("read".equals(blocklistType)) {
                             savePermissionsToFile(READ_BLOCKLIST_FILE, perms);
@@ -188,6 +201,22 @@ public class PermissionProvider extends ContentProvider {
                             result.putInt(CALL_KEY_RESULT, -1);
                         }
                     }
+                    return result;
+                }
+
+                case CALL_METHOD_GET_FULL_CONFIG: {
+                    Context context = getContext();
+                    Bundle result = new Bundle();
+                    result.putStringArrayList(CALL_KEY_WRITE_BLOCKLIST,
+                            new ArrayList<>(loadBlocklistFromFile(WRITE_BLOCKLIST_FILE)));
+                    result.putStringArrayList(CALL_KEY_READ_BLOCKLIST,
+                            new ArrayList<>(loadBlocklistFromFile(READ_BLOCKLIST_FILE)));
+                    String writeRulesJson = buildMergedRulesJson(context, "write_rules.json", "write_default_rules.json");
+                    if (writeRulesJson != null) result.putString(CALL_KEY_WRITE_RULES_JSON, writeRulesJson);
+                    String readRulesJson = buildMergedRulesJson(context, "read_rules.json", "read_default_rules.json");
+                    if (readRulesJson != null) result.putString(CALL_KEY_READ_RULES_JSON, readRulesJson);
+                    result.putBoolean(CALL_KEY_READ_BLOCKED_TOAST_ENABLED, isReadBlockedToastEnabled(context));
+                    result.putBoolean(CALL_KEY_LSPOSED_LOG_ENABLED, isLsposedLogEnabled(context));
                     return result;
                 }
             }
@@ -378,7 +407,7 @@ public class PermissionProvider extends ContentProvider {
             args.putString(CALL_KEY_PACKAGE, packageName);
             args.putInt(CALL_KEY_PERMISSION, permission);
             context.getContentResolver().call(uri, CALL_METHOD_SET, null, args);
-            sendBlocklistBroadcast(context);
+            sendReadWriteBlocklistBroadcast(context);
         } catch (Throwable e) {
             XLog.e(TAG, "savePermission 失败: " + e.getMessage());
         }
@@ -434,7 +463,7 @@ public class PermissionProvider extends ContentProvider {
     /** @deprecated 使用 sendBlocklistBroadcast 或 sendFullConfigBroadcast 代替 */
     @Deprecated
     public static void sendPermissionChangedBroadcastStatic(Context context) {
-        sendBlocklistBroadcast(context);
+        sendReadWriteBlocklistBroadcast(context);
     }
 
     // ═══════════════════════════════════ 新增：只广播 blocklist ═══════════════════════════════
@@ -443,7 +472,7 @@ public class PermissionProvider extends ContentProvider {
      * 仅发送写入/读取的 blocklist 广播，不携带规则。
      * 用于包名拦截变更后通知 Hook 侧。
      */
-    public static void sendBlocklistBroadcast(Context context) {
+    public static void sendReadWriteBlocklistBroadcast(Context context) {
         try {
             Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
@@ -455,6 +484,8 @@ public class PermissionProvider extends ContentProvider {
 
             List<String> readBlocklist = loadBlocklistFromFile(READ_BLOCKLIST_FILE);
             intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
+            intent.putExtra("read_blocked_toast_enabled", isReadBlockedToastEnabled(context));
+            intent.putExtra("lsposed_log_enabled", isLsposedLogEnabled(context));
 
             context.sendBroadcast(intent);
             XLog.d(TAG, "已发送 blocklist 广播，写入=" + writeBlocklist.size() + " 读取=" + readBlocklist.size());
@@ -490,6 +521,9 @@ public class PermissionProvider extends ContentProvider {
                 intent.putExtra("read_rules_json", readRulesJson);
             }
 
+            intent.putExtra("read_blocked_toast_enabled", isReadBlockedToastEnabled(context));
+            intent.putExtra("lsposed_log_enabled", isLsposedLogEnabled(context));
+
             context.sendBroadcast(intent);
             XLog.d(TAG, "已发送完整配置广播");
         } catch (Throwable e) {
@@ -501,6 +535,18 @@ public class PermissionProvider extends ContentProvider {
      * 合并自定义规则和默认规则（只包含启用的默认规则）
      * Hook 侧收到广播后直接使用，规则数 = 自定义规则 + 启用的默认规则
      */
+    public static boolean isReadBlockedToastEnabled(Context context) {
+        if (context == null) return true;
+        return context.getSharedPreferences("clipboardguard_prefs", Context.MODE_PRIVATE)
+                .getBoolean("read_blocked_toast_enabled", true);
+    }
+
+    public static boolean isLsposedLogEnabled(Context context) {
+        if (context == null) return true;
+        return context.getSharedPreferences("clipboardguard_prefs", Context.MODE_PRIVATE)
+                .getBoolean("lsposed_log_enabled", true);
+    }
+
     private static String buildMergedRulesJson(Context context, String rulesFileName, String defaultRulesFileName) {
         try {
             JSONObject mergedRoot = new JSONObject();
@@ -555,7 +601,7 @@ public class PermissionProvider extends ContentProvider {
 
     @Deprecated
     private static void sendPermissionChangedBroadcast(Context context) {
-        sendBlocklistBroadcast(context);
+        sendReadWriteBlocklistBroadcast(context);
     }
 
     private static String readFileContent(File file) {

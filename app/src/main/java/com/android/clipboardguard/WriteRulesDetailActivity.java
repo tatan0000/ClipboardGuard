@@ -74,6 +74,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
     private final android.os.Handler mHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final java.util.concurrent.ExecutorService mExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private volatile boolean mDestroyed = false;
 
     private AlertDialog mCurrentRuleDialog;
 
@@ -542,6 +543,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             final boolean fe = enabled;
             final List<ContentRule> fr = new ArrayList<>(rules);
             mHandler.post(() -> {
+                if (mDestroyed || isFinishing() || isDestroyed()) return;
                 mWriteRulesEnabled = fe;
                 mWriteRules.clear();
                 mWriteRules.addAll(fr);
@@ -667,6 +669,9 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        mDestroyed = true;
+        mHandler.removeCallbacksAndMessages(null);
+        mExecutor.shutdownNow();
         if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) mCurrentRuleDialog.dismiss();
         super.onDestroy();
     }

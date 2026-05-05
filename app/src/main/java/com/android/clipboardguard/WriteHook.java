@@ -32,9 +32,9 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  */
 public class WriteHook implements IXposedHookLoadPackage {
 
-    private static final String TAG = "ClipboardGuard";
+    private static final String TAG = "ClipboardGuard.WriteHook";
     private static final String MODULE_PKG = "com.android.clipboardguard";
-    private static final long DEBOUNCE_MS = 1500;
+    private static final long DEBOUNCE_MS = 2000;
 
     private static final Map<String, Long>    sLastDecisionTime = new HashMap<>();
     private static final Map<String, Integer> sLastUserDecision = new HashMap<>();
@@ -184,6 +184,7 @@ public class WriteHook implements IXposedHookLoadPackage {
         if (ok) {
             sReceiverRegistered = true;
             XLog.i(TAG, "[" + tag + "] 广播接收器注册成功");
+            loadAllConfig(ctx, tag);
 
             // ★ Hook 侧触发：注册成功后延迟 5s 直接启动 ConfigSyncService
             // 绕过 AMS broadcast 检查，消除 "non-protected broadcast" 警告
@@ -217,11 +218,13 @@ public class WriteHook implements IXposedHookLoadPackage {
     }
 
     /** 一次性加载全部配置（写入/读取拦截列表 + 内容规则） */
-    private static void loadAllConfig(String tag) {
-        PermissionCache.loadWriteBlockSet();
-        PermissionCache.loadReadBlockSet();
-        ContentRulesManager.loadRules();
-        ContentRulesManager.loadReadRules();
+    private static void loadAllConfig(Context context, String tag) {
+        if (!PermissionCache.loadFullConfigFromProvider(context)) {
+            PermissionCache.loadWriteBlockSet();
+            PermissionCache.loadReadBlockSet();
+            ContentRulesManager.loadWriteRules();
+            ContentRulesManager.loadReadRules();
+        }
         XLog.i(TAG, "[" + tag + "] 配置加载完成，writeBlockSet.size=" + PermissionCache.getWriteBlockSetSize());
     }
 
@@ -310,11 +313,11 @@ public class WriteHook implements IXposedHookLoadPackage {
         }
 
         private boolean shouldShowPopup(String preview) {
-            if (!ContentRulesManager.isEnabled()) return true;
-            if (!ContentRulesManager.isLoaded()) return true;
-            if (!ContentRulesManager.hasEnabledRule()) return true;
+            if (!ContentRulesManager.isWriteEnabled()) return true;
+            if (!ContentRulesManager.isWriteLoaded()) return true;
+            if (!ContentRulesManager.hasEnabledWriteRule()) return true;
 
-            String matchedRule = ContentRulesManager.matchesAdContent(preview);
+            String matchedRule = ContentRulesManager.matchesWriteContent(preview);
             if (matchedRule != null) {
                 XLog.i(TAG, "内容命中规则 [" + matchedRule + "]，弹窗");
                 return true;
@@ -378,7 +381,7 @@ public class WriteHook implements IXposedHookLoadPackage {
             AtomicInteger result = new AtomicInteger(PermissionStorage.PERMISSION_BLOCK);
             try {
                 InlineDialogManager dialogManager = InlineDialogManager.getInstance(ctx);
-                boolean shown = dialogManager.showDialog(pkgName, preview, result);
+                boolean shown = dialogManager.showWriteDialog(pkgName, preview, result);
                 if (!shown) return PermissionStorage.PERMISSION_BLOCK;
             } catch (Throwable e) {
                 XLog.e(TAG, "弹窗异常: " + e.getMessage());
@@ -396,7 +399,8 @@ public class WriteHook implements IXposedHookLoadPackage {
         // 只输出到 LSPosed 日志，不保存到数据库
         if (pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
             return;
-        XLog.i(TAG, "[" + pkgName + "] " + action + ": " + content);
+        if (!PermissionCache.isLsposedLogEnabled()) return;
+        XLog.i(TAG, "[" + pkgName + "] " + action + ": " + PrivacyLogUtils.maskClipboardContent(content));
     }
 
     private static Context getSystemServerContextStatic() {

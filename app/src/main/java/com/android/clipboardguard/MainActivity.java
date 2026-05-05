@@ -44,6 +44,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -631,6 +632,26 @@ public class MainActivity extends AppCompatActivity {
             itemPermission.setVisibility(View.GONE);
         }
 
+        SwitchMaterial switchReadBlockedToast = findViewById(R.id.switch_read_blocked_toast_enabled);
+        if (switchReadBlockedToast != null) {
+            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
+            switchReadBlockedToast.setChecked(prefs.getBoolean("read_blocked_toast_enabled", true));
+            switchReadBlockedToast.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                prefs.edit().putBoolean("read_blocked_toast_enabled", isChecked).apply();
+                PermissionProvider.sendReadWriteBlocklistBroadcast(this);
+            });
+        }
+
+        SwitchMaterial switchLsposedLog = findViewById(R.id.switch_lsposed_log_enabled);
+        if (switchLsposedLog != null) {
+            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
+            switchLsposedLog.setChecked(prefs.getBoolean("lsposed_log_enabled", true));
+            switchLsposedLog.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                prefs.edit().putBoolean("lsposed_log_enabled", isChecked).apply();
+                PermissionProvider.sendReadWriteBlocklistBroadcast(this);
+            });
+        }
+
         View itemAbout = findViewById(R.id.item_about);
         if (itemAbout != null) {
             itemAbout.setOnClickListener(v ->
@@ -740,6 +761,7 @@ public class MainActivity extends AppCompatActivity {
         sortReadApps(tmpReadCore);
 
         runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
             mWriteUserApps.clear();   mWriteUserApps.addAll(tmpWriteUser);
             mWriteSystemApps.clear(); mWriteSystemApps.addAll(tmpWriteSystem);
             mWriteCoreApps.clear();   mWriteCoreApps.addAll(tmpWriteCore);
@@ -751,7 +773,7 @@ public class MainActivity extends AppCompatActivity {
             refreshReadPermissions();
             applyWriteFilter();
             applyReadFilter();
-            mWriteExpandableListView.expandGroup(GROUP_USER);
+            if (mWriteExpandableListView != null) mWriteExpandableListView.expandGroup(GROUP_USER);
 
             if (mWriteSwipeRefresh != null) mWriteSwipeRefresh.setRefreshing(false);
             if (mReadSwipeRefresh != null) mReadSwipeRefresh.setRefreshing(false);
@@ -811,8 +833,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
             if (mWriteAdapter != null) mWriteAdapter.notifyDataSetChanged();
-            if (!mWriteCurrentQuery.isEmpty()) {
+            if (!mWriteCurrentQuery.isEmpty() && mWriteExpandableListView != null) {
                 mWriteExpandableListView.expandGroup(GROUP_USER);
                 mWriteExpandableListView.expandGroup(GROUP_SYSTEM);
                 mWriteExpandableListView.expandGroup(GROUP_CORE);
@@ -934,7 +957,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         PermissionProvider.saveAllWritePermissions(this, allWritePerms);
-        PermissionProvider.sendBlocklistBroadcast(this);
+        PermissionProvider.sendReadWriteBlocklistBroadcast(this);
 
         mWritePendingChanges.clear();
 
@@ -991,7 +1014,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         PermissionProvider.saveAllReadPermissions(this, allReadPerms);
-        PermissionProvider.sendBlocklistBroadcast(this);
+        PermissionProvider.sendReadWriteBlocklistBroadcast(this);
         mReadPendingChanges.clear();
 
         int readblocked = 0;

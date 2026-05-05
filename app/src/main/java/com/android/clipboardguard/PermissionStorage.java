@@ -25,6 +25,7 @@ public class PermissionStorage {
 
     public static final int PERMISSION_BLOCK  = 0;
     public static final int PERMISSION_IGNORE = 1;
+    public static final int PERMISSION_CLEAR  = 2;
 
     public static final int PERMISSION_ASK   = PERMISSION_BLOCK;
     public static final int PERMISSION_ALLOW = PERMISSION_IGNORE;
