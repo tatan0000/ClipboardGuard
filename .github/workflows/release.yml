@@ -104,13 +104,14 @@ jobs:
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
         run: |
-          if [ -z "${KEY_STORE_BASE64}" ]; then
-            echo "::warning::KEYSTORE_BASE64 secret not set. Building unsigned release APK."
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::warning::KEYSTORE_BASE64 secret not set. Building debug APK."
             echo "SIGNING_AVAILABLE=false" >> $GITHUB_ENV
           else
             # 清理 Base64 字符串（去掉可能的换行和空格），然后用 printf 输出
-            CLEAN_BASE64=$(echo "${KEY_STORE_BASE64}" | tr -d '[:space:]')
+            CLEAN_BASE64=$(printf '%s' "${KEYSTORE_BASE64}" | tr -d '[:space:]')
             printf '%s' "$CLEAN_BASE64" | base64 -d > keystore.jks
             # 验证密钥库是否有效
             if keytool -list -keystore keystore.jks -storepass "$KEY_STORE_PASSWORD" > /dev/null 2>&1; then
@@ -148,10 +149,18 @@ jobs:
       - name: Rename APK
         id: rename_apk
         run: |
-          APK_DIR="app/build/outputs/apk/release"
+          # 根据是否签名，确定 APK 目录
+          if [ "${{ env.SIGNING_AVAILABLE }}" = "true" ]; then
+            APK_DIR="app/build/outputs/apk/release"
+          else
+            APK_DIR="app/build/outputs/apk/debug"
+          fi
+          
           ORIGINAL=$(ls ${APK_DIR}/*.apk 2>/dev/null | head -1)
           if [ -z "${ORIGINAL}" ]; then
             echo "::error::No APK found in ${APK_DIR}"
+            echo "Listing all APK files for debugging:"
+            find app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "No APK files found anywhere"
             exit 1
           fi
           TARGET="${APK_DIR}/${{ steps.version.outputs.apk_name }}"
