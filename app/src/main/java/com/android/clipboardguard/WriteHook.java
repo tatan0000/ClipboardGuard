@@ -1,7 +1,9 @@
 package com.android.clipboardguard;
 
 import android.content.ClipData;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
@@ -43,6 +45,9 @@ public class WriteHook implements IXposedHookLoadPackage {
 
     /** 标记广播接收器是否已注册成功 */
     private static volatile boolean sReceiverRegistered = false;
+
+    /** Hook 侧触发广播是否已发送（防止重复） */
+    private static final java.util.concurrent.atomic.AtomicBoolean sHookTriggerSent = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     @Override
     @SuppressWarnings("RedundantThrows")
@@ -112,6 +117,9 @@ public class WriteHook implements IXposedHookLoadPackage {
                         XposedBridge.hookMethod(m, new ClipboardServiceHook());
                         XLog.i(TAG, "WriteHook成功: " + className);
 
+                        // 记录 Hook 加载时间，用于计算后续触发时间
+                        sHookLoadTime = System.currentTimeMillis();
+
                         // ★ 初始化代码必须用 try-catch 包裹！
                         // 如果这里抛出未捕获的异常，会导致 handleLoadPackage 整体失败，
                         // LSPosed 会标记模块为异常状态并禁用 Hook
@@ -154,6 +162,9 @@ public class WriteHook implements IXposedHookLoadPackage {
         XLog.e(TAG, "WriteHook失败：未找到 setPrimaryClip");
     }
 
+    /** Hook 加载时间，用于计算广播发送时机 */
+    private static volatile long sHookLoadTime = 0;
+
     /**
      * 尝试注册广播接收器。
      * @param tag 日志标签
@@ -170,6 +181,32 @@ public class WriteHook implements IXposedHookLoadPackage {
         if (ok) {
             sReceiverRegistered = true;
             XLog.i(TAG, "[" + tag + "] 广播接收器注册成功");
+
+            // ★ Hook 侧触发：注册成功后延迟 2s 直接启动 ConfigSyncService
+            // 绕过 AMS broadcast 检查，消除 "non-protected broadcast" 警告
+            if (sHookTriggerSent.compareAndSet(false, true)) {
+                Handler hookTriggerHandler = new Handler(Looper.getMainLooper());
+                hookTriggerHandler.postDelayed(() -> {
+                    try {
+                        Context ctx2 = getSystemServerContextStatic();
+                        if (ctx2 != null) {
+                            Intent serviceIntent = new Intent();
+                            serviceIntent.setComponent(new ComponentName(
+                                    MODULE_PKG, MODULE_PKG + ".ConfigSyncService"));
+                            // Android O+ 需要 startForegroundService
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                ctx2.startForegroundService(serviceIntent);
+                            } else {
+                                ctx2.startService(serviceIntent);
+                            }
+                            XLog.i(TAG, "[Hook触发] 已直接启动 ConfigSyncService (约"
+                                    + (System.currentTimeMillis() - sHookLoadTime) + "ms)");
+                        }
+                    } catch (Throwable t) {
+                        XLog.e(TAG, "[Hook触发] 启动服务失败: " + t.getMessage());
+                    }
+                }, 2000);
+            }
         } else {
             XLog.w(TAG, "[" + tag + "] 广播接收器注册失败，将稍后重试");
         }

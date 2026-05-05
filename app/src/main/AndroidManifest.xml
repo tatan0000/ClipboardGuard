@@ -76,7 +76,7 @@
         -->
         <service
             android:name=".ConfigSyncService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="clipboard_guard_config_sync" />
@@ -119,6 +119,7 @@
 
         <!-- 开机自启动接收器 -->
         <!-- 注册多个 Intent 作为兜底，国产 ROM 常拦截 BOOT_COMPLETED -->
+        <!-- Hook 侧触发：注册成功后 2s 发显式广播（ComponentName 直达），不走 intent-filter -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -126,6 +127,8 @@
             <intent-filter>
                 <!-- 标准开机广播（可能被国产 ROM 拦截） -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Android 7.0+ 直接启动模式：加密解锁后发送，比 BOOT_COMPLETED 更早 -->
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <!-- 一加/OPPO 等机型使用 -->
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <!-- 用户首次解锁屏幕（最可靠，国产 ROM 通常不拦截） -->
