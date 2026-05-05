@@ -161,20 +161,15 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="58c79809-c6c9-44ea-ac57-69a67ae0e8aa" name="更改" comment="修复真机开机自启动问题&#10;修复真机无法hook的问题&#10;迁移日志到LSPosed manager &#10;清理旧日志相关代码，资源&#10;应该是能正常运行了，在一加ACE 5 Pro（Android 15）上测试通过&#10;不能正常使用的日志，机型等等提Issue">
+    <list default="true" id="58c79809-c6c9-44ea-ac57-69a67ae0e8aa" name="更改" comment="修复真机开机自启动问题">
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/executionHistory/executionHistory.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/fileHashes.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/resourceHashesCache.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/9.3.1/fileHashes/resourceHashesCache.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/file-system.probe" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/file-system.probe" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.workbuddy/memory/MEMORY.md" beforeDir="false" afterPath="$PROJECT_DIR$/.workbuddy/memory/MEMORY.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/AndroidManifest.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/BootReceiver.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/BootReceiver.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteHook.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/WriteHook.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/android/clipboardguard/ConfigSyncService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/reports/problems/problems-report.html" beforeDir="false" afterPath="$PROJECT_DIR$/build/reports/problems/problems-report.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -482,7 +477,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777892546695</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="修复真机开机自启动问题">
+      <option name="closed" value="true" />
+      <created>1777953417186</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1777953417186</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -520,7 +523,9 @@
     <MESSAGE value="- 删除日志页面，替换为读取页面（日志将迁移至LSPosed manager中输出，尚未实现）&#10;- 原app页面改为写入页面&#10;- 新增开机自启动（5s-10s延迟），自启动成功会发送通知，开机自启动后会初始化配置，每次打开app主界面，也会主动更新配置，app内更改配置保存后实时生效。&#10;- 新增正则拦截，允许自定义规则，带有默认规则，默认规则仅查看，开启关闭，不可编辑，删除。&#10;- 写入hook逻辑，&#10;   未开启正则总开关/开启了正则总开关，子规则开关未开启，按照包名匹配，弹窗询问&#10;   开启了规则的，先查包名，不在拦截名单，放行；在名单里，匹配内容，匹配到，弹窗询问，不匹配，放行。&#10;- 读取hook尚未实现，跟写入hook大差不差。先将就用写入吧。" />
     <MESSAGE value="Update README.md" />
     <MESSAGE value="修复真机开机自启动问题&#10;修复真机无法hook的问题&#10;迁移日志到LSPosed manager &#10;清理旧日志相关代码，资源&#10;应该是能正常运行了，在一加ACE 5 Pro（Android 15）上测试通过&#10;不能正常使用的日志，机型等等提Issue" />
-    <option name="LAST_COMMIT_MESSAGE" value="修复真机开机自启动问题&#10;修复真机无法hook的问题&#10;迁移日志到LSPosed manager &#10;清理旧日志相关代码，资源&#10;应该是能正常运行了，在一加ACE 5 Pro（Android 15）上测试通过&#10;不能正常使用的日志，机型等等提Issue" />
+    <MESSAGE value="修复真机开机自启动问题&#10;修复真机无法hook的问题&#10;迁移日志到LSPosed manager&#10;清理旧日志相关代码，资源&#10;应该是能正常运行了，在一加ACE 5 Pro（Android 15）上测试通过&#10;不能正常使用的日志，机型等等提Issue" />
+    <MESSAGE value="修复真机开机自启动问题" />
+    <option name="LAST_COMMIT_MESSAGE" value="修复真机开机自启动问题" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>
@@ -535,12 +540,12 @@
       <map>
         <entry key="com.android.clipboardguard">
           <value>
-            <CheckInfo lastCheckTimestamp="1777860702233" />
+            <CheckInfo lastCheckTimestamp="1777953410319" />
           </value>
         </entry>
         <entry key="com.android.clipboardguard.test">
           <value>
-            <CheckInfo lastCheckTimestamp="1777860702233" />
+            <CheckInfo lastCheckTimestamp="1777953410319" />
           </value>
         </entry>
       </map>
