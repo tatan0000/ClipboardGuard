@@ -105,23 +105,49 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          # 检查所有必要的 Secrets 是否设置
           if [ -z "${KEYSTORE_BASE64}" ]; then
-            echo "::warning::KEYSTORE_BASE64 secret not set. Building debug APK."
-            echo "SIGNING_AVAILABLE=false" >> $GITHUB_ENV
+            echo "::error::KEYSTORE_BASE64 secret is not set! Go to Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          if [ -z "${KEY_STORE_PASSWORD}" ]; then
+            echo "::error::KEY_STORE_PASSWORD secret is not set! Go to Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          if [ -z "${KEY_ALIAS}" ]; then
+            echo "::error::KEY_ALIAS secret is not set! Go to Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          if [ -z "${KEY_PASSWORD}" ]; then
+            echo "::error::KEY_PASSWORD secret is not set! Go to Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+
+          echo "All required secrets are set. Decoding keystore..."
+
+          # 清理 Base64 字符串（去掉可能的换行和空格）
+          CLEAN_BASE64=$(printf '%s' "${KEYSTORE_BASE64}" | tr -d '[:space:]')
+
+          # 解码密钥库
+          if ! printf '%s' "$CLEAN_BASE64" | base64 -d > keystore.jks; then
+            echo "::error::Failed to decode KEYSTORE_BASE64! The Base64 string may be corrupted."
+            echo "  Tip: Regenerate with: base64 -w 0 release-key.jks"
+            exit 1
+          fi
+
+          # 验证密钥库密码
+          if keytool -list -keystore keystore.jks -storepass "$KEY_STORE_PASSWORD" > /dev/null 2>&1; then
+            echo "SIGNING_AVAILABLE=true" >> $GITHUB_ENV
+            echo "Keystore decoded and verified successfully (alias: ${KEY_ALIAS})"
           else
-            # 清理 Base64 字符串（去掉可能的换行和空格），然后用 printf 输出
-            CLEAN_BASE64=$(printf '%s' "${KEYSTORE_BASE64}" | tr -d '[:space:]')
-            printf '%s' "$CLEAN_BASE64" | base64 -d > keystore.jks
-            # 验证密钥库是否有效
-            if keytool -list -keystore keystore.jks -storepass "$KEY_STORE_PASSWORD" > /dev/null 2>&1; then
-              echo "SIGNING_AVAILABLE=true" >> $GITHUB_ENV
-              echo "Keystore decoded and verified successfully."
-            else
-              echo "::error::Keystore verification failed! Check KEYSTORE_BASE64 secret."
-              echo "SIGNING_AVAILABLE=false" >> $GITHUB_ENV
-              exit 1
-            fi
+            echo "::error::Keystore verification failed! Possible causes:"
+            echo "  1. KEY_STORE_PASSWORD is incorrect"
+            echo "  2. KEYSTORE_BASE64 is corrupted - regenerate it"
+            echo "  3. Keystore file format is invalid"
+            exit 1
           fi
 
       # ── 构建 Release APK（已签名）──
