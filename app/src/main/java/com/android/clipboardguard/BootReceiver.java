@@ -4,13 +4,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 /**
  * 开机自启动接收器
  *
  * 功能：
  * - 监听多个系统广播作为自启动触发（国产 ROM 常拦截 BOOT_COMPLETED）
- * - 收到广播后启动 ConfigSyncService（前台服务）来完成配置同步
+ * - 收到广播后延迟启动 ConfigSyncService（前台服务）来完成配置同步
  * - 前台服务比 BroadcastReceiver.goAsync() 更可靠（goAsync 最多 10 秒）
  * - 60 秒内只启动一次服务（防止 USER_PRESENT 等多次触发）
  *
@@ -22,6 +24,10 @@ import android.os.Build;
  * - BOOT_COMPLETED / QUICKBOOT_POWERON：标准开机广播（可能被拦截）
  * - USER_PRESENT：用户首次解锁屏幕（最可靠，国产 ROM 通常不拦截）
  * - TIME_SET / TIMEZONE_CHANGED：时间/时区变化（开机时常触发）
+ *
+ * 触发时序：
+ * 1. Hook 侧直接启动（约 13s，最可靠）
+ * 2. BOOT_COMPLETED 触发（约 14s，延迟 5s 后启动 → 约 19s）
  */
 public class BootReceiver extends BroadcastReceiver {
     private static final String TAG = "ClipboardGuard.Boot";
@@ -31,6 +37,11 @@ public class BootReceiver extends BroadcastReceiver {
     // 防抖：60 秒内不重复启动服务
     private static volatile long sLastTriggerTime = 0;
     private static final long COOLDOWN_MS = 60_000L;
+
+    // ★ 收到系统广播后，延迟启动服务：14s收到+4s=18s启动
+    private static final long TRIGGER_DELAY_MS = 4000L;
+
+    private Handler mainHandler;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -58,7 +69,15 @@ public class BootReceiver extends BroadcastReceiver {
         }
         sLastTriggerTime = now;
 
-        // 启动前台服务来同步配置
+        // ★ 延迟启动服务（顺延，给系统更多初始化时间）
+        mainHandler = new Handler(Looper.getMainLooper());
+        mainHandler.postDelayed(() -> {
+            XLog.i(TAG, "延迟 " + (TRIGGER_DELAY_MS / 1000) + "s 后启动 ConfigSyncService...");
+            startService(context);
+        }, TRIGGER_DELAY_MS);
+    }
+
+    private void startService(Context context) {
         try {
             Intent serviceIntent = new Intent(context, ConfigSyncService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

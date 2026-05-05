@@ -130,10 +130,10 @@ jobs:
             -Pandroid.injected.signing.key.password="${KEY_PASSWORD}" \
             --stacktrace
 
-      # ── 构建 Release APK（未签名，作为后备）──
-      - name: Build unsigned Release APK (fallback)
+      # ── 构建 Debug APK（与 AS 本地行为一致，避免未签名问题）──
+      - name: Build Debug APK (fallback when no signing config)
         if: env.SIGNING_AVAILABLE != 'true'
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       # ── 重命名 APK ──
       - name: Rename APK

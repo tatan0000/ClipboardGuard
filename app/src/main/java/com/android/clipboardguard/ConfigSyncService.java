@@ -41,7 +41,9 @@ public class ConfigSyncService extends Service {
     private static final String CHANNEL_ID = "clipboardguard_sync";
     private static final int NOTIFICATION_ID = 1002;
 
-    // 第二次广播的间隔（第一次立即发，3s 后第二次 ≈ 13s）
+    // 第一次广播延迟（等 App 进程完全初始化好）
+    private static final long FIRST_BROADCAST_DELAY_MS = 2000L;
+    // 第二次广播的间隔（第一次后 3s，兜底）
     private static final long SECOND_BROADCAST_DELAY_MS = 3000L;
     // 发完广播后延迟停止服务，让 Hook 侧有时间处理广播
     private static final long STOP_DELAY_MS = 2000L;
@@ -76,8 +78,11 @@ public class ConfigSyncService extends Service {
 
         new Thread(() -> {
             try {
-                // ★ Hook 侧 8s 已注册好，无需再等 12s，立即发第一次
-                XLog.i(TAG, "立即发送第一次配置广播...");
+                // ★ 等 App 进程完全初始化好，延迟 2s 发第一次广播
+                XLog.i(TAG, "等待 App 进程初始化，延迟 " + (FIRST_BROADCAST_DELAY_MS/1000) + "s 后发第一次广播...");
+                Thread.sleep(FIRST_BROADCAST_DELAY_MS);
+                
+                XLog.i(TAG, "发送第一次配置广播...");
                 PermissionProvider.sendFullConfigBroadcast(this);
                 XLog.i(TAG, "已发送第一次配置刷新广播");
 

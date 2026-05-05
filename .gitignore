@@ -22,3 +22,4 @@ keystore.properties
 /gradle_out.txt
 /nul
 /restart_log.txt
+release-key.jks

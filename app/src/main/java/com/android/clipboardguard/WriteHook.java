@@ -60,7 +60,10 @@ public class WriteHook implements IXposedHookLoadPackage {
                 return;
             }
             if ("android".equals(lpparam.packageName)) {
-                // 初始化 XLog：传入 XposedBridge.log(String) 方法引用
+                // 初始化策略（v6 - 2026-05-05）：
+        // Hook 侧：5s/8s 注册广播接收器 → 注册成功后 12s 启动 ConfigSyncService
+        // BootReceiver 侧：收到广播后 12s 启动 ConfigSyncService（兜底）
+        // 初始化 XLog：传入 XposedBridge.log(String) 方法引用
                 try {
                     XLog.init(XposedBridge.class.getMethod("log", String.class));
                 } catch (NoSuchMethodException e) {
@@ -182,7 +185,7 @@ public class WriteHook implements IXposedHookLoadPackage {
             sReceiverRegistered = true;
             XLog.i(TAG, "[" + tag + "] 广播接收器注册成功");
 
-            // ★ Hook 侧触发：注册成功后延迟 2s 直接启动 ConfigSyncService
+            // ★ Hook 侧触发：注册成功后延迟 5s 直接启动 ConfigSyncService
             // 绕过 AMS broadcast 检查，消除 "non-protected broadcast" 警告
             if (sHookTriggerSent.compareAndSet(false, true)) {
                 Handler hookTriggerHandler = new Handler(Looper.getMainLooper());
@@ -205,7 +208,7 @@ public class WriteHook implements IXposedHookLoadPackage {
                     } catch (Throwable t) {
                         XLog.e(TAG, "[Hook触发] 启动服务失败: " + t.getMessage());
                     }
-                }, 2000);
+                }, 7000);  // ★ 注册成功后延迟7s启动：5s注册→12s，8s注册→15s
             }
         } else {
             XLog.w(TAG, "[" + tag + "] 广播接收器注册失败，将稍后重试");
