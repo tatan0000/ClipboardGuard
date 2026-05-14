@@ -158,6 +158,7 @@ public class ReadHook implements IXposedHookLoadPackage {
                 }
                 Intent serviceIntent = new Intent();
                 serviceIntent.setComponent(new ComponentName(MODULE_PKG, MODULE_PKG + ".ConfigSyncService"));
+                serviceIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                     context.startForegroundService(serviceIntent);
                 } else {

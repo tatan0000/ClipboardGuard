@@ -54,7 +54,7 @@ public class InlineDialogManager {
     private static final int COLOR_TEXT_SECONDARY = 0xFF636366; // 次要文字
     private static final int COLOR_TEXT_HINT = 0xFFAEAEB2;     // 提示文字
     private static final int COLOR_BTN_ALLOW = 0xFF007AFF;      // 允许按钮文字
-    private static final int COLOR_BTN_DENY = 0xFF8E8E93;       // 拒绝按钮文字
+    private static final int COLOR_BTN_DENY = 0xFFFF3B30;       // 拒绝按钮文字
     private static final int COLOR_PREVIEW_BG = 0xFFF2F2F7;     // 预览背景
     private static final int COLOR_PREVIEW_BG_DARK = 0xFF2C2C2E;
     private static final int COLOR_DIVIDER = 0xFFC6C6C8;        // 分割线

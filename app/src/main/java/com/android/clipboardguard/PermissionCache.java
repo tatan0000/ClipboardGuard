@@ -5,9 +5,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
@@ -117,35 +119,20 @@ public class PermissionCache {
         if (context == null) return false;
         long identity = Binder.clearCallingIdentity();
         try {
-            Uri uri = Uri.parse("content://" + PermissionProvider.AUTHORITY + "/permission_all");
-            Bundle result = context.getContentResolver().call(
-                    uri, PermissionProvider.CALL_METHOD_GET_FULL_CONFIG, null, new Bundle());
-            if (result == null) {
-                XLog.w(TAG, "loadFullConfigFromProvider: Provider 返回空结果");
-                return false;
-            }
+            updateFromWriteBlockList(loadBlocklistFromFile("/data/data/com.android.clipboardguard/files/write_blocklist.txt"));
+            updateFromReadBlockList(loadBlocklistFromFile("/data/data/com.android.clipboardguard/files/read_blocklist.txt"));
 
-            updateFromWriteBlockList(result.getStringArrayList(PermissionProvider.CALL_KEY_WRITE_BLOCKLIST));
-            updateFromReadBlockList(result.getStringArrayList(PermissionProvider.CALL_KEY_READ_BLOCKLIST));
+            loadRulesFromFileOrDefault(true);
+            loadRulesFromFileOrDefault(false);
 
-            String writeRulesJson = result.getString(PermissionProvider.CALL_KEY_WRITE_RULES_JSON);
-            if (writeRulesJson != null && !writeRulesJson.isEmpty()) {
-                ContentRulesManager.updateWriteRulesFromJson(writeRulesJson);
-            } else {
-                ContentRulesManager.loadWriteRules();
-            }
-
-            String readRulesJson = result.getString(PermissionProvider.CALL_KEY_READ_RULES_JSON);
-            if (readRulesJson != null && !readRulesJson.isEmpty()) {
-                ContentRulesManager.updateReadRulesFromJson(readRulesJson);
-            } else {
-                ContentRulesManager.loadReadRules();
-            }
-
-            sReadBlockedToastEnabled = result.getBoolean(
-                    PermissionProvider.CALL_KEY_READ_BLOCKED_TOAST_ENABLED, true);
-            sLsposedLogEnabled = result.getBoolean(
-                    PermissionProvider.CALL_KEY_LSPOSED_LOG_ENABLED, true);
+            sReadBlockedToastEnabled = readBooleanFromFile(
+                    "/data/data/com.android.clipboardguard/shared_prefs/clipboardguard_prefs.xml",
+                    "read_blocked_toast_enabled",
+                    true);
+            sLsposedLogEnabled = readBooleanFromFile(
+                    "/data/data/com.android.clipboardguard/shared_prefs/clipboardguard_prefs.xml",
+                    "lsposed_log_enabled",
+                    true);
             XLog.i(TAG, "loadFullConfigFromProvider 完成，write=" + sWriteBlockSet.size()
                     + " read=" + sReadBlockSet.size()
                     + " toast=" + sReadBlockedToastEnabled
@@ -157,6 +144,46 @@ public class PermissionCache {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    private static ArrayList<String> loadBlocklistFromFile(String filePath) {
+        ArrayList<String> result = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String pkg = line.trim();
+                if (!pkg.isEmpty()) {
+                    result.add(pkg);
+                }
+            }
+        } catch (Throwable e) {
+            XLog.w(TAG, "loadBlocklistFromFile 失败: " + filePath + " -> " + e.getMessage());
+        }
+        return result;
+    }
+
+    private static void loadRulesFromFileOrDefault(boolean writeRules) {
+        if (writeRules) {
+            ContentRulesManager.loadWriteRules();
+        } else {
+            ContentRulesManager.loadReadRules();
+        }
+    }
+
+    private static boolean readBooleanFromFile(String filePath, String key, boolean defaultValue) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            String prefix = key + "=";
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith(prefix)) {
+                    return Boolean.parseBoolean(line.substring(prefix.length()).trim());
+                }
+            }
+        } catch (Throwable e) {
+            XLog.w(TAG, "readBooleanFromFile 失败: " + filePath + " -> " + e.getMessage());
+        }
+        return defaultValue;
     }
 
     // ──────────────────────────── 广播接收器注册 ────────────────────────────

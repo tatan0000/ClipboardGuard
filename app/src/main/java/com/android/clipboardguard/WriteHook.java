@@ -197,6 +197,7 @@ public class WriteHook implements IXposedHookLoadPackage {
                             Intent serviceIntent = new Intent();
                             serviceIntent.setComponent(new ComponentName(
                                     MODULE_PKG, MODULE_PKG + ".ConfigSyncService"));
+                            serviceIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                             // Android O+ 需要 startForegroundService
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                                 ctx2.startForegroundService(serviceIntent);

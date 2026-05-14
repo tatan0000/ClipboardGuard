@@ -80,6 +80,7 @@ public class BootReceiver extends BroadcastReceiver {
     private void startService(Context context) {
         try {
             Intent serviceIntent = new Intent(context, ConfigSyncService.class);
+            serviceIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent);
             } else {

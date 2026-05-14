@@ -50,6 +50,7 @@ public class ConfigSyncService extends Service {
 
     // ★ 防止重复执行：Hook 侧和 BootReceiver 都可能触发
     private static volatile boolean sSyncStarted = false;
+    private static volatile boolean sSyncCompleted = false;
 
     private Handler mainHandler;
     private NotificationManager notificationManager;
@@ -71,9 +72,16 @@ public class ConfigSyncService extends Service {
         // ★ 防止重复执行：Hook 侧 10s 和 BootReceiver 12s 都可能触发
         if (sSyncStarted) {
             XLog.i(TAG, "ConfigSyncService 同步已在进行中，跳过重复触发");
+            if (sSyncCompleted) {
+                startForeground(NOTIFICATION_ID, buildNotification("已完成开机自启动", false));
+            }
             return START_NOT_STICKY;
         }
         sSyncStarted = true;
+        sSyncCompleted = false;
+
+        // 首次进入时才显示“启动中...”
+        startForeground(NOTIFICATION_ID, buildNotification("启动中...", true));
 
         XLog.i(TAG, "ConfigSyncService onStartCommand，开始同步配置");
 
@@ -100,6 +108,7 @@ public class ConfigSyncService extends Service {
             } finally {
                 // ★ 广播发完后：更新通知为"已完成开机自启动"（取消 ongoing，允许用户清除）
                 mainHandler.post(() -> {
+                    sSyncCompleted = true;
                     updateNotificationFinal("已完成开机自启动");
                 });
 
@@ -128,6 +137,7 @@ public class ConfigSyncService extends Service {
         }
         // ★ 服务销毁时重置标志位，允许下次启动重新同步
         sSyncStarted = false;
+        sSyncCompleted = false;
     }
 
     @Override
