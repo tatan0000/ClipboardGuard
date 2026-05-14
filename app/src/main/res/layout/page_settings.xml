@@ -9,7 +9,9 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
         android:text="@string/settings_appearance"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"
@@ -231,9 +233,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="16dp"
-        android:paddingTop="16dp"
+        android:paddingTop="8dp"
         android:paddingBottom="8dp"
-        android:text="&#35835;&#21462;&#25552;&#31034;"
+        android:text="@string/settings_read_tip"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:textStyle="bold" />
@@ -242,7 +244,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="8dp"
         xmlns:app="http://schemas.android.com/apk/res-auto"
         app:cardBackgroundColor="?attr/colorSurface"
         app:cardCornerRadius="16dp"
@@ -266,7 +268,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="&#25298;&#32477;&#35835;&#21462;&#26102;&#26174;&#31034; Toast"
+                    android:text="@string/settings_read_blocked_toast"
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnSurface" />
 
@@ -274,7 +276,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="&#26410;&#24320;&#21551;&#35835;&#21462;&#27491;&#21017;&#26102;&#65292;&#21246;&#36873;&#24212;&#29992;&#34987;&#25298;&#32477;&#35835;&#21462;&#21518;&#25552;&#31034;"
+                    android:text="@string/settings_read_blocked_toast_desc"
                     android:textSize="13sp"
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
@@ -292,7 +294,7 @@
         android:paddingHorizontal="16dp"
         android:paddingTop="0dp"
         android:paddingBottom="8dp"
-        android:text="&#26085;&#24535;&#36755;&#20986;"
+        android:text="@string/settings_log_output"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:textStyle="bold" />
@@ -301,7 +303,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="8dp"
         xmlns:app="http://schemas.android.com/apk/res-auto"
         app:cardBackgroundColor="?attr/colorSurface"
         app:cardCornerRadius="16dp"
@@ -326,14 +328,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="&#26085;&#24535;&#36755;&#20986;&#21040; LSPosed Manager"
+                    android:text="@string/settings_lsposed_log"
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnSurfaceVariant" />
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="&#20851;&#38381;&#21518;&#19981;&#20877;&#36755;&#20986;&#35835;&#20889;&#21098;&#36148;&#26495;&#26085;&#24535;&#65292;&#24320;&#21551;&#26102;&#20869;&#23481;&#20250;&#33258;&#21160;&#33073;&#25935;"
+                    android:text="@string/settings_lsposed_log_desc"
                     android:textSize="13sp"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -349,7 +351,9 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="0dp"
+        android:paddingBottom="8dp"
         android:text="@string/settings_about"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"

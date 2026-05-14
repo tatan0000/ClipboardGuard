@@ -53,10 +53,8 @@
     <string name="usage_title">使用说明</string>
     <string name="usage_content">• 在"写入"页勾选需要拦截剪贴板写入的 APP\n• 点击右下角保存按钮使配置生效\n• 被拦截的 APP 写入剪贴板时，会弹窗询问您是否允许\n• 永久允许/永久拦截 由 AppOps/Thanox 等工具管理</string>
 
-    <!-- 写入页 -->
+    <!-- 写入页 --><!-- 读取页 -->
     <string name="write_tip">勾选 = 拦截（写入剪贴板时弹窗询问），未勾选 = 放行</string>
-
-    <!-- 读取页 -->
     <string name="read_tip">勾选 = 拦截（读取剪贴板时弹窗询问），未勾选 = 放行</string>
     <string name="btn_select_all">全选</string>
     <string name="btn_deselect_all">全不选</string>
@@ -141,6 +139,12 @@
     <string name="settings_write_rules_desc">广告过滤</string>
     <string name="settings_read_rules">读取规则</string>
     <string name="settings_read_rules_desc">敏感信息检测</string>
+    <string name="settings_read_tip">读取提示</string>
+    <string name="settings_read_blocked_toast">拒绝读取时显示 Toast</string>
+    <string name="settings_read_blocked_toast_desc">未开启读取正则时，勾选应用被拒绝读取后提示</string>
+    <string name="settings_log_output">日志输出</string>
+    <string name="settings_lsposed_log">日志输出到 LSPosed Manager</string>
+    <string name="settings_lsposed_log_desc">关闭后不再输出读写剪贴板日志，开启后读写内容会自动脱敏</string>
 
 
 

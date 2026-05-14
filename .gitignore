@@ -18,7 +18,6 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
-/dmesg.log
 /gradle_out.txt
 /nul
 /restart_log.txt
