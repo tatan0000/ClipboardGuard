@@ -56,20 +56,6 @@
             android:theme="@style/Theme.ClipboardGuard" />
 
         <!--
-            写入默认规则页（预留）
-            权限弹窗Activity（已废弃）
-            现在使用 InlineDialogManager 在 system_server 内直接弹窗
-            此 Activity 保留用于兼容性和调试
-        -->
-        <activity
-            android:name=".PermissionDialogActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:theme="@style/Theme.Dialog.Transparent"
-            android:launchMode="singleInstance" />
-
-        <!--
             配置同步前台服务
             由 BootReceiver 启动，延迟发配置广播给 Hook 侧。
             前台服务比 BroadcastReceiver.goAsync() 更可靠。

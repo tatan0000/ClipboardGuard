@@ -7,7 +7,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
-/**
+/*
  * 开机自启动接收器
  *
  * 功能：

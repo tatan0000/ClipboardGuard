@@ -2,10 +2,9 @@ package com.android.clipboardguard;
 
 import android.app.Application;
 import android.content.Context;
-
 import androidx.appcompat.app.AppCompatDelegate;
 
-/**
+/*
  * 自定义 Application，用于初始化全局主题设置
  *
  * 注意：

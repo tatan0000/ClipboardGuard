@@ -1,7 +1,6 @@
 package com.android.clipboardguard;
 
 import org.json.JSONObject;
-
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 

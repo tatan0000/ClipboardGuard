@@ -9,12 +9,11 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.Settings;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.LruCache;
@@ -33,19 +32,15 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
-import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -76,7 +71,6 @@ public class MainActivity extends AppCompatActivity {
     public static final int PAGE_WRITE             = 1;
     public static final int PAGE_READ              = 2;
     public static final int PAGE_SETTINGS          = 3;
-    public static final int PAGE_PERMISSION_DETAIL = 4;
 
     public static final String PREF_NAME   = ClipboardGuardApp.PREF_NAME;
     public static final String KEY_THEME   = ClipboardGuardApp.KEY_THEME;
@@ -88,7 +82,6 @@ public class MainActivity extends AppCompatActivity {
     private View mPageWrite;
     private View mPageRead;
     private View mPageSettings;
-    private View mPagePermissionDetail;
     private FloatingActionButton mFab;
     private LinearLayout mBottomNav;
     private LinearLayout mNavHome, mNavApps, mNavRead, mNavSettings;
@@ -136,6 +129,9 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private static final long FAB_AUTO_HIDE_DELAY = 4000L;
+    private static final long BOTTOM_NAV_DOUBLE_CLICK_MS = 350L;
+    private long mLastWriteNavClickTime = 0L;
+    private long mLastReadNavClickTime = 0L;
     private final Runnable mFabAutoHide = () -> {
         if (mFab != null && mFab.getVisibility() == View.VISIBLE) {
             mFab.animate().alpha(0f).scaleX(0.5f).scaleY(0.5f)
@@ -180,7 +176,6 @@ public class MainActivity extends AppCompatActivity {
         mPageWrite            = findViewById(R.id.page_write);
         mPageRead             = findViewById(R.id.page_read);
         mPageSettings         = findViewById(R.id.page_settings);
-        mPagePermissionDetail = findViewById(R.id.page_permission_detail);
         mFab                  = findViewById(R.id.fab_save);
         mBottomNav            = findViewById(R.id.bottom_nav);
         mNavHome              = findViewById(R.id.nav_home);
@@ -202,7 +197,6 @@ public class MainActivity extends AppCompatActivity {
         initHomePage();
         setupBottomNav();
         setupSettingsPage();
-        setupBackPressed();
         loadAppsAsync();
 
         showPage(sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ
@@ -215,8 +209,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         initHomePage();
-        if (sCurrentPage == PAGE_PERMISSION_DETAIL) initPermissionDetailPage();
         loadAppsAsync();
+    }
+
+    @Override
+    protected void onPause() {
+        discardPendingChangesForPage(sCurrentPage);
+        super.onPause();
     }
 
     @Override
@@ -375,28 +374,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showPage(int page) {
+        int previousPage = sCurrentPage;
         sCurrentPage = page;
 
-        if (page != PAGE_WRITE && page != PAGE_READ) {
-            mHandler.removeCallbacks(mFabAutoHide);
-            if (!mWritePendingChanges.isEmpty()) {
-                mWritePendingChanges.clear();
-                refreshWritePermissions();
-                if (mWriteAdapter != null) mWriteAdapter.notifyDataSetChanged();
-            }
-            if (!mReadPendingChanges.isEmpty()) {
-                mReadPendingChanges.clear();
-                refreshReadPermissions();
-                if (mReadAdapter != null) mReadAdapter.notifyDataSetChanged();
-            }
-        }
+        if (previousPage != page) discardPendingChangesForPage(previousPage);
 
         mPageHome.setVisibility(View.GONE);
         mPageWrite.setVisibility(View.GONE);
         mPageRead.setVisibility(View.GONE);
         mPageSettings.setVisibility(View.GONE);
-        mPagePermissionDetail.setVisibility(View.GONE);
-
         switch (page) {
             case PAGE_HOME:
                 mPageHome.setVisibility(View.VISIBLE);
@@ -416,11 +402,6 @@ public class MainActivity extends AppCompatActivity {
                 mPageSettings.setVisibility(View.VISIBLE);
                 mFab.setVisibility(View.GONE);
                 break;
-            case PAGE_PERMISSION_DETAIL:
-                mPagePermissionDetail.setVisibility(View.VISIBLE);
-                mFab.setVisibility(View.GONE);
-                initPermissionDetailPage();
-                break;
         }
 
         updateToolbar(page);
@@ -434,16 +415,7 @@ public class MainActivity extends AppCompatActivity {
             case PAGE_WRITE:      toolbar.setTitle(R.string.title_write_block); toolbar.setNavigationIcon(null); break;
             case PAGE_READ:       toolbar.setTitle(R.string.title_read_block);  toolbar.setNavigationIcon(null); break;
             case PAGE_SETTINGS:   toolbar.setTitle(R.string.nav_settings);      toolbar.setNavigationIcon(null); break;
-            case PAGE_PERMISSION_DETAIL:
-                toolbar.setTitle(R.string.settings_permission);
-                toolbar.setNavigationIcon(R.drawable.ic_back);
-                break;
         }
-        toolbar.setNavigationOnClickListener(v -> {
-            if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
-                showPage(PAGE_SETTINGS);
-            }
-        });
     }
 
     private void updateBottomNav(int page) {
@@ -454,7 +426,6 @@ public class MainActivity extends AppCompatActivity {
         tintNavItem(mNavRead,     page == PAGE_READ,     sel, unsel);
         tintNavItem(mNavSettings, page == PAGE_SETTINGS, sel, unsel);
 
-        mBottomNav.setVisibility(page == PAGE_PERMISSION_DETAIL ? View.GONE : View.VISIBLE);
     }
 
     private void tintNavItem(LinearLayout nav, boolean selected, int selColor, int unselColor) {
@@ -463,12 +434,27 @@ public class MainActivity extends AppCompatActivity {
         ((TextView)  nav.getChildAt(1)).setTextColor(color);
     }
 
+    private void discardPendingChangesForPage(int page) {
+        if (page != PAGE_WRITE && page != PAGE_READ) return;
+        mHandler.removeCallbacks(mFabAutoHide);
+
+        if (page == PAGE_WRITE && !mWritePendingChanges.isEmpty()) {
+            mWritePendingChanges.clear();
+            refreshWritePermissions();
+            if (mWriteAdapter != null) mWriteAdapter.notifyDataSetChanged();
+        } else if (page == PAGE_READ && !mReadPendingChanges.isEmpty()) {
+            mReadPendingChanges.clear();
+            refreshReadPermissions();
+            if (mReadAdapter != null) mReadAdapter.notifyDataSetChanged();
+        }
+    }
+
     private void setupBottomNav() {
         View.OnClickListener navClick = v -> {
             int id = v.getId();
             if      (id == R.id.nav_home)     showPage(PAGE_HOME);
-            else if (id == R.id.nav_apps)     showPage(PAGE_WRITE);
-            else if (id == R.id.nav_read)     showPage(PAGE_READ);
+            else if (id == R.id.nav_apps)     handleWriteNavClick();
+            else if (id == R.id.nav_read)     handleReadNavClick();
             else if (id == R.id.nav_settings) showPage(PAGE_SETTINGS);
         };
         mNavHome.setOnClickListener(navClick);
@@ -486,17 +472,40 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void setupBackPressed() {
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override public void handleOnBackPressed() {
-                if (sCurrentPage == PAGE_PERMISSION_DETAIL) {
-                    showPage(PAGE_SETTINGS);
-                } else {
-                    setEnabled(false);
-                    getOnBackPressedDispatcher().onBackPressed(); // 不再使用已弃用的 super.onBackPressed()
-                }
+    private void handleWriteNavClick() {
+        long now = SystemClock.elapsedRealtime();
+        if (sCurrentPage == PAGE_WRITE) {
+            if (now - mLastWriteNavClickTime <= BOTTOM_NAV_DOUBLE_CLICK_MS) {
+                scrollWriteListToTop();
             }
-        });
+        } else {
+            showPage(PAGE_WRITE);
+        }
+        mLastWriteNavClickTime = now;
+    }
+
+    private void handleReadNavClick() {
+        long now = SystemClock.elapsedRealtime();
+        if (sCurrentPage == PAGE_READ) {
+            if (now - mLastReadNavClickTime <= BOTTOM_NAV_DOUBLE_CLICK_MS) {
+                scrollReadListToTop();
+            }
+        } else {
+            showPage(PAGE_READ);
+        }
+        mLastReadNavClickTime = now;
+    }
+
+    private void scrollWriteListToTop() {
+        if (mWriteExpandableListView != null) {
+            mWriteExpandableListView.setSelection(0);
+        }
+    }
+
+    private void scrollReadListToTop() {
+        if (mReadExpandableListView != null) {
+            mReadExpandableListView.setSelection(0);
+        }
     }
 
     @SuppressLint("SetTextI18n")
@@ -528,30 +537,6 @@ public class MainActivity extends AppCompatActivity {
         mTvAndroidVersion.setText(Build.VERSION.RELEASE);
         mTvManufacturer.setText(Build.MANUFACTURER);
         mTvModel.setText(Build.MODEL);
-    }
-
-    private void initPermissionDetailPage() {
-        boolean hasPerm = Settings.canDrawOverlays(this);
-
-        TextView tvStatus = findViewById(R.id.tv_float_status);
-        if (tvStatus != null) {
-            if (hasPerm) {
-                tvStatus.setText(R.string.guide_float_granted);
-                tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_active));
-            } else {
-                tvStatus.setText(R.string.guide_float_not_granted);
-                tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_inactive));
-            }
-        }
-
-        MaterialButton btnFloat = findViewById(R.id.btn_float_settings);
-        if (btnFloat != null) {
-            btnFloat.setVisibility(View.VISIBLE);
-            btnFloat.setText(hasPerm ? R.string.guide_btn_open_float : R.string.guide_btn_go_settings);
-            btnFloat.setOnClickListener(v -> startActivity(new Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName()))));
-        }
     }
 
     private boolean isModuleActive() { return false; }
@@ -626,11 +611,6 @@ public class MainActivity extends AppCompatActivity {
         setupThemeItem(R.id.item_theme_light,  THEME_LIGHT);
         setupThemeItem(R.id.item_theme_dark,   THEME_DARK);
         setupThemeItem(R.id.item_theme_system, THEME_SYSTEM);
-
-        View itemPermission = findViewById(R.id.item_permission);
-        if (itemPermission != null) {
-            itemPermission.setVisibility(View.GONE);
-        }
 
         SwitchMaterial switchReadBlockedToast = findViewById(R.id.switch_read_blocked_toast_enabled);
         if (switchReadBlockedToast != null) {
@@ -794,6 +774,18 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void sortWriteAppLists() {
+        sortWriteApps(mWriteUserApps);
+        sortWriteApps(mWriteSystemApps);
+        sortWriteApps(mWriteCoreApps);
+    }
+
+    private void sortReadAppLists() {
+        sortReadApps(mReadUserApps);
+        sortReadApps(mReadSystemApps);
+        sortReadApps(mReadCoreApps);
+    }
+
     private void refreshWritePermissions() {
         List<String[]> savedPerms = PermissionProvider.getAllWritePermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
@@ -805,6 +797,7 @@ public class MainActivity extends AppCompatActivity {
             Integer saved = permMap.get(item.packageName);
             item.isBlockedWrite = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
         }
+        sortWriteAppLists();
         applyWriteFilter();
     }
 
@@ -866,6 +859,7 @@ public class MainActivity extends AppCompatActivity {
             Integer saved = permMap.get(item.packageName);
             item.isBlockedRead = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
         }
+        sortReadAppLists();
         applyReadFilter();
     }
 
@@ -960,6 +954,8 @@ public class MainActivity extends AppCompatActivity {
         PermissionProvider.sendReadWriteBlocklistBroadcast(this);
 
         mWritePendingChanges.clear();
+        sortWriteAppLists();
+        applyWriteFilter();
 
         int writeblocked = 0;
         for (AppItem i : mWriteUserApps)   if (i.isBlockedWrite) writeblocked++;
@@ -1016,6 +1012,8 @@ public class MainActivity extends AppCompatActivity {
         PermissionProvider.saveAllReadPermissions(this, allReadPerms);
         PermissionProvider.sendReadWriteBlocklistBroadcast(this);
         mReadPendingChanges.clear();
+        sortReadAppLists();
+        applyReadFilter();
 
         int readblocked = 0;
         for (AppItem i : mReadUserApps)   if (i.isBlockedRead) readblocked++;

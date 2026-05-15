@@ -20,12 +20,11 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Objects;
 
-/**
+/*
  * InlineDialogManager - system_server 内弹窗管理器
  *
  * 功能：

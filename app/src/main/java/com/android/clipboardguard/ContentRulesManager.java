@@ -2,11 +2,10 @@ package com.android.clipboardguard;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.List;
 
-/**
+/*
  * ContentRulesManager - 广告内容过滤规则管理器（写入 + 读取）
  *
  * 改造说明（2026-05-05）：

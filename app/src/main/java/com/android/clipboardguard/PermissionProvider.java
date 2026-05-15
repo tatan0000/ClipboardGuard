@@ -12,10 +12,8 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -27,7 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
+/*
  * 权限数据 ContentProvider
  *
  * 存储层：纯文本文件（每行一个包名，只存需要拦截的包）

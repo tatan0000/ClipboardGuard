@@ -16,20 +16,11 @@
     <string name="nav_write">写入</string>
     <string name="nav_read">读取</string>
     <string name="nav_settings">设置</string>
-    <string name="log_empty">暂无日志记录</string>
-    <string name="settings_appearance">外观</string>
+
 
     <!-- 页面标题 -->
     <string name="title_write_block">写入拦截</string>
     <string name="title_read_block">读取拦截</string>
-
-    <string name="settings_about">关于</string>
-    <string name="settings_about_module">关于模块</string>
-    <string name="settings_license">开源许可</string>
-    <string name="theme_light">亮色</string>
-    <string name="theme_dark">暗色</string>
-    <string name="theme_follow_system">跟随系统</string>
-    <string name="about_description">ClipboardGuard 是一款 Xposed 模块，用于管理应用对剪贴板的访问权限。当应用尝试写入剪贴板时，会弹窗询问您是否允许。</string>
 
     <!-- 首页 - 状态 -->
     <string name="status_active">模块已激活</string>
@@ -67,29 +58,6 @@
     <string name="fab_save_desc">保存配置</string>
     <string name="save_success">已保存，拦截 %d 个应用</string>
     <string name="save_no_block">已保存，未拦截任何应用</string>
-
-    <!-- 首次使用引导（权限检测） -->
-    <string name="guide_float_perm">悬浮窗权限</string>
-    <string name="guide_float_perm_desc">弹窗询问需要悬浮窗权限才能在其他应用上层显示</string>
-
-    <string name="guide_autostart_perm">自启动/关联启动</string>
-    <string name="guide_autostart_perm_desc">部分手机需允许本模块在后台保持运行，确保广播正常接收</string>
-    <string name="guide_autostart_hint">请在系统设置中手动开启（如：电池优化→不限制 / 自启动管理→允许）</string>
-
-    <string name="guide_btn_go_settings">去设置</string>
-    <string name="guide_btn_done">已完成</string>
-    <string name="guide_btn_later">稍后再说</string>
-    <string name="guide_btn_check_settings">稍后可在「设置」查看相关权限</string>
-    <string name="guide_thanox_tip">💡 若使用了 Thanox 等软件，也请同步开启相关权限（如后台启动），否则模块可能无法生效</string>
-    <string name="settings_permission">权限管理</string>
-    <string name="settings_permission_check">权限状态</string>
-
-    <string name="guide_float_granted">已开启</string>
-    <string name="guide_float_not_granted">未开启</string>
-    <string name="guide_float_perm_granted">已开启 ✓</string>
-    <string name="guide_float_perm_not_granted">未开启，点击前往设置</string>
-    <string name="guide_title">欢迎使用 ClipboardGuard</string>
-    <string name="guide_btn_open_float">打开设置</string>
 
     <!-- 正则规则页面 -->
     <string name="tab_write_rules">写入规则</string>
@@ -139,12 +107,21 @@
     <string name="settings_write_rules_desc">广告过滤</string>
     <string name="settings_read_rules">读取规则</string>
     <string name="settings_read_rules_desc">敏感信息检测</string>
+    <string name="settings_appearance">外观</string>
+    <string name="theme_light">亮色</string>
+    <string name="theme_dark">暗色</string>
+    <string name="theme_follow_system">跟随系统</string>
     <string name="settings_read_tip">读取提示</string>
     <string name="settings_read_blocked_toast">拒绝读取时显示 Toast</string>
     <string name="settings_read_blocked_toast_desc">未开启读取正则时，勾选应用被拒绝读取后提示</string>
     <string name="settings_log_output">日志输出</string>
     <string name="settings_lsposed_log">日志输出到 LSPosed Manager</string>
     <string name="settings_lsposed_log_desc">关闭后不再输出读写剪贴板日志，开启后读写内容会自动脱敏</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_about_module">关于模块</string>
+    <string name="settings_license">开源许可</string>
+    <string name="about_description">ClipboardGuard 是一款 Xposed 模块，用于管理应用对剪贴板的访问权限。当应用尝试写入剪贴板时，会弹窗询问您是否允许。</string>
+
 
 
 

@@ -12,11 +12,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 
-/**
+/*
  * 开机配置同步前台服务
  *
  * 由 BootReceiver 启动，在 App 进程中运行。

@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Binder;
 import android.os.Bundle;
-
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.ArrayList;
@@ -15,7 +14,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
+/*
  * PermissionCache - 被动刷新内存缓存
  *
  * 改造说明：
@@ -188,7 +187,7 @@ public class PermissionCache {
 
     // ──────────────────────────── 广播接收器注册 ────────────────────────────
 
-    /**
+    /*
      * 注册权限变更广播接收器。
      *
      * @param context system_server Context
