@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Xposed/LSPosed 通过 assets/xposed_init 中的完整类名加载 Hook 入口，不能混淆或移除。
+-keep class com.android.clipboardguard.WriteHook { *; }
+-keep class com.android.clipboardguard.ReadHook { *; }
+
+# Hook 入口继承/使用 Xposed API，compileOnly 依赖在运行时由框架提供。
+-dontwarn de.robv.android.xposed.**
