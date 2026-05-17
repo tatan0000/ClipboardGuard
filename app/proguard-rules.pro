@@ -20,6 +20,9 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
+# Release 保留 R8 代码/资源压缩，但不混淆类名，避免影响 LSPosed 激活状态识别。
+-dontobfuscate
+
 # Xposed/LSPosed 通过 assets/xposed_init 中的完整类名加载 Hook 入口，不能混淆或移除。
 -keep class com.android.clipboardguard.WriteHook { *; }
 -keep class com.android.clipboardguard.ReadHook { *; }
