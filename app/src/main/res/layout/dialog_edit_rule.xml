@@ -11,44 +11,46 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/til_rule_name"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="@string/rules_dialog_name_hint"
-        app:helperText="@string/rules_dialog_name_helper"
-        app:helperTextEnabled="true"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/et_rule_name"
+        <!-- 规则名称 -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/til_rule_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
-            android:maxLines="1" />
+            android:hint="@string/rules_dialog_name_hint"
+            app:helperText="@string/rules_dialog_name_helper"
+            app:helperTextEnabled="true"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
-    </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_rule_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/til_rule_pattern"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:hint="@string/rules_dialog_regex_hint"
-        app:helperText="@string/rules_dialog_regex_helper"
-        app:helperTextEnabled="true"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+        </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/et_rule_pattern"
+        <!-- 正则表达式 -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/til_rule_pattern"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
-            android:fontFamily="monospace"
-            android:maxLines="3" />
+            android:layout_marginTop="16dp"
+            android:hint="@string/rules_dialog_regex_hint"
+            app:helperText="@string/rules_dialog_regex_helper"
+            app:helperTextEnabled="true"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
-    </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_rule_pattern"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:fontFamily="monospace"
+                android:maxLines="3" />
 
-</LinearLayout>
+        </com.google.android.material.textfield.TextInputLayout>
+
+    </LinearLayout>
 
 </ScrollView>

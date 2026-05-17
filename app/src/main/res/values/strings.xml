@@ -1,15 +1,8 @@
 <resources>
-    <string name="app_name">ClipboardGuard</string>
 
-    <!-- 权限弹窗 -->
-    <string name="permission_message">"%s" 正在尝试写入剪贴板，是否允许？</string>
-    <string name="content_preview">内容预览：%s</string>
-    <string name="countdown_format">%ds</string>
+    <!-- 应用基础 -->
+    <string name="app_name">ClipboardGuard</string>
     <string name="default_value">--</string>
-    <string name="group_expand">▼</string>
-    <string name="countdown_initial">4s</string>
-    <string name="btn_allow">允许</string>
-    <string name="btn_deny">拒绝</string>
 
     <!-- 底部导航 -->
     <string name="nav_home">首页</string>
@@ -17,36 +10,23 @@
     <string name="nav_read">读取</string>
     <string name="nav_settings">设置</string>
 
-
-    <!-- 页面标题 -->
+    <!-- 通用页面标题 -->
     <string name="title_write_block">写入拦截</string>
     <string name="title_read_block">读取拦截</string>
+    <string name="write_rules_title">写入内容拦截规则</string>
+    <string name="read_rules_title">读取内容拦截规则</string>
+    <string name="default_rules_title">默认拦截规则</string>
 
-    <!-- 首页 - 状态 -->
-    <string name="status_active">模块已激活</string>
-    <string name="status_not_active">模块未激活</string>
-    <string name="status_active_desc">剪贴板写入保护正在运行</string>
-    <string name="status_not_active_desc">请激活本模块并重启系统</string>
+    <!-- Hook 权限弹窗 -->
+    <string name="permission_message">"%s" 正在尝试写入剪贴板，是否允许？</string>
+    <string name="content_preview">内容预览：%s</string>
+    <string name="countdown_format">%ds</string>
+    <string name="countdown_initial">4s</string>
+    <string name="btn_allow">允许</string>
+    <string name="btn_deny">拒绝</string>
 
-    <!-- 首页 - 信息卡片 -->
-    <string name="info_card_title">模块信息</string>
-    <string name="info_xposed_api">Xposed API</string>
-    <string name="info_module_version">模块版本</string>
-    <string name="info_hook_target">Hook 目标</string>
-    <string name="info_hook_target_value">ClipboardService</string>
-    <string name="info_scope">作用域</string>
-    <string name="info_scope_value">系统框架</string>
-    <string name="info_android_version">Android 版本</string>
-    <string name="info_manufacturer">厂商</string>
-    <string name="info_model">型号</string>
-
-    <!-- 首页 - 使用说明 -->
-    <string name="usage_title">使用说明</string>
-    <string name="usage_content">• 在"写入"页勾选需要拦截剪贴板写入的 APP\n• 点击右下角保存按钮使配置生效\n• 被拦截的 APP 写入剪贴板时，会弹窗询问您是否允许\n• 永久允许/永久拦截 由 AppOps/Thanox 等工具管理</string>
-
-    <!-- 写入页 --><!-- 读取页 -->
-    <string name="write_tip">勾选 = 拦截（写入剪贴板时弹窗询问），未勾选 = 放行</string>
-    <string name="read_tip">勾选 = 拦截（读取剪贴板时弹窗询问），未勾选 = 放行</string>
+    <!-- 列表与分组通用 -->
+    <string name="group_expand">▼</string>
     <string name="btn_select_all">全选</string>
     <string name="btn_deselect_all">全不选</string>
     <string name="select_all">全选</string>
@@ -59,11 +39,35 @@
     <string name="save_success">已保存，拦截 %d 个应用</string>
     <string name="save_no_block">已保存，未拦截任何应用</string>
 
-    <!-- 正则规则页面 -->
+    <!-- 首页状态卡片 -->
+    <string name="status_active">模块已激活</string>
+    <string name="status_not_active">模块未激活</string>
+    <string name="status_active_desc">剪贴板读取写入保护正在运行</string>
+    <string name="status_not_active_desc">请激活本模块并重启系统</string>
+
+    <!-- 首页信息卡片 -->
+    <string name="info_card_title">模块信息</string>
+    <string name="info_xposed_api">Xposed API</string>
+    <string name="info_module_version">模块版本</string>
+    <string name="info_hook_target">Hook 目标</string>
+    <string name="info_hook_target_value">ClipboardService</string>
+    <string name="info_scope">作用域</string>
+    <string name="info_scope_value">系统框架</string>
+    <string name="info_android_version">Android 版本</string>
+    <string name="info_manufacturer">厂商</string>
+    <string name="info_model">型号</string>
+
+    <!-- 首页使用说明 -->
+    <string name="usage_title">使用说明</string>
+    <string name="usage_content">• 在"写入"页勾选应用：未开启写入正则时写入剪贴板会弹窗询问；开启正则后命中规则才弹窗询问，未勾选则放行\n• 在"读取"页勾选应用：未开启读取正则时直接拒绝读取；开启正则后命中敏感内容才弹窗询问\n• 写入/读取规则页可配置内容检测规则，默认规则可查看、开启或关闭，自定义规则可新增、编辑、删除\n• 修改应用名单或规则后，点击右下角保存按钮使配置同步到 Hook 侧\n• LSPosed 日志开关开启后会记录读写行为，剪贴板内容会自动脱敏\n• 永久允许/永久拦截 由 AppOps/Thanox 等工具管理</string>
+
+    <!-- 写入页与读取页提示 -->
+    <string name="write_tip">勾选 = 拦截（写入剪贴板时弹窗询问），未勾选 = 放行</string>
+    <string name="read_tip">勾选 = 拦截（读取剪贴板时弹窗询问），未勾选 = 放行</string>
+
+    <!-- 规则页 Tabs 与说明 -->
     <string name="tab_write_rules">写入规则</string>
     <string name="tab_read_rules">读取规则</string>
-    <string name="write_rules_title">写入内容拦截规则</string>
-    <string name="read_rules_title">读取内容拦截规则</string>
     <string name="rules_regex_enabled">内容检测</string>
     <string name="rules_regex_enabled_desc">启用正则规则匹配</string>
     <string name="rules_regex_enabled_write_desc">广告内容过滤，命中规则的内容会弹窗询问</string>
@@ -71,59 +75,71 @@
     <string name="rules_hint">点击右下角按钮添加新规则</string>
     <string name="rules_hint_write">匹配广告/垃圾内容，命中后弹窗询问</string>
     <string name="rules_hint_read">匹配敏感信息，命中后弹窗询问</string>
+    <string name="rules_write_hint">匹配广告/垃圾内容，命中后弹窗询问。开启后将检测剪贴板内容是否匹配以下正则规则。\n💡 长按可批量选择多条规则进行操作</string>
+    <string name="rules_read_hint">匹配敏感信息，命中后弹窗询问。开启后将检测剪贴板内容是否匹配以下正则规则。\n💡 长按可批量选择多条规则进行操作</string>
+    <string name="rules_hint_long_press">长按选择多条规则进行批量操作</string>
+    <string name="rules_default_hint">默认规则内置常用检测模式，不可删除和修改</string>
+
+    <!-- 规则页按钮与操作 -->
     <string name="rules_btn_add">添加拦截规则</string>
     <string name="rules_btn_edit">编辑</string>
     <string name="rules_btn_delete">删除</string>
     <string name="rules_btn_enable_selected">开启</string>
     <string name="rules_btn_disable_selected">关闭</string>
+    <string name="enable_selected">开启</string>
+    <string name="disable_selected">关闭</string>
+    <string name="selected_count">已选择 %d 项</string>
+    <string name="rules_save_success">规则已保存</string>
+    <string name="save">保存</string>
+
+    <!-- 规则页删除确认 -->
+    <string name="rules_delete_confirm_title">删除规则</string>
+    <string name="rules_delete_confirm">确定删除此规则？</string>
+    <string name="rules_delete_selected_confirm">确定删除选中的 %d 条规则？</string>
+    <string name="rules_delete_all_confirm">确定删除全部 %d 条规则？</string>
+
+    <!-- 规则编辑与校验 -->
     <string name="rules_dialog_title_add">添加拦截规则</string>
     <string name="rules_dialog_title_edit">编辑规则</string>
     <string name="rules_dialog_title_view">规则详情</string>
     <string name="rules_dialog_name_hint">规则名称</string>
     <string name="rules_dialog_regex_hint">正则表达式</string>
-    <string name="rules_dialog_regex_helper">正则示例：[0-9]{4,8}</string>
+    <string name="rules_dialog_regex_helper">正则示例：[0–9]{4,8}</string>
     <string name="rules_dialog_name_helper">名称示例：验证码</string>
-    <string name="rules_save_success">规则已保存</string>
-    <string name="save">保存</string>
-    <string name="rules_delete_confirm">确定删除此规则？</string>
     <string name="rules_regex_error">正则表达式格式错误</string>
     <string name="rules_name_required">规则名称不能为空</string>
-    <string name="rules_default_hint">默认规则内置常用检测模式，不可删除和修改</string>
-    <string name="default_rules_title">默认拦截规则</string>
-    <string name="enable_selected">开启</string>
-    <string name="disable_selected">关闭</string>
-    <string name="rules_delete_confirm_title">删除规则</string>
-    <string name="rules_delete_selected_confirm">确定删除选中的 %d 条规则？</string>
-    <string name="rules_delete_all_confirm">确定删除全部 %d 条规则？</string>
-    <string name="rules_hint_long_press">长按选择多条规则进行批量操作</string>
-    <string name="selected_count">已选择 %d 项</string>
-    <string name="rules_write_hint">匹配广告/垃圾内容，命中后弹窗询问。开启后将检测剪贴板内容是否匹配以下正则规则。\n💡 长按可批量选择多条规则进行操作</string>
-    <string name="rules_read_hint">匹配敏感信息，命中后弹窗询问。开启后将检测剪贴板内容是否匹配以下正则规则。\n💡 长按可批量选择多条规则进行操作</string>
 
-    <!-- 设置页 -->
+    <!-- 设置页：规则入口 -->
     <string name="settings_rules">内容拦截规则</string>
     <string name="settings_rules_desc">配置正则过滤规则</string>
     <string name="settings_write_rules">写入规则</string>
     <string name="settings_write_rules_desc">广告过滤</string>
     <string name="settings_read_rules">读取规则</string>
     <string name="settings_read_rules_desc">敏感信息检测</string>
+
+    <!-- 设置页：外观 -->
     <string name="settings_appearance">外观</string>
     <string name="theme_light">亮色</string>
     <string name="theme_dark">暗色</string>
     <string name="theme_follow_system">跟随系统</string>
+
+    <!-- 设置页：读取提示 -->
     <string name="settings_read_tip">读取提示</string>
     <string name="settings_read_blocked_toast">拒绝读取时显示 Toast</string>
     <string name="settings_read_blocked_toast_desc">未开启读取正则时，勾选应用被拒绝读取后提示</string>
+
+    <!-- 设置页：日志输出 -->
     <string name="settings_log_output">日志输出</string>
     <string name="settings_lsposed_log">日志输出到 LSPosed Manager</string>
     <string name="settings_lsposed_log_desc">关闭后不再输出读写剪贴板日志，开启后读写内容会自动脱敏</string>
+
+    <!-- 设置页：关于 -->
     <string name="settings_about">关于</string>
     <string name="settings_about_module">关于模块</string>
-    <string name="settings_license">开源许可</string>
-    <string name="about_description">ClipboardGuard 是一款 Xposed 模块，用于管理应用对剪贴板的访问权限。当应用尝试写入剪贴板时，会弹窗询问您是否允许。</string>
+    <string name="about_description">基于 LSPosed/Xposed 的剪贴板访问管理模块，可在应用读取或写入剪贴板时进行提示、拦截与内容规则匹配。</string>
+    <string name="about_notes_content" formatted="false">建议优先使用系统自带功能，避免冲突&lt;br/&gt;遇到问题欢迎提交 Issue，觉得有帮助也欢迎点个 star ⭐&lt;br/&gt;&lt;a href="https://github.com/tatan0000/ClipboardGuard/releases"&gt;检查更新&lt;/a&gt;&lt;br/&gt;&lt;a href="https://github.com/tatan0000/ClipboardGuard/issues/new"&gt;反馈问题&lt;/a&gt;</string>
+    <string name="about_ack_title">参考与致谢（排名不分先后）</string>
+    <string name="about_ack_content" formatted="false">开源项目&lt;br/&gt;• &lt;a href="https://github.com/Tornaco/Thanox"&gt;Thanox&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/zjyzip/AdClose"&gt;AdClose&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/gkd-kit/gkd"&gt;GKD&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/RikkaApps/Shizuku"&gt;Shizuku&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/topjohnwu/Magisk"&gt;Magisk&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/LSPosed/LSPosed"&gt;LSPosed&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/rovo89/XposedBridge/wiki/Development-tutorial"&gt;XposedBridge&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://github.com/superxlcr/ClipboardManagerHook"&gt;ClipboardManagerHook&lt;/a&gt;&lt;br/&gt;&lt;br/&gt;技术文章&lt;br/&gt;• &lt;a href="https://www.w3schools.cn/android/android-clipboard.html"&gt;Android 剪贴板基础与使用示例&lt;/a&gt;&lt;br/&gt;• &lt;a href="https://developer.android.google.cn/develop/ui/views/touch-and-input/copy-paste?hl=zh-cn"&gt;Android 官方复制粘贴开发指南&lt;/a&gt;&lt;br/&gt;&lt;br/&gt;本项目的开发离不开以上优秀开源项目与技术资料的启发与支撑，在此向所有作者与贡献者致以诚挚的感谢 🙏</string>
+    <string name="about_version_format">版本：%1$s</string>
 
-
-
-
-    
 </resources>

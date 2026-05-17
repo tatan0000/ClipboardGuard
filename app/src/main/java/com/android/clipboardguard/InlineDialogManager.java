@@ -1,7 +1,6 @@
 package com.android.clipboardguard;
 
 import android.content.Context;
-import android.view.WindowManager;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -15,24 +14,24 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Objects;
 
-/*
+/**
  * InlineDialogManager - system_server 内弹窗管理器
- *
  * 功能：
  * - 直接在 system_server 进程内创建权限询问浮窗
  * - 使用 WindowManager.addView() 渲染，无需跨进程启动 Activity
  * - 通过 CountDownLatch 同步等待用户选择结果
  * - 自动处理超时（默认 4 秒）
- *
  * 优势：
  * - 无 Activity 启动延迟（约 200-500ms）
  * - 不依赖 ActivityTaskManager，避免 invisible task 跳过问题
@@ -60,6 +59,7 @@ public class InlineDialogManager {
     private static final int COLOR_DIM = 0x80000000;            // 半透明遮罩
     private static final int COLOR_DIM_DARK = 0xB0000000;       // 深色遮罩
 
+    @SuppressWarnings("StaticFieldLeak")
     private static InlineDialogManager sInstance;
 
     private final Context mSystemContext;
@@ -68,7 +68,6 @@ public class InlineDialogManager {
 
     // 当前活跃的弹窗
     private View mCurrentDialogView;
-    private LayoutParams mCurrentWindowParams;
     private CountDownLatch mCurrentLatch;
     private AtomicInteger mCurrentResult;
     private CountDownTimer mCurrentTimer;
@@ -76,6 +75,8 @@ public class InlineDialogManager {
 
     // 锁对象
     private final Object mLock = new Object();
+
+    // ──────────────────────────── 单例初始化 ────────────────────────────
 
     private InlineDialogManager(Context context) {
         mSystemContext = context.getApplicationContext();
@@ -90,25 +91,27 @@ public class InlineDialogManager {
         return sInstance;
     }
 
-    /*
+    // ──────────────────────────── 对外弹窗入口 ────────────────────────────
+
+    /**
      * 显示弹窗并阻塞等待结果
      *
      * @param pkgName 应用包名
-     * @param contentPreview 剪贴板内容预览
-     * @param decision 结果输出（PermissionStorage.PERMISSION_IGNORE 或 PERMISSION_BLOCK）
+     * @param writeContentPreview 写入内容预览
+     * @param writeDecision 结果输出（PermissionDecision.PERMISSION_IGNORE 或 PERMISSION_BLOCK）
      * @return true 表示弹窗正常显示并收到结果，false 表示异常
      */
     public boolean showWriteDialog(String pkgName, String writeContentPreview, AtomicInteger writeDecision) {
         return showWriteDialogWithContent(pkgName, writeContentPreview, null, writeDecision);
     }
 
-    /*
+    /**
      * 显示弹窗并阻塞等待结果（带敏感内容检测信息）
      *
      * @param pkgName 应用包名
-     * @param contentPreview 剪贴板内容预览
-     * @param matchedRule 匹配的敏感规则名称（如 "身份证"、"手机号"），可为 null
-     * @param decision 结果输出（PermissionStorage.PERMISSION_IGNORE 或 PERMISSION_BLOCK）
+     * @param writeContentPreview 写入内容预览
+     * @param matchedWriteRule 匹配的写入规则名称，可为 null
+     * @param writeDecision 结果输出（PermissionDecision.PERMISSION_IGNORE 或 PERMISSION_BLOCK）
      * @return true 表示弹窗正常显示并收到结果，false 表示异常
      */
     public boolean showWriteDialogWithContent(String pkgName, String writeContentPreview, String matchedWriteRule, AtomicInteger writeDecision) {
@@ -119,10 +122,12 @@ public class InlineDialogManager {
         return showClipboardDialog(pkgName, readContentPreview, matchedReadRule, readDecision, "read", true);
     }
 
+    // ──────────────────────────── 弹窗创建与等待 ────────────────────────────
+
     private boolean showClipboardDialog(String pkgName, String contentPreview, String matchedRule, AtomicInteger decision,
             String operationText, boolean showClearButton) {
         // 如果已有弹窗在显示，先关闭它
-        dismissCurrentDialog(true);
+        dismissCurrentDialog(true, null);
 
         CountDownLatch latch;
         AtomicInteger resultRef;
@@ -150,16 +155,22 @@ public class InlineDialogManager {
         });
 
         // 等待主线程完成（最多 1 秒，避免 Binder 线程长时间阻塞）
+        boolean dialogCreated = false;
         try {
-            createLatch.await(1, java.util.concurrent.TimeUnit.SECONDS);
+            dialogCreated = createLatch.await(1, java.util.concurrent.TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
+        if (!dialogCreated) {
+            XLog.w(TAG, "创建弹窗等待超时: " + pkgName);
+        }
+
         // 等待用户选择或超时
+        boolean userResponded = false;
         try {
             // 使用较短的超时，避免主线程阻塞太久
-            latch.await(TIMEOUT_MS + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
+            userResponded = latch.await(TIMEOUT_MS + 1000, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -169,16 +180,19 @@ public class InlineDialogManager {
 
         // 如果用户没选择（latch 未 countdown），设置默认拒绝
         try {
-            if (latch.getCount() > 0 && resultRef != null) {
-                resultRef.set(PermissionStorage.PERMISSION_BLOCK);
+            if (!userResponded && resultRef != null) {
+                resultRef.set(PermissionDecision.PERMISSION_BLOCK);
             }
         } catch (Throwable ignored) {}
 
+        int finalDecision = decision != null ? decision.get() : PermissionDecision.PERMISSION_BLOCK;
         XLog.i(TAG, "弹窗结果: " + pkgName + " -> " +
-                (decision.get() == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
+                (finalDecision == PermissionDecision.PERMISSION_IGNORE ? "允许" : "拒绝"));
 
         return true;
     }
+
+    // ──────────────────────────── 视图构建 ────────────────────────────
 
     /**
      * 创建并显示弹窗（带敏感内容检测信息，必须在主线程调用）
@@ -194,7 +208,8 @@ public class InlineDialogManager {
         try {
             PackageManager pm = mSystemContext.getPackageManager();
             ApplicationInfo appInfo = pm.getApplicationInfo(pkgName, 0);
-            appName = pm.getApplicationLabel(appInfo).toString();
+            CharSequence label = pm.getApplicationLabel(appInfo);
+            appName = label.toString();
             appIcon = pm.getApplicationIcon(pkgName);
         } catch (PackageManager.NameNotFoundException e) {
             XLog.w(TAG, "应用不存在: " + pkgName);
@@ -207,7 +222,7 @@ public class InlineDialogManager {
         rootLayout.setBackgroundColor(isDarkMode ? COLOR_DIM_DARK : COLOR_DIM);
 
         // 创建卡片
-        LinearLayout card = createDialogCard(pkgName, appName, appIcon, contentPreview, matchedRule, operationText, showClearButton, isDarkMode);
+        LinearLayout card = createDialogCard(pkgName, appName, appIcon, contentPreview, operationText, showClearButton, isDarkMode);
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(
                 dpToPx(320),
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -229,7 +244,6 @@ public class InlineDialogManager {
         try {
             mWindowManager.addView(rootLayout, windowParams);
             mCurrentDialogView = rootLayout;
-            mCurrentWindowParams = windowParams;
 
             // 启动倒计时
             startCountdown(pkgName);
@@ -244,7 +258,7 @@ public class InlineDialogManager {
      * 创建对话框卡片
      */
     private LinearLayout createDialogCard(String pkgName, String appName,
-            android.graphics.drawable.Drawable appIcon, String contentPreview, String matchedRule,
+            android.graphics.drawable.Drawable appIcon, String contentPreview,
             String operationText, boolean showClearButton, boolean isDarkMode) {
 
         LinearLayout card = new LinearLayout(mSystemContext);
@@ -289,7 +303,7 @@ public class InlineDialogManager {
         countdownParams.gravity = Gravity.CENTER_HORIZONTAL;
         countdownParams.topMargin = dpToPx(6);
         tvCountdown.setLayoutParams(countdownParams);
-        tvCountdown.setText(String.format("%d 秒后自动拒绝", TIMEOUT_MS / 1000));
+        tvCountdown.setText(String.format(Locale.ROOT, "%d 秒后自动拒绝", TIMEOUT_MS / 1000));
         tvCountdown.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         tvCountdown.setTextColor(COLOR_PRIMARY);
         tvCountdown.setTag("countdown"); // 标记用于后续更新
@@ -303,7 +317,7 @@ public class InlineDialogManager {
         );
         msgParams.topMargin = dpToPx(16);
         tvMessage.setLayoutParams(msgParams);
-        tvMessage.setText(String.format("%s 正在%s剪贴板", appName, getOperationText(operationText)));
+        tvMessage.setText(String.format(Locale.ROOT, "%s 正在%s剪贴板", appName, getOperationText(operationText)));
         tvMessage.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         tvMessage.setTextColor(isDarkMode ? 0xFFAAAAAA : COLOR_TEXT_SECONDARY);
         tvMessage.setGravity(Gravity.CENTER);
@@ -350,20 +364,22 @@ public class InlineDialogManager {
         btnContainer.setBackgroundColor(Color.TRANSPARENT);
 
         if (showClearButton) {
-            addReadDialogButton(btnContainer, pkgName, "允许", PermissionStorage.PERMISSION_IGNORE, COLOR_BTN_ALLOW, true, isDarkMode);
+            addReadDialogButton(btnContainer, pkgName, "允许", PermissionDecision.PERMISSION_IGNORE, COLOR_BTN_ALLOW, true);
             addDialogDivider(btnContainer, true);
-            addReadDialogButton(btnContainer, pkgName, "拒绝", PermissionStorage.PERMISSION_BLOCK, COLOR_BTN_DENY, false, isDarkMode);
+            addReadDialogButton(btnContainer, pkgName, "拒绝", PermissionDecision.PERMISSION_BLOCK, COLOR_BTN_DENY, false);
             addDialogDivider(btnContainer, true);
-            addReadDialogButton(btnContainer, pkgName, "拒绝并清空", PermissionStorage.PERMISSION_CLEAR, 0xFFFF3B30, false, isDarkMode);
+            addReadDialogButton(btnContainer, pkgName, "拒绝并清空", PermissionDecision.PERMISSION_CLEAR, 0xFFFF3B30, false);
         } else {
-            addWriteDialogButton(btnContainer, pkgName, "拒绝", PermissionStorage.PERMISSION_BLOCK, COLOR_BTN_DENY, false, isDarkMode);
+            addWriteDialogButton(btnContainer, pkgName, "拒绝", PermissionDecision.PERMISSION_BLOCK, COLOR_BTN_DENY, false);
             addDialogDivider(btnContainer, false);
-            addWriteDialogButton(btnContainer, pkgName, "允许", PermissionStorage.PERMISSION_IGNORE, COLOR_BTN_ALLOW, true, isDarkMode);
+            addWriteDialogButton(btnContainer, pkgName, "允许", PermissionDecision.PERMISSION_IGNORE, COLOR_BTN_ALLOW, true);
         }
         card.addView(btnContainer);
 
         return card;
     }
+
+    // ──────────────────────────── 按钮与样式 ────────────────────────────
 
     /**
      * 创建卡片背景
@@ -373,19 +389,19 @@ public class InlineDialogManager {
     }
 
     private void addWriteDialogButton(LinearLayout btnContainer, String pkgName, String text, int decision,
-            int textColor, boolean isAllow, boolean isDarkMode) {
-        addDialogButton(btnContainer, pkgName, text, decision, textColor, isAllow, isDarkMode,
+            int textColor, boolean isAllow) {
+        addDialogButton(btnContainer, pkgName, text, decision, textColor, isAllow,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.0f));
     }
 
     private void addReadDialogButton(LinearLayout btnContainer, String pkgName, String text, int decision,
-            int textColor, boolean isAllow, boolean isDarkMode) {
-        addDialogButton(btnContainer, pkgName, text, decision, textColor, isAllow, isDarkMode,
+            int textColor, boolean isAllow) {
+        addDialogButton(btnContainer, pkgName, text, decision, textColor, isAllow,
                 new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(52)));
     }
 
     private void addDialogButton(LinearLayout btnContainer, String pkgName, String text, int decision,
-            int textColor, boolean isAllow, boolean isDarkMode, LinearLayout.LayoutParams params) {
+            int textColor, boolean isAllow, LinearLayout.LayoutParams params) {
         TextView button = new TextView(mSystemContext);
         button.setLayoutParams(params);
         button.setText(text);
@@ -393,7 +409,7 @@ public class InlineDialogManager {
         button.setTextColor(textColor);
         if (isAllow) button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(createButtonBackground(isAllow, isDarkMode));
+        button.setBackground(createButtonBackground(isAllow));
         button.setClickable(true);
         button.setFocusable(true);
         button.setOnClickListener(v -> onResult(pkgName, decision));
@@ -432,7 +448,7 @@ public class InlineDialogManager {
     /**
      * 创建按钮背景
      */
-    private GradientDrawable createButtonBackground(boolean isAllow, boolean isDarkMode) {
+    private GradientDrawable createButtonBackground(boolean isAllow) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
         // 左下/右下圆角
@@ -445,6 +461,8 @@ public class InlineDialogManager {
         drawable.setCornerRadii(radii);
         return drawable;
     }
+
+    // ──────────────────────────── 倒计时与结果处理 ────────────────────────────
 
     /**
      * 启动倒计时
@@ -464,7 +482,7 @@ public class InlineDialogManager {
             @Override
             public void onFinish() {
                 XLog.i(TAG, "倒计时结束，超时拒绝: " + pkgName);
-                onResult(pkgName, PermissionStorage.PERMISSION_BLOCK);
+                onResult(pkgName, PermissionDecision.PERMISSION_BLOCK);
             }
         };
         mCurrentTimer.start();
@@ -477,7 +495,7 @@ public class InlineDialogManager {
         if (mCurrentDialogView != null) {
             TextView tvCountdown = mCurrentDialogView.findViewWithTag("countdown");
             if (tvCountdown != null) {
-                tvCountdown.setText(String.format("%d 秒后自动拒绝", seconds));
+                tvCountdown.setText(String.format(Locale.ROOT, "%d 秒后自动拒绝", seconds));
             }
         }
     }
@@ -509,25 +527,10 @@ public class InlineDialogManager {
         }
 
         XLog.i(TAG, "用户选择: " + pkgName + " -> " +
-                (decision == PermissionStorage.PERMISSION_IGNORE ? "允许" : "拒绝"));
+                (decision == PermissionDecision.PERMISSION_IGNORE ? "允许" : "拒绝"));
     }
 
-    /**
-     * 关闭当前弹窗
-     */
-    private String decisionToText(int decision) {
-        if (decision == PermissionStorage.PERMISSION_IGNORE) return "允许";
-        if (decision == PermissionStorage.PERMISSION_CLEAR) return "拒绝并清空";
-        return "拒绝";
-    }
-
-    private void dismissCurrentDialog() {
-        dismissCurrentDialog(true);
-    }
-
-    private void dismissCurrentDialog(boolean cancelPending) {
-        dismissCurrentDialog(cancelPending, null);
-    }
+    // ──────────────────────────── 弹窗清理 ────────────────────────────
 
     private void dismissCurrentDialog(boolean cancelPending, CountDownLatch expectedLatch) {
         // 取消倒计时
@@ -553,7 +556,7 @@ public class InlineDialogManager {
 
         if (cancelPending) {
             if (resultToRelease != null) {
-                resultToRelease.set(PermissionStorage.PERMISSION_BLOCK);
+                resultToRelease.set(PermissionDecision.PERMISSION_BLOCK);
             }
             if (latchToRelease != null) {
                 latchToRelease.countDown();
@@ -583,6 +586,8 @@ public class InlineDialogManager {
         }
     }
 
+    // ──────────────────────────── 通用工具 ────────────────────────────
+
     /**
      * dp 转 px
      */
@@ -603,13 +608,4 @@ public class InlineDialogManager {
         return nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /**
-     * 释放资源
-     */
-    public void destroy() {
-        dismissCurrentDialog();
-        synchronized (this) {
-            sInstance = null;
-        }
-    }
 }

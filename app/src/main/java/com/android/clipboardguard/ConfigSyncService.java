@@ -1,18 +1,13 @@
 package com.android.clipboardguard;
 
-import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 
 /*
@@ -24,8 +19,8 @@ import androidx.core.app.NotificationCompat;
  * 生命周期：
  * 1. BootReceiver 收到开机广播 → startForegroundService()
  * 2. onCreate → startForeground()（显示"启动中..."通知）
- * 3. onStartCommand → 立即发第一次配置广播（Hook 侧 8s 已注册好）
- * 4. 3s 后发第二次配置广播（兜底，约 13s）
+ * 3. onStartCommand → 延迟 2 秒发送第一次完整配置广播
+ * 4. 再等待 3 秒发送第二次完整配置广播（兜底）
  * 5. 广播发完后 → 更新通知为"已完成开机自启动"
  * 6. 延迟 2 秒 → stopSelf()（通知保留，用户手动清除）
  *
@@ -47,7 +42,7 @@ public class ConfigSyncService extends Service {
     // 发完广播后延迟停止服务，让 Hook 侧有时间处理广播
     private static final long STOP_DELAY_MS = 2000L;
 
-    // ★ 防止重复执行：Hook 侧和 BootReceiver 都可能触发
+    // Hook 侧和 BootReceiver 都可能触发，用静态标志避免重复同步。
     private static volatile boolean sSyncStarted = false;
     private static volatile boolean sSyncCompleted = false;
 
@@ -55,20 +50,22 @@ public class ConfigSyncService extends Service {
     private NotificationManager notificationManager;
     private Thread syncThread;
 
+    // ──────────────────────────── 服务生命周期 ────────────────────────────
+
     @Override
     public void onCreate() {
         super.onCreate();
         mainHandler = new Handler(Looper.getMainLooper());
         notificationManager = getSystemService(NotificationManager.class);
         createNotificationChannel();
-        // ★ 服务启动：显示"启动中..."（ongoing，不可清除）
+        // 服务启动：显示“启动中...”（ongoing，不可清除）。
         startForeground(NOTIFICATION_ID, buildNotification("启动中...", true));
         XLog.i(TAG, "ConfigSyncService 前台服务已创建");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // ★ 防止重复执行：Hook 侧 10s 和 BootReceiver 12s 都可能触发
+        // 防止重复执行：Hook 侧和 BootReceiver 都可能触发。
         if (sSyncStarted) {
             XLog.i(TAG, "ConfigSyncService 同步已在进行中，跳过重复触发");
             if (sSyncCompleted) {
@@ -84,9 +81,16 @@ public class ConfigSyncService extends Service {
 
         XLog.i(TAG, "ConfigSyncService onStartCommand，开始同步配置");
 
-        syncThread = new Thread(() -> {
+        syncThread = createSyncThread(startId);
+        syncThread.start();
+
+        return START_NOT_STICKY;
+    }
+
+    private Thread createSyncThread(int startId) {
+        return new Thread(() -> {
             try {
-                // ★ 等 App 进程完全初始化好，延迟 2s 发第一次广播
+                // 等 App 进程完全初始化好，延迟 2s 发第一次广播。
                 XLog.i(TAG, "等待 App 进程初始化，延迟 " + (FIRST_BROADCAST_DELAY_MS/1000) + "s 后发第一次广播...");
                 Thread.sleep(FIRST_BROADCAST_DELAY_MS);
                 
@@ -105,10 +109,10 @@ public class ConfigSyncService extends Service {
             } catch (Throwable e) {
                 XLog.e(TAG, "配置同步异常: " + e.getMessage(), e);
             } finally {
-                // ★ 广播发完后：更新通知为"已完成开机自启动"（取消 ongoing，允许用户清除）
+                // 广播发完后更新通知，取消 ongoing，允许用户清除。
                 mainHandler.post(() -> {
                     sSyncCompleted = true;
-                    updateNotificationFinal("已完成开机自启动");
+                    updateNotificationFinal();
                 });
 
                 // 延迟 STOP_DELAY_MS 后停止服务（通知保留，不自动移除）
@@ -119,9 +123,6 @@ public class ConfigSyncService extends Service {
                 }, STOP_DELAY_MS);
             }
         }, "ClipboardGuard-SyncService");
-        syncThread.start();
-
-        return START_NOT_STICKY;
     }
 
     @Override
@@ -134,7 +135,7 @@ public class ConfigSyncService extends Service {
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
         }
-        // ★ 服务销毁时重置标志位，允许下次启动重新同步
+        // 服务销毁时重置标志位，允许下次启动重新同步。
         sSyncStarted = false;
         sSyncCompleted = false;
     }
@@ -144,18 +145,18 @@ public class ConfigSyncService extends Service {
         return null;
     }
 
+    // ──────────────────────────── 通知构建 ────────────────────────────
+
     private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "剪贴板护卫",
-                    NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("ClipboardGuard 服务状态");
-            channel.setShowBadge(false);
-            if (notificationManager != null) {
-                notificationManager.createNotificationChannel(channel);
-            }
+        NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID,
+                "剪贴板护卫",
+                NotificationManager.IMPORTANCE_LOW
+        );
+        channel.setDescription("ClipboardGuard 服务状态");
+        channel.setShowBadge(false);
+        if (notificationManager != null) {
+            notificationManager.createNotificationChannel(channel);
         }
     }
 
@@ -172,21 +173,12 @@ public class ConfigSyncService extends Service {
     }
 
     /**
-     * 服务运行中更新通知（ongoing = true，不可清除）
-     */
-    private void updateNotification(String text) {
-        if (notificationManager != null) {
-            notificationManager.notify(NOTIFICATION_ID, buildNotification(text, true));
-        }
-    }
-
-    /**
      * 服务完成前更新通知（ongoing = false，用户可手动清除）
      */
-    private void updateNotificationFinal(String text) {
+    private void updateNotificationFinal() {
         if (notificationManager != null) {
-            notificationManager.notify(NOTIFICATION_ID, buildNotification(text, false));
-            XLog.i(TAG, "通知已更新: " + text + " (ongoing=false, 用户可清除)");
+            notificationManager.notify(NOTIFICATION_ID, buildNotification("已完成开机自启动", false));
+            XLog.i(TAG, "通知已更新: 已完成开机自启动 (ongoing=false, 用户可清除)");
         }
     }
 }

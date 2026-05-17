@@ -45,8 +45,6 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
     private RecyclerView mRvReadRulesDetail;
     private SwitchCompat mSwitchReadRulesEnabled;
-    private TextView mTvReadRulesHint;
-    private MaterialButton mBtnAddReadRule;
 
     private boolean mReadRulesEnabled = false;
     private final List<ContentRule> mReadRules = new ArrayList<>();
@@ -57,9 +55,6 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
     private View mReadBatchCard;
     private TextView mReadSelectedCount;
-    private TextView mReadDeleteSelected;
-    private TextView mReadEnableSelected;
-    private TextView mReadDisableSelected;
 
     private boolean mShowDefaultRules = false;
     private final List<ContentRule> mReadDefaultRules = new ArrayList<>();
@@ -77,6 +72,10 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     private volatile boolean mDestroyed = false;
 
     private AlertDialog mCurrentRuleDialog;
+
+    // ═══════════════════════════════════════════════════════════════
+    // 生命周期与基础初始化
+    // ═══════════════════════════════════════════════════════════════
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -139,21 +138,24 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
         mRvReadRulesDetail = findViewById(R.id.rv_read_rules_detail);
         mSwitchReadRulesEnabled = findViewById(R.id.switch_read_rules_enabled);
-        mTvReadRulesHint = findViewById(R.id.tv_read_rules_hint);
-        mBtnAddReadRule = findViewById(R.id.btn_add_read_rule);
+        TextView tvReadRulesHint = findViewById(R.id.tv_read_rules_hint);
+        MaterialButton btnAddReadRule = findViewById(R.id.btn_add_read_rule);
+        if (tvReadRulesHint != null) {
+            tvReadRulesHint.setText(R.string.rules_read_hint);
+        }
 
         mReadBatchCard = findViewById(R.id.card_batch_actions_main);
         mReadSelectedCount = findViewById(R.id.tv_selected_count);
         TextView btnSelectAll = findViewById(R.id.btn_select_all_rules);
-        mReadDeleteSelected = findViewById(R.id.btn_delete_selected);
-        mReadEnableSelected = findViewById(R.id.btn_enable_selected);
-        mReadDisableSelected = findViewById(R.id.btn_disable_selected);
+        TextView readDeleteSelected = findViewById(R.id.btn_delete_selected);
+        TextView readEnableSelected = findViewById(R.id.btn_enable_selected);
+        TextView readDisableSelected = findViewById(R.id.btn_disable_selected);
 
         mSwitchReadRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
             mReadRulesEnabled = isChecked;
             saveReadRules();
         });
-        mBtnAddReadRule.setOnClickListener(v -> showEditReadRuleDialog());
+        btnAddReadRule.setOnClickListener(v -> showEditReadRuleDialog());
 
         btnSelectAll.setOnClickListener(v -> {
             if (mReadSelectedRules.size() == mReadRules.size()) mReadSelectedRules.clear();
@@ -162,9 +164,9 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             updateReadSelectedCount();
         });
 
-        mReadDeleteSelected.setOnClickListener(v -> deleteReadSelectedRules());
-        mReadEnableSelected.setOnClickListener(v -> enableReadSelectedRules(true));
-        mReadDisableSelected.setOnClickListener(v -> enableReadSelectedRules(false));
+        readDeleteSelected.setOnClickListener(v -> deleteReadSelectedRules());
+        readEnableSelected.setOnClickListener(v -> enableReadSelectedRules(true));
+        readDisableSelected.setOnClickListener(v -> enableReadSelectedRules(false));
 
         View cardDefaultRules = findViewById(R.id.card_read_default_rules);
         if (cardDefaultRules != null) cardDefaultRules.setOnClickListener(v -> showDefaultRulesPage());
@@ -186,6 +188,10 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
         mHandler.post(this::loadDefaultReadRulesAsync);
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 页面初始化与切换
+    // ═══════════════════════════════════════════════════════════════
 
     private void initReadRulesDetailPage() {
         if (mReadRulesAdapter == null) mReadRulesAdapter = new ReadRulesAdapter(mReadRules);
@@ -234,30 +240,32 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
         mReadDefaultRules.clear();
         for (String[] ruleDef : template) {
-            mReadDefaultRules.add(new ContentRule(ruleDef[0], ruleDef[1],
-                    oldEnabledStates.getOrDefault(ruleDef[0], false), true));
+            Boolean oldEnabled = oldEnabledStates.get(ruleDef[0]);
+            mReadDefaultRules.add(new ContentRule(ruleDef[0], ruleDef[1], oldEnabled != null && oldEnabled, true));
         }
         // 如果文件不存在（首次），仅创建文件，不发送广播
         if (!file.exists()) {
             saveDefaultReadRulesToFile();
         }
-        mHandler.post(() -> {
-            if (mReadDefaultRulesAdapter != null) mReadDefaultRulesAdapter.notifyDataSetChanged();
-        });
+        mHandler.post(this::refreshReadDefaultRulesAdapter);
     }
 
     private String[][] getReadDefaultRulesTemplate() {
         return new String[][] {
-                {"手机号码", "1\\d{10}"},
-                {"身份证号", "\\d{17}[\\dXx]"},
-                {"银行卡号", "[1-9]\\d{12,18}"},
-                {"邮箱地址", "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"},
-                {"快递单号", "[A-Za-z0-9]{10,20}"}
-                //{"验证码", "(?:验证码|校验码|动态码)[：:\\s]*[0-9A-Za-z]{4,8}"},
-                // 快递单号（带公司名）：原有精准规则，误判率低
-                //{"快递单号(带公司名)", "(?:SF|JD|YT|YZ|EMS|STO|ZTO|DHL|中通|圆通|韵达|申通|顺丰)[：:\\s]*[A-Za-z0-9]{10,20}|(?:YT|EMS|STO|ZTO|SF|JD)[0-9]{10,18}"}
+                {"手机号码", "(?<!\\d)1[3-9]\\d{9}(?!\\d)"},
+                {"身份证号", "(?<!\\d)[1-9]\\d{5}\\d{4}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx](?!\\d)"},
+                // 银行卡号先用正则初筛，运行时还会通过 Luhn 校验降低快递单号误判。
+                {"银行卡号", "(?<![A-Za-z0-9])(?:[1-9]\\d{12,18}|[1-9]\\d{3}(?:[- ]?\\d{4}){2,3}[- ]?\\d{1,3})(?![A-Za-z0-9])"},
+                {"邮箱地址", "(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])"},
+                // 快递单号不做中文前缀匹配，主要覆盖英文前缀和常见纯数字长度。
+                {"快递单号", "(?<![A-Za-z0-9])(?:[A-Z]{2}[0-9]{9}[A-Z]{2}|[A-Z]{2}[0-9]{10,13}|[0-9]{12,16}|[0-9]{18}|[0-9]{20})(?![A-Za-z0-9])"}
+                //{"验证码", "(?:验证码|校验码|动态码)[：:\\s]*[0-9A-Za-z]{4,8}"}
         };
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 默认读取规则选择
+    // ═══════════════════════════════════════════════════════════════
 
     private void enterReadDefaultSelectionMode(ContentRule rule) {
         mReadDefaultSelectionMode = true;
@@ -284,7 +292,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         if (mReadDefaultSelectedRules.isEmpty()) return;
         for (ContentRule rule : mReadDefaultSelectedRules) rule.enabled = enable;
         saveDefaultReadRules();   // 用户操作，保存并广播
-        if (mReadDefaultRulesAdapter != null) mReadDefaultRulesAdapter.notifyDataSetChanged();
+        refreshReadDefaultRulesAdapter();
         exitReadDefaultSelectionMode();
     }
 
@@ -380,7 +388,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         tvStatus.setText(rule.enabled ? "已启用" : "已禁用");
         tvStatus.setTextColor(rule.enabled ?
                 ContextCompat.getColor(this, R.color.status_active) :
-                ContextCompat.getColor(this, R.color.nav_unselected));
+                ContextCompat.getColor(this, R.color.status_inactive));
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.rules_dialog_title_view)
                 .setView(dialogView)
@@ -454,13 +462,12 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         if (isEdit && rule != null) {
             rule.name = name;
             rule.pattern = pattern;
-            rule.enabled = true;
             rule.compilePattern();
         } else {
             mReadRules.add(new ContentRule(name, pattern, true));
         }
         saveReadRules();
-        if (mReadRulesAdapter != null) mReadRulesAdapter.notifyDataSetChanged();
+        refreshReadRulesAdapter();
         mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
         mCurrentRuleDialog.dismiss();
     }
@@ -499,7 +506,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
                     mReadRules.removeAll(mReadSelectedRules);
                     saveReadRules();
-                    if (mReadRulesAdapter != null) mReadRulesAdapter.notifyDataSetChanged();
+                    refreshReadRulesAdapter();
                     mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
                     exitReadSelectionMode();
                 })
@@ -513,7 +520,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
                     mReadRules.remove(rule);
                     saveReadRules();
-                    if (mReadRulesAdapter != null) mReadRulesAdapter.notifyDataSetChanged();
+                    refreshReadRulesAdapter();
                     mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
                 })
                 .setNegativeButton(android.R.string.cancel, null)
@@ -524,7 +531,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         if (mReadSelectedRules.isEmpty()) return;
         for (ContentRule rule : mReadSelectedRules) rule.enabled = enable;
         saveReadRules();
-        if (mReadRulesAdapter != null) mReadRulesAdapter.notifyDataSetChanged();
+        refreshReadRulesAdapter();
         exitReadSelectionMode();
     }
 
@@ -569,7 +576,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                         saveReadRules();
                     });
                 }
-                if (mReadRulesAdapter != null) mReadRulesAdapter.notifyDataSetChanged();
+                refreshReadRulesAdapter();
                 if (mRvReadRulesDetail != null)
                     mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
             });
@@ -619,12 +626,13 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
 
         @Override
-        public ReadRuleViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        @androidx.annotation.NonNull
+        public ReadRuleViewHolder onCreateViewHolder(@androidx.annotation.NonNull ViewGroup parent, int viewType) {
             return new ReadRuleViewHolder(getLayoutInflater().inflate(R.layout.item_content_rule, parent, false));
         }
 
         @Override
-        public void onBindViewHolder(ReadRuleViewHolder holder, int position) {
+        public void onBindViewHolder(@androidx.annotation.NonNull ReadRuleViewHolder holder, int position) {
             ContentRule rule = mRulesList.get(position);
             boolean sm = mIsDefaultRules ? mReadDefaultSelectionMode : mReadRulesSelectionMode;
             Set<ContentRule> ss = mIsDefaultRules ? mReadDefaultSelectedRules : mReadSelectedRules;
@@ -638,7 +646,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 holder.tvRuleStatus.setText(rule.enabled ? "已启用" : "已禁用");
                 holder.tvRuleStatus.setTextColor(rule.enabled ?
                         ContextCompat.getColor(ReadRulesDetailActivity.this, R.color.status_active) :
-                        ContextCompat.getColor(ReadRulesDetailActivity.this, R.color.nav_unselected));
+                        ContextCompat.getColor(ReadRulesDetailActivity.this, R.color.status_inactive));
                 holder.cbSelected.setChecked(isSel);
                 holder.itemView.setOnClickListener(v -> {
                     if (isSel) ss.remove(rule); else ss.add(rule);
@@ -677,7 +685,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
 
         void refreshSelectionMode() {
-            notifyDataSetChanged();
+            notifyItemRangeChanged(0, getItemCount());
         }
 
         class ReadRuleViewHolder extends RecyclerView.ViewHolder {
@@ -705,6 +713,22 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             }
         }
     }
+
+    private void refreshReadRulesAdapter() {
+        if (mReadRulesAdapter != null) {
+            mReadRulesAdapter.refreshSelectionMode();
+        }
+    }
+
+    private void refreshReadDefaultRulesAdapter() {
+        if (mReadDefaultRulesAdapter != null) {
+            mReadDefaultRulesAdapter.refreshSelectionMode();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 生命周期清理
+    // ═══════════════════════════════════════════════════════════════
 
     @Override
     protected void onDestroy() {

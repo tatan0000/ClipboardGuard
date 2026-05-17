@@ -2,17 +2,17 @@ package com.android.clipboardguard;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
 
-/*
- * ContentRulesManager - 广告内容过滤规则管理器（写入 + 读取）
- *
- * 改造说明（2026-05-05）：
- * - 移除所有硬编码文件路径，system_server 进程无法访问 App 私有目录
- * - loadWriteRules / loadReadRules 改为空操作（sLoaded=true），实际数据由广播推送
- * - App 端通过 Activity.getFilesDir() 直接操作文件，不经过此类
- * - 所有规则数据仅通过广播中的 JSON 字符串更新（updateWriteRulesFromJson / updateReadRulesFromJson）
+/**
+ * ContentRulesManager - 剪贴板内容规则管理器（写入 + 读取）
+ * 运行说明：
+ * - 该类在 Hook 侧维护已编译的读取/写入正则缓存。
+ * - system_server 不能直接读取 App 私有目录，规则文件由 App 端维护。
+ * - loadWriteRules / loadReadRules 只标记初始化完成，实际规则通过广播 JSON 同步。
+ * - 读取规则和写入规则保持独立开关、独立缓存，避免两类配置互相影响。
  */
 public class ContentRulesManager {
 
@@ -62,7 +62,7 @@ public class ContentRulesManager {
         }
     }
 
-    // ──────────────────────────── 加载方法（system_server 中为空操作） ────────────────────────────
+    // ──────────────────────────── 初始化占位 ────────────────────────────
 
     /**
      * 加载写入规则。
@@ -84,10 +84,10 @@ public class ContentRulesManager {
         XLog.i(TAG, "loadReadRules: system_server 中跳过文件读取，等待广播推送规则数据");
     }
 
-    // ──────────────────────────── 查询接口 ────────────────────────────
+    // ──────────────────────────── 写入规则查询 ────────────────────────────
 
     /**
-     * 检查文本是否匹配广告规则
+     * 检查文本是否匹配写入内容规则。
      * @return 匹配的规则名称，未匹配返回 null
      */
     public static String matchesWriteContent(String text) {
@@ -121,10 +121,10 @@ public class ContentRulesManager {
 
     public static boolean isWriteLoaded() { return sWriteLoaded; }
 
-    // ──────────────────────────── 广播更新接口 ────────────────────────────
+    // ──────────────────────────── 广播规则更新 ────────────────────────────
 
     /**
-     * 从广播 JSON 完全替换规则列表
+     * 使用广播 JSON 完全替换读取或写入规则缓存。
      */
     public static synchronized void updateReadWriteRulesFromJson(String json, boolean isReadRules) {
         if (json == null || json.isEmpty()) {
@@ -192,7 +192,6 @@ public class ContentRulesManager {
         }
     }
 
-    @SuppressWarnings("unused") // 兼容旧调用
     public static synchronized void updateWriteRulesFromJson(String json) {
         updateReadWriteRulesFromJson(json, false);
     }
@@ -201,9 +200,8 @@ public class ContentRulesManager {
         updateReadWriteRulesFromJson(json, true);
     }
 
-    // ──────────────────────────── 读取规则专有方法 ────────────────────────────
+    // ──────────────────────────── 读取规则查询 ────────────────────────────
 
-    @SuppressWarnings("unused") // 由 ReadHook 调用
     public static String matchesReadContent(String text) {
         if (!sReadEnabled) return null;
         if (text == null || text.isEmpty()) return null;
@@ -212,6 +210,11 @@ public class ContentRulesManager {
         for (ReadRulePattern rule : sReadRulePatterns) {
             if (!rule.enabled || rule.pattern == null) continue;
             try {
+                // 银行卡号容易和快递单号、订单号重叠，正则命中后再用 Luhn 做二次确认。
+                if ("银行卡号".equals(rule.name)) {
+                    if (matchesBankCardContent(rule, text)) return rule.name;
+                    continue;
+                }
                 if (rule.pattern.matcher(text).find()) return rule.name;
             } catch (Exception e) {
                 XLog.e(TAG, "正则匹配异常: " + rule.name);
@@ -220,32 +223,49 @@ public class ContentRulesManager {
         return null;
     }
 
-    @SuppressWarnings("unused")
+    private static boolean matchesBankCardContent(ReadRulePattern rule, String text) {
+        java.util.regex.Matcher matcher = rule.pattern.matcher(text);
+        while (matcher.find()) {
+            String candidate = matcher.group();
+            // 允许用户复制带空格或短横分组的卡号，校验前统一还原为纯数字。
+            String digits = candidate.replace(" ", "").replace("-", "");
+            if (digits.length() < 13 || digits.length() > 19) continue;
+            if (isLuhnValid(digits)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isLuhnValid(String digits) {
+        int sum = 0;
+        boolean doubleDigit = false;
+        // 从右向左按 Luhn 规则累加，最后一位为校验位。
+        for (int index = digits.length() - 1; index >= 0; index--) {
+            char ch = digits.charAt(index);
+            if (ch < '0' || ch > '9') return false;
+            int value = ch - '0';
+            if (doubleDigit) {
+                value *= 2;
+                if (value > 9) value -= 9;
+            }
+            sum += value;
+            doubleDigit = !doubleDigit;
+        }
+        return sum % 10 == 0;
+    }
+
     public static boolean isReadEnabled() { return sReadEnabled; }
-    @SuppressWarnings("unused")
+
     public static int getReadEnabledRuleCount() {
         int cnt = 0;
         for (ReadRulePattern r : sReadRulePatterns) if (r.enabled) cnt++;
         return cnt;
     }
-    @SuppressWarnings("unused")
+
     public static boolean hasEnabledReadRule() {
         for (ReadRulePattern r : sReadRulePatterns) if (r.enabled && r.pattern != null) return true;
         return false;
     }
-    @SuppressWarnings("unused")
+
     public static boolean isReadLoaded() { return sReadLoaded; }
 
-    @SuppressWarnings("unused") // 可能由外部设置
-    public static void setWriteEnabled(boolean enabled) { sWriteEnabled = enabled; }
-    @SuppressWarnings("unused")
-    public static void setReadEnabled(boolean enabled) { sReadEnabled = enabled; }
-    @SuppressWarnings("unused")
-    public static List<WriteRulePattern> getAllWriteRules() { return new ArrayList<>(sWriteRulePatterns); }
-    @SuppressWarnings("unused")
-    public static List<ReadRulePattern> getAllReadRules() { return new ArrayList<>(sReadRulePatterns); }
-    @SuppressWarnings("unused")
-    public static boolean getWriteRulesEmpty() { return sWriteRulePatterns.isEmpty(); }
-    @SuppressWarnings("unused")
-    public static boolean getReadRulesEmpty() { return sReadRulePatterns.isEmpty(); }
 }

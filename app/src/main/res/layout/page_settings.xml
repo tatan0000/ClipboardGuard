@@ -17,7 +17,7 @@
         android:textColor="?attr/colorOnSurfaceVariant"
         android:textStyle="bold" />
 
-    <!-- 外观列表 - Material3 风格 -->
+    <!-- 外观列表：点击整行切换主题，RadioButton 只负责显示当前选择。 -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -34,7 +34,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 主题选择 - 亮色 -->
+            <!-- 主题选择：强制亮色 -->
             <LinearLayout
                 android:id="@+id/item_theme_light"
                 android:layout_width="match_parent"
@@ -77,7 +77,7 @@
                 android:layout_marginStart="68dp"
                 android:background="?attr/colorOutlineVariant" />
 
-            <!-- 主题选择 - 暗色 -->
+            <!-- 主题选择：强制暗色 -->
             <LinearLayout
                 android:id="@+id/item_theme_dark"
                 android:layout_width="match_parent"
@@ -120,7 +120,7 @@
                 android:layout_marginStart="68dp"
                 android:background="?attr/colorOutlineVariant" />
 
-            <!-- 主题选择 - 跟随系统 -->
+            <!-- 主题选择：跟随系统浅色/暗色 -->
             <LinearLayout
                 android:id="@+id/item_theme_system"
                 android:layout_width="match_parent"
@@ -187,10 +187,12 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="64dp"
+            android:layout_height="wrap_content"
+            android:minHeight="64dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -217,7 +219,8 @@
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switch_read_blocked_toast_enabled"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -247,10 +250,12 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="72dp"
+            android:layout_height="wrap_content"
+            android:minHeight="72dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -278,7 +283,8 @@
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switch_lsposed_log_enabled"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -327,40 +333,6 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/settings_about_module"
-                    android:textSize="16sp"
-                    android:textColor="?attr/colorOnSurface" />
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_arrow_right"
-                    app:tint="?attr/colorOnSurfaceVariant" />
-
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginStart="16dp"
-                android:background="?attr/colorOutlineVariant" />
-
-            <!-- 开源许可 -->
-            <LinearLayout
-                android:id="@+id/item_license"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:background="?attr/selectableItemBackground"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/settings_license"
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnSurface" />
 

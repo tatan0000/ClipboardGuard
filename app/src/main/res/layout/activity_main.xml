@@ -541,7 +541,7 @@
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="10dp"
                 android:text="@string/write_tip"
-                android:textColor="?attr/colorPrimary"
+                android:textColor="?attr/colorOnPrimaryContainer"
                 android:textSize="13sp" />
 
             <!-- 下拉刷新 + 应用列表 -->
@@ -708,7 +708,7 @@
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="10dp"
                 android:text="@string/read_tip"
-                android:textColor="?attr/colorPrimary"
+                android:textColor="?attr/colorOnPrimaryContainer"
                 android:textSize="13sp" />
 
             <!-- 下拉刷新 + 应用列表 -->
@@ -779,13 +779,13 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_nav_home"
-                app:tint="?attr/colorPrimary" />
+                app:tint="@color/nav_selected" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="首页"
                 android:textSize="11sp"
-                android:textColor="?attr/colorPrimary" />
+                android:textColor="@color/nav_selected" />
         </LinearLayout>
 
         <!-- 写入 -->
@@ -802,13 +802,13 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_nav_write"
-                app:tint="?attr/colorOnSurfaceVariant" />
+                app:tint="@color/nav_unselected" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/nav_write"
                 android:textSize="11sp"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:textColor="@color/nav_unselected" />
         </LinearLayout>
 
         <!-- 读取 -->
@@ -825,13 +825,13 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_nav_read"
-                app:tint="?attr/colorOnSurfaceVariant" />
+                app:tint="@color/nav_unselected" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/nav_read"
                 android:textSize="11sp"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:textColor="@color/nav_unselected" />
         </LinearLayout>
 
         <!-- 设置 -->
@@ -848,13 +848,13 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_nav_settings"
-                app:tint="?attr/colorOnSurfaceVariant" />
+                app:tint="@color/nav_unselected" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="设置"
                 android:textSize="11sp"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:textColor="@color/nav_unselected" />
         </LinearLayout>
 
     </LinearLayout>

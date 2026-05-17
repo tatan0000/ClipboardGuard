@@ -4,15 +4,20 @@ import org.json.JSONObject;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-/**
- * 规则数据模型
- */
+/** 读写内容规则的数据模型。 */
 public class ContentRule {
+
+    // ──────────────────────────── 持久化字段 ────────────────────────────
+
     public String name;
     public String pattern;
     public boolean enabled;
-    public boolean isDefault; // 是否为默认规则（不可删除/修改）
-    public transient Pattern compiledPattern; // 编译后的正则（transient 不参与 JSON 序列化）
+    /** 是否为默认规则；默认规则不可删除或编辑正文。 */
+    public boolean isDefault;
+    /** 编译后的正则，仅运行时使用，不写入 JSON。 */
+    public transient Pattern compiledPattern;
+
+    // ──────────────────────────── 构造与校验 ────────────────────────────
 
     public ContentRule() {}
 
@@ -33,6 +38,10 @@ public class ContentRule {
     }
 
     public void compilePattern() {
+        if (pattern == null || pattern.isEmpty()) {
+            compiledPattern = null;
+            return;
+        }
         try {
             compiledPattern = Pattern.compile(pattern);
         } catch (PatternSyntaxException e) {
@@ -40,9 +49,7 @@ public class ContentRule {
         }
     }
 
-    public boolean isValid() {
-        return compiledPattern != null;
-    }
+    // ──────────────────────────── JSON 转换 ────────────────────────────
 
     public JSONObject toJson() {
         JSONObject json = new JSONObject();
@@ -51,7 +58,8 @@ public class ContentRule {
             json.put("pattern", pattern);
             json.put("enabled", enabled);
             json.put("isDefault", isDefault);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return json;
     }
 
@@ -63,7 +71,8 @@ public class ContentRule {
             rule.enabled = json.optBoolean("enabled", false);
             rule.isDefault = json.optBoolean("isDefault", false);
             rule.compilePattern();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return rule;
     }
 }

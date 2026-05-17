@@ -42,7 +42,6 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
@@ -83,7 +82,6 @@ public class MainActivity extends AppCompatActivity {
     private View mPageRead;
     private View mPageSettings;
     private FloatingActionButton mFab;
-    private LinearLayout mBottomNav;
     private LinearLayout mNavHome, mNavApps, mNavRead, mNavSettings;
     private ExpandableListView mWriteExpandableListView;
     private ExpandableListView mReadExpandableListView;
@@ -141,6 +139,8 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    // ──────────────────── FAB 显示控制 ────────────────────────────
+
     private void resetFabAutoHide() {
         mHandler.removeCallbacks(mFabAutoHide);
         if (mFab.getVisibility() != View.VISIBLE && (sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ)) {
@@ -151,6 +151,8 @@ public class MainActivity extends AppCompatActivity {
         }
         mHandler.postDelayed(mFabAutoHide, FAB_AUTO_HIDE_DELAY);
     }
+
+    // ──────────────────── 生命周期与基础初始化 ────────────────────────────
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -163,6 +165,18 @@ public class MainActivity extends AppCompatActivity {
         initThemeRadioButtons();
         applyTheme();
 
+        applyAppBarInsets();
+        bindMainViews();
+
+        initPagesAndData();
+
+        showPage(sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ
+                || sCurrentPage == PAGE_SETTINGS ? sCurrentPage : PAGE_HOME);
+
+        PermissionProvider.sendFullConfigBroadcast(this);
+    }
+
+    private void applyAppBarInsets() {
         View appBarView = findViewById(R.id.app_bar);
         ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
@@ -171,13 +185,14 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
         ViewCompat.requestApplyInsets(appBarView);
+    }
 
+    private void bindMainViews() {
         mPageHome             = findViewById(R.id.page_home);
         mPageWrite            = findViewById(R.id.page_write);
         mPageRead             = findViewById(R.id.page_read);
         mPageSettings         = findViewById(R.id.page_settings);
         mFab                  = findViewById(R.id.fab_save);
-        mBottomNav            = findViewById(R.id.bottom_nav);
         mNavHome              = findViewById(R.id.nav_home);
         mNavApps              = findViewById(R.id.nav_apps);
         mNavRead              = findViewById(R.id.nav_read);
@@ -190,7 +205,9 @@ public class MainActivity extends AppCompatActivity {
         mTvAndroidVersion     = findViewById(R.id.tv_android_version);
         mTvManufacturer       = findViewById(R.id.tv_manufacturer);
         mTvModel              = findViewById(R.id.tv_model);
+    }
 
+    private void initPagesAndData() {
         initWritePage();
         initReadPage();
         initRuleFiles();
@@ -198,11 +215,6 @@ public class MainActivity extends AppCompatActivity {
         setupBottomNav();
         setupSettingsPage();
         loadAppsAsync();
-
-        showPage(sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ
-                || sCurrentPage == PAGE_SETTINGS ? sCurrentPage : PAGE_HOME);
-
-        PermissionProvider.sendFullConfigBroadcast(this);
     }
 
     @Override
@@ -224,10 +236,7 @@ public class MainActivity extends AppCompatActivity {
         mHandler.removeCallbacksAndMessages(null);
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-    }
+    // ──────────────────── 读写页面初始化 ────────────────────────────
 
     @SuppressLint("ClickableViewAccessibility")
     private void initWritePage() {
@@ -260,7 +269,7 @@ public class MainActivity extends AppCompatActivity {
             if (item == null || item.isCore) return false;
             item.isBlockedWrite = !item.isBlockedWrite;
             mWritePendingChanges.put(item.packageName,
-                    item.isBlockedWrite ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+                    item.isBlockedWrite ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE);
             mWriteAdapter.notifyDataSetChanged();
             resetFabAutoHide();
             return true;
@@ -330,7 +339,7 @@ public class MainActivity extends AppCompatActivity {
             if (item == null || item.isCore) return false;
             item.isBlockedRead = !item.isBlockedRead;
             mReadPendingChanges.put(item.packageName,
-                    item.isBlockedRead ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+                    item.isBlockedRead ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE);
             mReadAdapter.notifyDataSetChanged();
             resetFabAutoHide();
             return true;
@@ -372,6 +381,8 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(new Intent(this, ReadRulesDetailActivity.class)));
         }
     }
+
+    // ──────────────────── 页面切换与底部导航 ────────────────────────────
 
     private void showPage(int page) {
         int previousPage = sCurrentPage;
@@ -508,9 +519,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ──────────────────── 首页状态信息 ────────────────────────────
+
     @SuppressLint("SetTextI18n")
     private void initHomePage() {
-        boolean isActive = isModuleActive();
+        updateModuleStatusCard(isModuleActive());
+
+        int xApi = getXposedApiVersion();
+        mTvXposedSdk.setText(xApi > 0 ? String.valueOf(xApi) : "未检测到");
+        updateDeviceInfo();
+    }
+
+    private void updateModuleStatusCard(boolean isActive) {
         if (isActive) {
             mTvStatusTitle.setText(R.string.status_active);
             mTvStatusTitle.setTextColor(ContextCompat.getColor(this, R.color.status_active));
@@ -522,10 +542,10 @@ public class MainActivity extends AppCompatActivity {
             mTvStatusDesc.setText(R.string.status_not_active_desc);
             mIvStatusIcon.setImageResource(R.drawable.ic_shield_off);
         }
+    }
 
-        int xApi = getXposedApiVersion();
-        mTvXposedSdk.setText(xApi > 0 ? String.valueOf(xApi) : "未检测到");
-
+    @SuppressLint("SetTextI18n")
+    private void updateDeviceInfo() {
         try {
             PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             // 使用 getLongVersionCode() 代替已弃用的 versionCode
@@ -541,6 +561,8 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isModuleActive() { return false; }
     private int getXposedApiVersion() { return -1; }
+
+    // ──────────────────── 主题与设置页 ────────────────────────────
 
     private void applyThemeNoView() {
         if (sCurrentTheme < 0) {
@@ -612,9 +634,10 @@ public class MainActivity extends AppCompatActivity {
         setupThemeItem(R.id.item_theme_dark,   THEME_DARK);
         setupThemeItem(R.id.item_theme_system, THEME_SYSTEM);
 
+        SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
+
         SwitchMaterial switchReadBlockedToast = findViewById(R.id.switch_read_blocked_toast_enabled);
         if (switchReadBlockedToast != null) {
-            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
             switchReadBlockedToast.setChecked(prefs.getBoolean("read_blocked_toast_enabled", true));
             switchReadBlockedToast.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 prefs.edit().putBoolean("read_blocked_toast_enabled", isChecked).apply();
@@ -624,7 +647,6 @@ public class MainActivity extends AppCompatActivity {
 
         SwitchMaterial switchLsposedLog = findViewById(R.id.switch_lsposed_log_enabled);
         if (switchLsposedLog != null) {
-            SharedPreferences prefs = getSharedPreferences("clipboardguard_prefs", MODE_PRIVATE);
             switchLsposedLog.setChecked(prefs.getBoolean("lsposed_log_enabled", true));
             switchLsposedLog.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 prefs.edit().putBoolean("lsposed_log_enabled", isChecked).apply();
@@ -635,7 +657,7 @@ public class MainActivity extends AppCompatActivity {
         View itemAbout = findViewById(R.id.item_about);
         if (itemAbout != null) {
             itemAbout.setOnClickListener(v ->
-                    Toast.makeText(this, "模块版本: " + getModuleVersion(), Toast.LENGTH_SHORT).show());
+                    startActivity(new Intent(this, AboutModuleActivity.class)));
         }
     }
 
@@ -649,14 +671,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String getModuleVersion() {
-        try {
-            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            return pi.versionName + " (" + pi.getLongVersionCode() + ")";
-        } catch (PackageManager.NameNotFoundException e) {
-            return "--";
-        }
-    }
+    // ──────────────────── 应用列表加载与分类 ────────────────────────────
 
     private void loadAppsAsync() {
         sExecutor.execute(this::loadAllApps);
@@ -686,13 +701,13 @@ public class MainActivity extends AppCompatActivity {
         List<String[]> savedWritePerms = PermissionProvider.getAllWritePermissions(this);
         android.util.ArrayMap<String, Integer> writePermMap = new android.util.ArrayMap<>();
         for (String[] row : savedWritePerms) {
-            writePermMap.put(row[0], Integer.parseInt(row[1]));
+            putPermissionRow(writePermMap, row);
         }
 
         List<String[]> savedReadPerms = PermissionProvider.getAllReadPermissions(this);
         android.util.ArrayMap<String, Integer> readPermMap = new android.util.ArrayMap<>();
         for (String[] row : savedReadPerms) {
-            readPermMap.put(row[0], Integer.parseInt(row[1]));
+            putPermissionRow(readPermMap, row);
         }
 
         List<AppItem> tmpWriteUser = new ArrayList<>();
@@ -707,7 +722,8 @@ public class MainActivity extends AppCompatActivity {
             if (self.equals(info.packageName)) continue;
 
             boolean isCore = isCoreSystemPackage(info.packageName);
-            String appName = pm.getApplicationLabel(info).toString();
+            CharSequence label = pm.getApplicationLabel(info);
+            String appName = label.toString();
             boolean isSystem = (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
 
             Integer writeSaved = writePermMap.get(info.packageName);
@@ -716,7 +732,7 @@ public class MainActivity extends AppCompatActivity {
             writeItem.appName = appName;
             writeItem.isSystem = isSystem;
             writeItem.isCore = isCore;
-            writeItem.isBlockedWrite = (writeSaved != null && writeSaved == PermissionStorage.PERMISSION_BLOCK);
+            writeItem.isBlockedWrite = (writeSaved != null && writeSaved == PermissionDecision.PERMISSION_BLOCK);
             if (isCore) tmpWriteCore.add(writeItem);
             else if (isSystem) tmpWriteSystem.add(writeItem);
             else tmpWriteUser.add(writeItem);
@@ -727,7 +743,7 @@ public class MainActivity extends AppCompatActivity {
             readItem.appName = appName;
             readItem.isSystem = isSystem;
             readItem.isCore = isCore;
-            readItem.isBlockedRead = (readSaved != null && readSaved == PermissionStorage.PERMISSION_BLOCK);
+            readItem.isBlockedRead = (readSaved != null && readSaved == PermissionDecision.PERMISSION_BLOCK);
             if (isCore) tmpReadCore.add(readItem);
             else if (isSystem) tmpReadSystem.add(readItem);
             else tmpReadUser.add(readItem);
@@ -763,14 +779,14 @@ public class MainActivity extends AppCompatActivity {
     private static void sortWriteApps(List<AppItem> list) {
         list.sort((a, b) -> {
             if (a.isBlockedWrite != b.isBlockedWrite) return a.isBlockedWrite ? -1 : 1;
-            return a.appName.compareToIgnoreCase(b.appName);
+            return safeText(a.appName).compareToIgnoreCase(safeText(b.appName));
         });
     }
 
     private static void sortReadApps(List<AppItem> list) {
         list.sort((a, b) -> {
             if (a.isBlockedRead != b.isBlockedRead) return a.isBlockedRead ? -1 : 1;
-            return a.appName.compareToIgnoreCase(b.appName);
+            return safeText(a.appName).compareToIgnoreCase(safeText(b.appName));
         });
     }
 
@@ -786,16 +802,18 @@ public class MainActivity extends AppCompatActivity {
         sortReadApps(mReadCoreApps);
     }
 
+    // ──────────────────── 写入权限列表 ────────────────────────────
+
     private void refreshWritePermissions() {
         List<String[]> savedPerms = PermissionProvider.getAllWritePermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
-        for (String[] row : savedPerms) permMap.put(row[0], Integer.parseInt(row[1]));
+        for (String[] row : savedPerms) putPermissionRow(permMap, row);
 
         for (AppItem item : mWriteUserApps)   applyWritePermToItem(item, permMap);
         for (AppItem item : mWriteSystemApps) applyWritePermToItem(item, permMap);
         for (AppItem item : mWriteCoreApps) {
             Integer saved = permMap.get(item.packageName);
-            item.isBlockedWrite = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+            item.isBlockedWrite = (saved != null && saved == PermissionDecision.PERMISSION_BLOCK);
         }
         sortWriteAppLists();
         applyWriteFilter();
@@ -803,10 +821,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyWritePermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
         Integer saved = permMap.get(item.packageName);
-        item.isBlockedWrite = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+        item.isBlockedWrite = (saved != null && saved == PermissionDecision.PERMISSION_BLOCK);
         Integer pending = mWritePendingChanges.get(item.packageName);
         if (pending != null) {
-            item.isBlockedWrite = (pending == PermissionStorage.PERMISSION_BLOCK);
+            item.isBlockedWrite = (pending == PermissionDecision.PERMISSION_BLOCK);
         }
     }
 
@@ -837,8 +855,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean matchesWrite(AppItem item) {
-        return item.appName.toLowerCase(Locale.ROOT).contains(mWriteCurrentQuery)
-                || item.packageName.toLowerCase(Locale.ROOT).contains(mWriteCurrentQuery);
+        return safeText(item.appName).toLowerCase(Locale.ROOT).contains(mWriteCurrentQuery)
+                || safeText(item.packageName).toLowerCase(Locale.ROOT).contains(mWriteCurrentQuery);
     }
 
     private AppItem getWriteItem(int group, int child) {
@@ -848,16 +866,18 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    // ──────────────────── 读取权限列表 ────────────────────────────
+
     private void refreshReadPermissions() {
         List<String[]> savedPerms = PermissionProvider.getAllReadPermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
-        for (String[] row : savedPerms) permMap.put(row[0], Integer.parseInt(row[1]));
+        for (String[] row : savedPerms) putPermissionRow(permMap, row);
 
         for (AppItem item : mReadUserApps)   applyReadPermToItem(item, permMap);
         for (AppItem item : mReadSystemApps) applyReadPermToItem(item, permMap);
         for (AppItem item : mReadCoreApps) {
             Integer saved = permMap.get(item.packageName);
-            item.isBlockedRead = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+            item.isBlockedRead = (saved != null && saved == PermissionDecision.PERMISSION_BLOCK);
         }
         sortReadAppLists();
         applyReadFilter();
@@ -865,10 +885,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyReadPermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
         Integer saved = permMap.get(item.packageName);
-        item.isBlockedRead = (saved != null && saved == PermissionStorage.PERMISSION_BLOCK);
+        item.isBlockedRead = (saved != null && saved == PermissionDecision.PERMISSION_BLOCK);
         Integer pending = mReadPendingChanges.get(item.packageName);
         if (pending != null) {
-            item.isBlockedRead = (pending == PermissionStorage.PERMISSION_BLOCK);
+            item.isBlockedRead = (pending == PermissionDecision.PERMISSION_BLOCK);
         }
     }
 
@@ -896,8 +916,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean matchesRead(AppItem item) {
-        return item.appName.toLowerCase(Locale.ROOT).contains(mReadCurrentQuery)
-                || item.packageName.toLowerCase(Locale.ROOT).contains(mReadCurrentQuery);
+        return safeText(item.appName).toLowerCase(Locale.ROOT).contains(mReadCurrentQuery)
+                || safeText(item.packageName).toLowerCase(Locale.ROOT).contains(mReadCurrentQuery);
+    }
+
+    private static void putPermissionRow(android.util.ArrayMap<String, Integer> target, String[] row) {
+        if (row == null || row.length < 2 || row[0] == null || row[0].isEmpty()) return;
+        try {
+            target.put(row[0], Integer.parseInt(row[1]));
+        } catch (NumberFormatException ignored) {
+            // 忽略异常行，避免单条脏配置导致应用列表刷新失败。
+        }
+    }
+
+    private static String safeText(String text) {
+        return text != null ? text : "";
     }
 
     private AppItem getReadItem(int group, int child) {
@@ -907,15 +940,17 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    // ──────────────────── 写入权限保存 ────────────────────────────
+
     private void setAllWriteApps(boolean blocked) {
-        int perm = blocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        int perm = blocked ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         for (AppItem i : mWriteUserApps)   { i.isBlockedWrite = blocked; mWritePendingChanges.put(i.packageName, perm); }
         for (AppItem i : mWriteSystemApps) { i.isBlockedWrite = blocked; mWritePendingChanges.put(i.packageName, perm); }
         applyWriteFilter();
     }
 
     private void toggleWriteGroupSelection(int groupPos, boolean select) {
-        int perm = select ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        int perm = select ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         List<AppItem> list;
         if (groupPos == GROUP_USER) {
             list = mWriteFilteredUser;
@@ -943,11 +978,11 @@ public class MainActivity extends AppCompatActivity {
         Map<String, Integer> allWritePerms = new HashMap<>();
         for (AppItem i : mWriteUserApps) {
             allWritePerms.put(i.packageName,
-                    i.isBlockedWrite ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+                    i.isBlockedWrite ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE);
         }
         for (AppItem i : mWriteSystemApps) {
             allWritePerms.put(i.packageName,
-                    i.isBlockedWrite ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+                    i.isBlockedWrite ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE);
         }
 
         PermissionProvider.saveAllWritePermissions(this, allWritePerms);
@@ -966,15 +1001,17 @@ public class MainActivity extends AppCompatActivity {
                 Toast.LENGTH_SHORT).show();
     }
 
+    // ──────────────────── 读取权限保存 ────────────────────────────
+
     private void setAllReadApps(boolean blocked) {
-        int perm = blocked ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        int perm = blocked ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         for (AppItem i : mReadUserApps)   { i.isBlockedRead = blocked; mReadPendingChanges.put(i.packageName, perm); }
         for (AppItem i : mReadSystemApps) { i.isBlockedRead = blocked; mReadPendingChanges.put(i.packageName, perm); }
         applyReadFilter();
     }
 
     private void toggleReadGroupSelection(int groupPos, boolean select) {
-        int perm = select ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE;
+        int perm = select ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         List<AppItem> list;
         if (groupPos == GROUP_USER) {
             list = mReadFilteredUser;
@@ -1002,11 +1039,11 @@ public class MainActivity extends AppCompatActivity {
         Map<String, Integer> allReadPerms = new HashMap<>();
         for (AppItem i : mReadUserApps) {
             allReadPerms.put(i.packageName,
-                    i.isBlockedRead ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+                    i.isBlockedRead ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE);
         }
         for (AppItem i : mReadSystemApps) {
             allReadPerms.put(i.packageName,
-                    i.isBlockedRead ? PermissionStorage.PERMISSION_BLOCK : PermissionStorage.PERMISSION_IGNORE);
+                    i.isBlockedRead ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE);
         }
 
         PermissionProvider.saveAllReadPermissions(this, allReadPerms);
@@ -1023,6 +1060,8 @@ public class MainActivity extends AppCompatActivity {
                 readblocked > 0 ? getString(R.string.save_success, readblocked) : getString(R.string.save_no_block),
                 Toast.LENGTH_SHORT).show();
     }
+
+    // ──────────────────── 规则文件初始化 ────────────────────────────
 
     @SuppressLint("SdCardPath")
     private void initRuleFiles() {
@@ -1041,31 +1080,16 @@ public class MainActivity extends AppCompatActivity {
         File file = new File(getFilesDir(), fileName);
         if (!file.exists()) {
             try {
-                writeFile(file, "[]");
+                writeEmptyJsonFile(file);
             } catch (Exception e) {
                 XLog.e("ClipboardGuard", "initRuleFiles: failed to create " + fileName, e);
             }
         }
     }
 
-    @SuppressWarnings("unused")
-    private String readFile(File file) throws Exception {
-        try (FileInputStream fis = new FileInputStream(file)) {
-            byte[] buffer = new byte[(int) file.length()];
-            int offset = 0;
-            while (offset < buffer.length) {
-                int bytesRead = fis.read(buffer, offset, buffer.length - offset);
-                if (bytesRead == -1) break;
-                offset += bytesRead;
-            }
-            return new String(buffer, 0, offset, StandardCharsets.UTF_8);
-        }
-    }
-
-    @SuppressWarnings("SameParameterValue")
-    private void writeFile(File file, String content) throws Exception {
+    private void writeEmptyJsonFile(File file) throws Exception {
         try (FileOutputStream fos = new FileOutputStream(file)) {
-            fos.write(content.getBytes(StandardCharsets.UTF_8));
+            fos.write("[]".getBytes(StandardCharsets.UTF_8));
             fos.flush();
         }
     }

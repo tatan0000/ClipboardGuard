@@ -27,7 +27,6 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
  * ClipboardGuard - Xposed 读取拦截 Hook。
- *
  * 读取端和写入端一样运行在 system_server 中，不能直接读取模块私有目录文件。
  * 配置依赖 App 侧通过广播推送：读取拦截列表、读取正则规则、读取拒绝 Toast 开关。
  */
@@ -50,14 +49,16 @@ public class ReadHook implements IXposedHookLoadPackage {
     /** 标记广播接收器是否已注册成功。 */
     private static volatile boolean sReadReceiverRegistered = false;
 
-    /** Hook 侧触发配置同步服务是否已发送，防止重复启动。 */
+    /** 配置同步服务是否已触发，防止重复启动。 */
     private static final AtomicBoolean sReadHookTriggerSent = new AtomicBoolean(false);
 
     /** Hook 加载时间，用于日志观察同步时机。 */
     private static volatile long sReadHookLoadTime = 0L;
 
+    // ──────────────────────────── Xposed 入口 ────────────────────────────
+
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             if (MODULE_PKG.equals(lpparam.packageName)) {
                 return;
@@ -75,6 +76,8 @@ public class ReadHook implements IXposedHookLoadPackage {
             XposedBridge.log(t);
         }
     }
+
+    // ──────────────────────────── Hook 注册 ────────────────────────────
 
     /** Hook ClipboardService.getPrimaryClip 方法。 */
     private void hookGetPrimaryClip(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -126,6 +129,8 @@ public class ReadHook implements IXposedHookLoadPackage {
         XLog.e(TAG, "ReadHook 失败：未找到 getPrimaryClip");
     }
 
+    // ──────────────────────────── 配置初始化 ────────────────────────────
+
     /** 尝试注册配置刷新广播接收器。 */
     private static boolean tryRegisterReadReceiver(String tag) {
         if (sReadReceiverRegistered) return true;
@@ -146,7 +151,7 @@ public class ReadHook implements IXposedHookLoadPackage {
         return ok;
     }
 
-    /** 注册成功后启动配置同步服务，让 App 侧推送读取配置。 */
+    /** 注册成功后延迟启动配置同步服务，由 App 侧广播完整读取配置。 */
     private static void startReadConfigSyncServiceOnce() {
         if (!sReadHookTriggerSent.compareAndSet(false, true)) return;
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
@@ -159,12 +164,8 @@ public class ReadHook implements IXposedHookLoadPackage {
                 Intent serviceIntent = new Intent();
                 serviceIntent.setComponent(new ComponentName(MODULE_PKG, MODULE_PKG + ".ConfigSyncService"));
                 serviceIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent);
-                } else {
-                    context.startService(serviceIntent);
-                }
-                XLog.i(TAG, "[Hook触发] 已启动 ConfigSyncService，同步读取配置，耗时 "
+                context.startForegroundService(serviceIntent);
+                XLog.i(TAG, "[Hook触发] 已启动 ConfigSyncService，等待读取配置广播，耗时 "
                         + (System.currentTimeMillis() - sReadHookLoadTime) + "ms");
             } catch (Throwable t) {
                 XLog.e(TAG, "[Hook触发] 启动 ConfigSyncService 失败: " + t.getMessage());
@@ -172,7 +173,7 @@ public class ReadHook implements IXposedHookLoadPackage {
         }, 7000);
     }
 
-    /** 一次性加载读取端需要的配置：写入/读取拦截列表 + 写入/读取内容规则。 */
+    /** 一次性加载读取端需要的配置：读写拦截列表 + 读写内容规则。 */
     private static void loadReadAllConfig(Context context, String tag) {
         if (!PermissionCache.loadFullConfigFromProvider(context)) {
             PermissionCache.loadWriteBlockSet();
@@ -189,15 +190,17 @@ public class ReadHook implements IXposedHookLoadPackage {
         if (!sReadReceiverRegistered) {
             tryRegisterReadReceiver("兜底");
         }
-        if (!PermissionCache.isReadLoaded()) {
+        if (!PermissionCache.isReadLoaded() || !ContentRulesManager.isReadLoaded()) {
             loadReadAllConfig(getReadSystemServerContextStatic(), "读取兜底");
         }
-        return PermissionCache.isReadLoaded();
+        return PermissionCache.isReadLoaded() && ContentRulesManager.isReadLoaded();
     }
+
+    // ──────────────────────────── 读取拦截处理 ────────────────────────────
 
     private static class GetPrimaryClipHook extends XC_MethodHook {
         @Override
-        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+        protected void afterHookedMethod(MethodHookParam param) {
             if (Boolean.TRUE.equals(sIsReadBlockingOperation.get())) return;
             sIsReadBlockingOperation.set(true);
             try {
@@ -240,11 +243,11 @@ public class ReadHook implements IXposedHookLoadPackage {
 
                 ReadDecisionResult readDecisionResult = getReadDecision(systemContext, readPackageName, readPreview, matchedReadRule);
                 int readDecision = readDecisionResult.decision;
-                if (readDecision == PermissionStorage.PERMISSION_IGNORE) {
+                if (readDecision == PermissionDecision.PERMISSION_IGNORE) {
                     writeReadLog(readPackageName, "允许读取", readPreview);
                     return;
                 }
-                if (readDecision == PermissionStorage.PERMISSION_CLEAR && readDecisionResult.shouldClearClipboard) {
+                if (readDecision == PermissionDecision.PERMISSION_CLEAR && readDecisionResult.shouldClearClipboard) {
                     clearClipboard(systemContext);
                     writeReadLog(readPackageName, "拒绝读取并清空剪贴板", readPreview);
                 } else {
@@ -273,7 +276,7 @@ public class ReadHook implements IXposedHookLoadPackage {
                 Integer lastDecision = sLastReadUserDecision.get(readPackageName);
                 if (lastTime != null && now - lastTime < READ_DIALOG_DEBOUNCE_MS && lastDecision != null) {
                     boolean shouldClearClipboard = false;
-                    if (lastDecision == PermissionStorage.PERMISSION_CLEAR
+                    if (lastDecision == PermissionDecision.PERMISSION_CLEAR
                             && !Boolean.TRUE.equals(sLastReadClearConsumed.get(readPackageName))) {
                         shouldClearClipboard = true;
                         sLastReadClearConsumed.put(readPackageName, true);
@@ -283,7 +286,7 @@ public class ReadHook implements IXposedHookLoadPackage {
             }
 
             int readDecision = askReadUser(context, readPackageName, readPreview, matchedReadRule);
-            boolean shouldClearClipboard = readDecision == PermissionStorage.PERMISSION_CLEAR;
+            boolean shouldClearClipboard = readDecision == PermissionDecision.PERMISSION_CLEAR;
             synchronized (sReadDebounceLock) {
                 sLastReadUserDecision.put(readPackageName, readDecision);
                 sLastReadDecisionTime.put(readPackageName, System.currentTimeMillis());
@@ -293,15 +296,15 @@ public class ReadHook implements IXposedHookLoadPackage {
         }
 
         private int askReadUser(Context context, String readPackageName, String readPreview, String matchedReadRule) {
-            AtomicInteger readDecision = new AtomicInteger(PermissionStorage.PERMISSION_BLOCK);
+            AtomicInteger readDecision = new AtomicInteger(PermissionDecision.PERMISSION_BLOCK);
             try {
                 InlineDialogManager dialogManager = InlineDialogManager.getInstance(context);
                 boolean shown = dialogManager.showReadDialogWithContent(
                         readPackageName, readPreview, matchedReadRule, readDecision);
-                if (!shown) return PermissionStorage.PERMISSION_BLOCK;
+                if (!shown) return PermissionDecision.PERMISSION_BLOCK;
             } catch (Throwable e) {
                 XLog.e(TAG, "读取弹窗异常: " + e.getMessage());
-                return PermissionStorage.PERMISSION_BLOCK;
+                return PermissionDecision.PERMISSION_BLOCK;
             }
             return readDecision.get();
         }
@@ -383,7 +386,7 @@ public class ReadHook implements IXposedHookLoadPackage {
                 PackageManager packageManager = context.getPackageManager();
                 ApplicationInfo appInfo = packageManager.getApplicationInfo(readPackageName, 0);
                 CharSequence label = packageManager.getApplicationLabel(appInfo);
-                if (label != null && label.length() > 0) return label.toString();
+                if (label.length() > 0) return label.toString();
             } catch (Throwable ignored) {
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -391,6 +394,8 @@ public class ReadHook implements IXposedHookLoadPackage {
             return readPackageName;
         }
     }
+
+    // ──────────────────────────── 读取决策结果 ────────────────────────────
 
     private static class ReadDecisionResult {
         final int decision;
@@ -401,6 +406,8 @@ public class ReadHook implements IXposedHookLoadPackage {
             this.shouldClearClipboard = shouldClearClipboard;
         }
     }
+
+    // ──────────────────────────── 公共辅助方法 ────────────────────────────
 
     private static Context getReadSystemServerContextStatic() {
         for (int retry = 0; retry < 3; retry++) {
@@ -440,7 +447,7 @@ public class ReadHook implements IXposedHookLoadPackage {
         }
         if (!PermissionCache.isLsposedLogEnabled()) return;
         XLog.i(TAG, "[" + readPackageName + "] " + readAction + ": "
-                + PrivacyLogUtils.maskClipboardContent(readContent));
+                + XLog.maskClipboardContent(readContent));
     }
 
     private static final HashSet<String> sReadCorePackagesSet = new HashSet<>(Arrays.asList(

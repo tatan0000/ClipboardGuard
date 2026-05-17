@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ===== Material3 完整颜色系统 ===== -->
+    <!--
+        浅色颜色表。
+        主题文件只引用这些语义颜色；暗色模式下同名颜色由 values-night/colors.xml 覆盖。
+    -->
     <!-- 主色系统（iOS 蓝） -->
     <color name="color_primary">#007AFF</color>
     <color name="color_primary_dark">#0056CC</color>

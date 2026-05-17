@@ -5,6 +5,7 @@
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground">
 
+    <!-- 普通模式：显示启用开关、规则名称、规则正则和编辑/删除按钮。 -->
     <LinearLayout
         android:id="@+id/layout_normal"
         android:layout_width="match_parent"
@@ -73,7 +74,7 @@
 
     </LinearLayout>
 
-    <!-- 批量选择模式布局 -->
+    <!-- 批量选择模式：隐藏编辑/删除按钮，改为显示选择框和启用状态。 -->
     <LinearLayout
         android:id="@+id/layout_selection"
         android:layout_width="match_parent"

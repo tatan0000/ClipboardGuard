@@ -18,7 +18,7 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
-    <!-- 全选 CheckBox -->
+    <!-- 分组全选 CheckBox：复用应用列表单项的三态方框样式。 -->
     <CheckBox
         android:id="@+id/cb_select_all"
         android:layout_width="wrap_content"
@@ -26,7 +26,7 @@
         android:layout_marginStart="8dp"
         android:minWidth="48dp"
         android:minHeight="48dp"
-        android:button="@drawable/checkbox_select_all"
+        android:button="@drawable/checkbox_custom"
         android:clickable="true"
         android:focusable="true" />
 

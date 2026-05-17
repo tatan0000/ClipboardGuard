@@ -6,7 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Binder;
-import android.os.Bundle;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.ArrayList;
@@ -24,9 +24,10 @@ import java.util.Set;
  */
 public class PermissionCache {
 
+    // ──────────────────────────── 缓存状态 ────────────────────────────
+
     private static final String TAG = "ClipboardGuard.PermCache";
 
-    // ── 缓存集合 ──
     private static final Set<String> sWriteBlockSet = new HashSet<>();
     private static boolean sWriteLoaded = false;
 
@@ -35,10 +36,9 @@ public class PermissionCache {
     private static volatile boolean sReadBlockedToastEnabled = true;
     private static volatile boolean sLsposedLogEnabled = true;
 
-    // ── 广播接收器 ──
     private static BroadcastReceiver sRefreshReceiver;
 
-    // ──────────────────────────── 加载方法（无 Context 参数） ────────────────────────────
+    // ──────────────────────────── 本地缓存加载 ────────────────────────────
 
     public static synchronized void loadWriteBlockSet() {
         XLog.i(TAG, "loadWriteBlockSet 开始...");
@@ -48,7 +48,7 @@ public class PermissionCache {
             sWriteBlockSet.clear();
             Map<String, Integer> all = PermissionProvider.getAllWritePermissionsDirect(null);
             for (Map.Entry<String, Integer> e : all.entrySet()) {
-                if (e.getValue() == PermissionStorage.PERMISSION_BLOCK) {
+                if (e.getValue() == PermissionDecision.PERMISSION_BLOCK) {
                     sWriteBlockSet.add(e.getKey());
                 }
             }
@@ -70,7 +70,7 @@ public class PermissionCache {
             sReadBlockSet.clear();
             Map<String, Integer> all = PermissionProvider.getAllReadPermissionsDirect(null);
             for (Map.Entry<String, Integer> e : all.entrySet()) {
-                if (e.getValue() == PermissionStorage.PERMISSION_BLOCK) {
+                if (e.getValue() == PermissionDecision.PERMISSION_BLOCK) {
                     sReadBlockSet.add(e.getKey());
                 }
             }
@@ -84,7 +84,7 @@ public class PermissionCache {
         }
     }
 
-    // ──────────────────────────── 广播/文件事件触发更新 ────────────────────────────
+    // ──────────────────────────── 广播数据更新 ────────────────────────────
 
     public static synchronized void updateFromWriteBlockList(ArrayList<String> blocklist) {
         if (blocklist == null) return;
@@ -102,7 +102,7 @@ public class PermissionCache {
         sReadLoaded = true;
     }
 
-    // ──────────────────────────── 被动刷新（广播触发） ────────────────────────────
+    // ──────────────────────────── Provider / 文件兜底加载 ────────────────────────────
 
     public static synchronized void refreshWriteBlockSet() {
         XLog.i(TAG, "被动刷新 writeBlockSet...");
@@ -118,20 +118,21 @@ public class PermissionCache {
         if (context == null) return false;
         long identity = Binder.clearCallingIdentity();
         try {
-            updateFromWriteBlockList(loadBlocklistFromFile("/data/data/com.android.clipboardguard/files/write_blocklist.txt"));
-            updateFromReadBlockList(loadBlocklistFromFile("/data/data/com.android.clipboardguard/files/read_blocklist.txt"));
+            // system_server 兜底读取模块私有文件；优先路径仍是 App 侧广播推送。
+            String filesDir = context.createPackageContext(
+                    "com.android.clipboardguard", Context.CONTEXT_IGNORE_SECURITY)
+                    .getFilesDir().getPath();
+            String prefsFile = new java.io.File(filesDir).getParent()
+                    + "/shared_prefs/clipboardguard_prefs.xml";
+
+            updateFromWriteBlockList(loadBlocklistFromFile(filesDir + "/write_blocklist.txt"));
+            updateFromReadBlockList(loadBlocklistFromFile(filesDir + "/read_blocklist.txt"));
 
             loadRulesFromFileOrDefault(true);
             loadRulesFromFileOrDefault(false);
 
-            sReadBlockedToastEnabled = readBooleanFromFile(
-                    "/data/data/com.android.clipboardguard/shared_prefs/clipboardguard_prefs.xml",
-                    "read_blocked_toast_enabled",
-                    true);
-            sLsposedLogEnabled = readBooleanFromFile(
-                    "/data/data/com.android.clipboardguard/shared_prefs/clipboardguard_prefs.xml",
-                    "lsposed_log_enabled",
-                    true);
+            sReadBlockedToastEnabled = readBooleanFromFile(prefsFile, "read_blocked_toast_enabled");
+            sLsposedLogEnabled = readBooleanFromFile(prefsFile, "lsposed_log_enabled");
             XLog.i(TAG, "loadFullConfigFromProvider 完成，write=" + sWriteBlockSet.size()
                     + " read=" + sReadBlockSet.size()
                     + " toast=" + sReadBlockedToastEnabled
@@ -169,7 +170,7 @@ public class PermissionCache {
         }
     }
 
-    private static boolean readBooleanFromFile(String filePath, String key, boolean defaultValue) {
+    private static boolean readBooleanFromFile(String filePath, String key) {
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             String prefix = key + "=";
@@ -182,12 +183,12 @@ public class PermissionCache {
         } catch (Throwable e) {
             XLog.w(TAG, "readBooleanFromFile 失败: " + filePath + " -> " + e.getMessage());
         }
-        return defaultValue;
+        return true;
     }
 
     // ──────────────────────────── 广播接收器注册 ────────────────────────────
 
-    /*
+    /**
      * 注册权限变更广播接收器。
      *
      * @param context system_server Context
@@ -203,25 +204,23 @@ public class PermissionCache {
                 public void onReceive(Context ctx, Intent intent) {
                     XLog.d(TAG, "收到权限变更广播");
 
-                    // 处理写入拦截列表
+                    // 写入/读取拦截列表：即使为空也要更新，表示用户清空了勾选项。
                     ArrayList<String> writeBlocklist = intent.getStringArrayListExtra("write_blocklist");
                     if (intent.hasExtra("write_blocklist")) {
                         updateFromWriteBlockList(writeBlocklist != null ? writeBlocklist : new ArrayList<>());
                     }
 
-                    // 处理读取拦截列表
                     ArrayList<String> readBlocklist = intent.getStringArrayListExtra("read_blocklist");
                     if (intent.hasExtra("read_blocklist")) {
                         updateFromReadBlockList(readBlocklist != null ? readBlocklist : new ArrayList<>());
                     }
 
-                    // 处理写入规则 JSON
+                    // 规则 JSON：只在携带有效内容时更新。
                     String writeRulesJson = intent.getStringExtra("write_rules_json");
                     if (intent.hasExtra("write_rules_json") && writeRulesJson != null && !writeRulesJson.isEmpty()) {
                         ContentRulesManager.updateWriteRulesFromJson(writeRulesJson);
                     }
 
-                    // 处理读取规则 JSON
                     String readRulesJson = intent.getStringExtra("read_rules_json");
                     if (intent.hasExtra("read_rules_json") && readRulesJson != null && !readRulesJson.isEmpty()) {
                         ContentRulesManager.updateReadRulesFromJson(readRulesJson);
@@ -251,9 +250,7 @@ public class PermissionCache {
             IntentFilter filter = new IntentFilter(PermissionProvider.ACTION_PERMISSION_CHANGED);
             long identity = Binder.clearCallingIdentity();
             try {
-                // ★ 必须使用 RECEIVER_EXPORTED（或 EXPORTED_UNAUDITED），
-                // 因为广播发送方是 App 进程，接收方在 system_server，
-                // RECEIVER_NOT_EXPORTED 会导致跨进程广播收不到！
+                // 广播发送方是 App 进程，接收方在 system_server，必须允许跨进程接收。
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                     context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
                 } else {
@@ -285,7 +282,6 @@ public class PermissionCache {
         return !sWriteBlockSet.contains(packageName);
     }
 
-    @SuppressWarnings("unused")
     public static boolean isReadIgnored(String packageName) {
         if (!sReadLoaded) {
             XLog.w(TAG, "读取缓存未加载，暂时放行: " + packageName);
@@ -294,42 +290,16 @@ public class PermissionCache {
         return !sReadBlockSet.contains(packageName);
     }
 
-    @SuppressWarnings("unused")
     public static boolean isWriteLoaded() { return sWriteLoaded; }
 
-    @SuppressWarnings("unused")
     public static boolean isReadLoaded() { return sReadLoaded; }
 
-    @SuppressWarnings("unused")
     public static boolean isReadBlockedToastEnabled() { return sReadBlockedToastEnabled; }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean isLsposedLogEnabled() { return sLsposedLogEnabled; }
 
-    @SuppressWarnings("unused")
     public static int getWriteBlockSetSize() { return sWriteBlockSet.size(); }
 
-    @SuppressWarnings("unused")
     public static int getReadBlockSetSize() { return sReadBlockSet.size(); }
-
-    @SuppressWarnings("unused")
-    public static void removeFromBlockSet(Context context, String packageName) {
-        if (packageName == null || packageName.isEmpty()) return;
-        sWriteBlockSet.remove(packageName);
-        if (context != null) {
-            PermissionProvider.saveWritePermission(context, packageName, PermissionStorage.PERMISSION_IGNORE);
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public static synchronized void clearWriteBlockSet() {
-        sWriteBlockSet.clear();
-        sWriteLoaded = false;
-    }
-
-    @SuppressWarnings("unused")
-    public static synchronized void clearReadBlockSet() {
-        sReadBlockSet.clear();
-        sReadLoaded = false;
-    }
 }

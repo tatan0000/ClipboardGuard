@@ -45,8 +45,6 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
     private RecyclerView mRvWriteRulesDetail;
     private SwitchCompat mSwitchWriteRulesEnabled;
-    private TextView mTvWriteRulesHint;
-    private MaterialButton mBtnAddWriteRule;
 
     private boolean mWriteRulesEnabled = false;
     private final List<ContentRule> mWriteRules = new ArrayList<>();
@@ -57,9 +55,6 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
     private View mWriteBatchCard;
     private TextView mWriteSelectedCount;
-    private TextView mWriteDeleteSelected;
-    private TextView mWriteEnableSelected;
-    private TextView mWriteDisableSelected;
 
     private boolean mShowDefaultRules = false;
     private final List<ContentRule> mWriteDefaultRules = new ArrayList<>();
@@ -77,6 +72,10 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     private volatile boolean mDestroyed = false;
 
     private AlertDialog mCurrentRuleDialog;
+
+    // ═══════════════════════════════════════════════════════════════
+    // 生命周期与基础初始化
+    // ═══════════════════════════════════════════════════════════════
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -147,22 +146,26 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
         mRvWriteRulesDetail = findViewById(R.id.rv_write_rules_detail);
         mSwitchWriteRulesEnabled = findViewById(R.id.switch_write_rules_enabled);
-        mTvWriteRulesHint = findViewById(R.id.tv_write_rules_hint);
-        mBtnAddWriteRule = findViewById(R.id.btn_add_write_rule);
+        TextView tvWriteRulesHint = findViewById(R.id.tv_write_rules_hint);
+        MaterialButton btnAddWriteRule = findViewById(R.id.btn_add_write_rule);
 
         mWriteBatchCard = findViewById(R.id.card_batch_actions_main);
         mWriteSelectedCount = findViewById(R.id.tv_selected_count);
         TextView btnSelectAll = findViewById(R.id.btn_select_all_rules);
-        mWriteDeleteSelected = findViewById(R.id.btn_delete_selected);
-        mWriteEnableSelected = findViewById(R.id.btn_enable_selected);
-        mWriteDisableSelected = findViewById(R.id.btn_disable_selected);
+        TextView writeDeleteSelected = findViewById(R.id.btn_delete_selected);
+        TextView writeEnableSelected = findViewById(R.id.btn_enable_selected);
+        TextView writeDisableSelected = findViewById(R.id.btn_disable_selected);
+
+        if (tvWriteRulesHint != null) {
+            tvWriteRulesHint.setText(R.string.rules_write_hint);
+        }
 
         mSwitchWriteRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
             mWriteRulesEnabled = isChecked;
             saveWriteRules(); // 用户操作，保存并广播
         });
 
-        mBtnAddWriteRule.setOnClickListener(v -> showEditWriteRuleDialog());
+        btnAddWriteRule.setOnClickListener(v -> showEditWriteRuleDialog());
 
         btnSelectAll.setOnClickListener(v -> {
             if (mWriteSelectedRules.size() == mWriteRules.size()) mWriteSelectedRules.clear();
@@ -171,9 +174,9 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             updateWriteSelectedCount();
         });
 
-        mWriteDeleteSelected.setOnClickListener(v -> deleteWriteSelectedRules());
-        mWriteEnableSelected.setOnClickListener(v -> enableWriteSelectedRules(true));
-        mWriteDisableSelected.setOnClickListener(v -> enableWriteSelectedRules(false));
+        writeDeleteSelected.setOnClickListener(v -> deleteWriteSelectedRules());
+        writeEnableSelected.setOnClickListener(v -> enableWriteSelectedRules(true));
+        writeDisableSelected.setOnClickListener(v -> enableWriteSelectedRules(false));
 
         View cardDefaultRules = findViewById(R.id.card_write_default_rules);
         if (cardDefaultRules != null) cardDefaultRules.setOnClickListener(v -> showDefaultRulesPage());
@@ -197,6 +200,10 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
         mHandler.post(this::loadDefaultWriteRulesAsync);
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 页面初始化与切换
+    // ═══════════════════════════════════════════════════════════════
 
     private void initWriteRulesDetailPage() {
         if (mWriteRulesAdapter == null) mWriteRulesAdapter = new WriteRulesAdapter(mWriteRules);
@@ -248,7 +255,8 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
         mWriteDefaultRules.clear();
         for (String[] ruleDef : template) {
-            boolean enabled = oldEnabledStates.getOrDefault(ruleDef[0], false);
+            Boolean oldEnabled = oldEnabledStates.get(ruleDef[0]);
+            boolean enabled = oldEnabled != null && oldEnabled;
             mWriteDefaultRules.add(new ContentRule(ruleDef[0], ruleDef[1], enabled, true));
         }
 
@@ -257,17 +265,19 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             saveDefaultWriteRulesToFile(); // 仅写入文件，不广播
         }
 
-        mHandler.post(() -> {
-            if (mWriteDefaultRulesAdapter != null) mWriteDefaultRulesAdapter.notifyDataSetChanged();
-        });
+        mHandler.post(this::refreshWriteDefaultRulesAdapter);
     }
 
     private String[][] getWriteDefaultRulesTemplate() {
         return new String[][] {
                 {"广告关键词", "(?:推广|广告|秒杀|限时抢购|领券|优惠券)"},
-                {"电商口令", "([￥$₴¢€£¥/\\\\])[A-Za-z0-9]{6,}\\1"}
+                {"电商口令", "[￥$₴¢€£¥√|*#][A-Za-z0-9]{3,}[￥$₴¢€£¥√|*#]"}
         };
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 默认写入规则选择
+    // ═══════════════════════════════════════════════════════════════
 
     private void enterWriteDefaultSelectionMode(ContentRule rule) {
         mWriteDefaultSelectionMode = true;
@@ -294,7 +304,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         if (mWriteDefaultSelectedRules.isEmpty()) return;
         for (ContentRule rule : mWriteDefaultSelectedRules) rule.enabled = enable;
         saveDefaultWriteRules(); // 用户操作，保存并广播
-        if (mWriteDefaultRulesAdapter != null) mWriteDefaultRulesAdapter.notifyDataSetChanged();
+        refreshWriteDefaultRulesAdapter();
         exitWriteDefaultSelectionMode();
     }
 
@@ -387,7 +397,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         tvStatus.setText(rule.enabled ? "已启用" : "已禁用");
         tvStatus.setTextColor(rule.enabled ?
                 ContextCompat.getColor(this, R.color.status_active) :
-                ContextCompat.getColor(this, R.color.nav_unselected));
+                ContextCompat.getColor(this, R.color.status_inactive));
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.rules_dialog_title_view)
                 .setView(dialogView)
@@ -456,12 +466,12 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         catch (Exception e) { tilPattern.setError(getString(R.string.rules_regex_error)); return; }
 
         if (isEdit && rule != null) {
-            rule.name = name; rule.pattern = pattern; rule.enabled = true; rule.compilePattern();
+            rule.name = name; rule.pattern = pattern; rule.compilePattern();
         } else {
             mWriteRules.add(new ContentRule(name, pattern, true));
         }
         saveWriteRules(); // 用户操作，保存并广播
-        if (mWriteRulesAdapter != null) mWriteRulesAdapter.notifyDataSetChanged();
+        refreshWriteRulesAdapter();
         mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
         mCurrentRuleDialog.dismiss();
     }
@@ -493,7 +503,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
                     mWriteRules.removeAll(mWriteSelectedRules);
                     saveWriteRules(); // 用户操作，保存并广播
-                    if (mWriteRulesAdapter != null) mWriteRulesAdapter.notifyDataSetChanged();
+                    refreshWriteRulesAdapter();
                     mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
                     exitWriteSelectionMode();
                 }).setNegativeButton(android.R.string.cancel, null).show();
@@ -504,7 +514,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
                     mWriteRules.remove(rule);
                     saveWriteRules(); // 用户操作，保存并广播
-                    if (mWriteRulesAdapter != null) mWriteRulesAdapter.notifyDataSetChanged();
+                    refreshWriteRulesAdapter();
                     mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
                 }).setNegativeButton(android.R.string.cancel, null).show();
     }
@@ -512,7 +522,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         if (mWriteSelectedRules.isEmpty()) return;
         for (ContentRule rule : mWriteSelectedRules) rule.enabled = enable;
         saveWriteRules(); // 用户操作，保存并广播
-        if (mWriteRulesAdapter != null) mWriteRulesAdapter.notifyDataSetChanged();
+        refreshWriteRulesAdapter();
         exitWriteSelectionMode();
     }
 
@@ -556,7 +566,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
                         saveWriteRules();
                     });
                 }
-                if (mWriteRulesAdapter != null) mWriteRulesAdapter.notifyDataSetChanged();
+                refreshWriteRulesAdapter();
                 if (mRvWriteRulesDetail != null)
                     mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
             });
@@ -592,12 +602,14 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         WriteRulesAdapter(List<ContentRule> rules) { this(rules, false); }
         WriteRulesAdapter(List<ContentRule> rules, boolean isDefaultRules) { mRulesList = rules; mIsDefaultRules = isDefaultRules; }
 
-        @Override public WriteRuleViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        @Override
+        @androidx.annotation.NonNull
+        public WriteRuleViewHolder onCreateViewHolder(@androidx.annotation.NonNull ViewGroup parent, int viewType) {
             return new WriteRuleViewHolder(getLayoutInflater().inflate(R.layout.item_content_rule, parent, false));
         }
 
         @Override
-        public void onBindViewHolder(WriteRuleViewHolder holder, int position) {
+        public void onBindViewHolder(@androidx.annotation.NonNull WriteRuleViewHolder holder, int position) {
             ContentRule rule = mRulesList.get(position);
             boolean selectionMode = mIsDefaultRules ? mWriteDefaultSelectionMode : mWriteRulesSelectionMode;
             Set<ContentRule> selectedSet = mIsDefaultRules ? mWriteDefaultSelectedRules : mWriteSelectedRules;
@@ -610,7 +622,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
                 holder.tvRuleStatus.setText(rule.enabled ? "已启用" : "已禁用");
                 holder.tvRuleStatus.setTextColor(rule.enabled ?
                         ContextCompat.getColor(WriteRulesDetailActivity.this, R.color.status_active) :
-                        ContextCompat.getColor(WriteRulesDetailActivity.this, R.color.nav_unselected));
+                        ContextCompat.getColor(WriteRulesDetailActivity.this, R.color.status_inactive));
                 holder.cbSelected.setChecked(isSelected);
                 holder.itemView.setOnClickListener(v -> {
                     if (isSelected) selectedSet.remove(rule); else selectedSet.add(rule);
@@ -645,8 +657,8 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         }
 
         @Override public int getItemCount() { return mRulesList.size(); }
-        void refreshSelectionMode() { notifyDataSetChanged(); }
-
+        void refreshSelectionMode() { notifyItemRangeChanged(0, getItemCount()); }
+    
         class WriteRuleViewHolder extends RecyclerView.ViewHolder {
             View layoutNormal; SwitchCompat switchEnabled; TextView tvName, tvPattern; View btnEdit, btnDelete;
             View layoutSelection; CheckBox cbSelected; TextView tvNameSel, tvPatternSel, tvRuleStatus;
@@ -666,6 +678,22 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             }
         }
     }
+
+    private void refreshWriteRulesAdapter() {
+        if (mWriteRulesAdapter != null) {
+            mWriteRulesAdapter.refreshSelectionMode();
+        }
+    }
+
+    private void refreshWriteDefaultRulesAdapter() {
+        if (mWriteDefaultRulesAdapter != null) {
+            mWriteDefaultRulesAdapter.refreshSelectionMode();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 生命周期清理
+    // ═══════════════════════════════════════════════════════════════
 
     @Override
     protected void onDestroy() {

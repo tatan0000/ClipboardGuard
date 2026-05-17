@@ -6,7 +6,7 @@
             <!-- 蓝色边框方框 -->
             <item>
                 <shape android:shape="rectangle">
-                    <stroke android:width="2dp" android:color="#2196F3" />
+                    <stroke android:width="2dp" android:color="@color/nav_selected" />
                     <corners android:radius="4dp" />
                     <solid android:color="@android:color/transparent" />
                     <size android:width="24dp" android:height="24dp" />
@@ -20,7 +20,7 @@
                     android:viewportWidth="24"
                     android:viewportHeight="24">
                     <path
-                        android:fillColor="#2196F3"
+                        android:fillColor="@color/nav_selected"
                         android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z" />
                 </vector>
             </item>
@@ -32,7 +32,7 @@
             <!-- 蓝色边框方框 -->
             <item>
                 <shape android:shape="rectangle">
-                    <stroke android:width="2dp" android:color="#2196F3" />
+                    <stroke android:width="2dp" android:color="@color/nav_selected" />
                     <corners android:radius="4dp" />
                     <solid android:color="@android:color/transparent" />
                     <size android:width="24dp" android:height="24dp" />
@@ -46,7 +46,7 @@
                     android:viewportWidth="24"
                     android:viewportHeight="24">
                     <path
-                        android:fillColor="#BDBDBD"
+                        android:fillColor="@color/nav_unselected"
                         android:pathData="M19,13H5v-2h14v2z" />
                 </vector>
             </item>
@@ -58,7 +58,7 @@
             <!-- 灰色边框方框 -->
             <item>
                 <shape android:shape="rectangle">
-                    <stroke android:width="2dp" android:color="#BDBDBD" />
+                    <stroke android:width="2dp" android:color="@color/nav_unselected" />
                     <corners android:radius="4dp" />
                     <solid android:color="@android:color/transparent" />
                     <size android:width="24dp" android:height="24dp" />
@@ -72,7 +72,7 @@
                     android:viewportWidth="24"
                     android:viewportHeight="24">
                     <path
-                        android:fillColor="#BDBDBD"
+                        android:fillColor="@color/nav_unselected"
                         android:pathData="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z" />
                 </vector>
             </item>

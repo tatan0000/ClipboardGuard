@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ===== Material3 完整颜色系统 - 深色模式 ===== -->
+    <!--
+        暗色颜色表。
+        这里通过同名 color 覆盖 values/colors.xml，布局和主题无需区分亮/暗模式。
+    -->
     <!-- 主色系统（iOS 蓝） - 深色模式稍亮 -->
     <color name="color_primary">#0A84FF</color>
     <color name="color_primary_dark">#0066CC</color>
@@ -62,24 +65,13 @@
 
     <!-- 按钮 -->
     <color name="btn_allow_text">#0A84FF</color>
-    <color name="btn_deny_text">#8E8E93</color>
     <color name="btn_pressed_bg">#3A3A3C</color>
 
     <!-- 状态 -->
     <color name="status_active">#30D158</color>
-    <color name="status_inactive">#8E8E93</color>
+    <color name="status_inactive">#FF453A</color>
 
     <!-- 底部导航 -->
-    <color name="bottom_nav_selected">@color/color_primary</color>
-    <color name="nav_selected">#2196F3</color>
+    <color name="nav_selected">#0A84FF</color>
     <color name="nav_unselected">#B0B0B0</color>
-
-    <!-- Material 标准色 -->
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
 </resources>

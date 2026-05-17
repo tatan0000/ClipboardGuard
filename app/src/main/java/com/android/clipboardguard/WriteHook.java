@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -23,12 +24,10 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
  * ClipboardGuard - Xposed 写入拦截 Hook
- *
- * 初始化策略（v5 - 2026-05-05）：
- * - 开机立即注册广播接收器必定失败（AMS 未就绪），不再尝试。
- * - 改为两级延迟注册：5s 第一次尝试，8s 第二次兜底。
- * - 配置依赖 App 侧推送：BootReceiver 自启动（12s/15s）、打开 App、保存配置时。
- * - 首次复制时 ensureInitialized() 确保广播接收器已注册。
+ * 初始化策略：
+ * - 不在开机瞬间注册广播接收器，改为延迟两次兜底。
+ * - 配置主要依赖 App 侧推送，Hook 侧再补一层启动服务。
+ * - 首次复制时 ensureInitialized() 会兜底检查初始化状态。
  */
 public class WriteHook implements IXposedHookLoadPackage {
 
@@ -36,22 +35,27 @@ public class WriteHook implements IXposedHookLoadPackage {
     private static final String MODULE_PKG = "com.android.clipboardguard";
     private static final long DEBOUNCE_MS = 2000;
 
-    private static final Map<String, Long>    sLastDecisionTime = new HashMap<>();
+    private static final Map<String, Long> sLastDecisionTime = new HashMap<>();
     private static final Map<String, Integer> sLastUserDecision = new HashMap<>();
     private static final Object sDebounceLock = new Object();
 
     private static final ThreadLocal<Boolean> sInAfterHook = ThreadLocal.withInitial(() -> false);
-    private static volatile boolean sIsBlockingOperation = false;
+    /** 防止同一 Binder 线程内递归触发写入 Hook，避免进程级标记误影响其它调用线程。 */
+    private static final ThreadLocal<Boolean> sIsBlockingOperation = ThreadLocal.withInitial(() -> false);
 
     /** 标记广播接收器是否已注册成功 */
     private static volatile boolean sReceiverRegistered = false;
 
     /** Hook 侧触发广播是否已发送（防止重复） */
-    private static final java.util.concurrent.atomic.AtomicBoolean sHookTriggerSent = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static final AtomicBoolean sHookTriggerSent = new AtomicBoolean(false);
+
+    /** Hook 加载时间，用于计算广播发送时机 */
+    private static volatile long sHookLoadTime = 0;
+
+    // ──────────────────────────── Xposed 入口 ────────────────────────────
 
     @Override
-    @SuppressWarnings("RedundantThrows")
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             if (MODULE_PKG.equals(lpparam.packageName)) {
                 if (!"android".equals(lpparam.processName)) {
@@ -60,10 +64,7 @@ public class WriteHook implements IXposedHookLoadPackage {
                 return;
             }
             if ("android".equals(lpparam.packageName)) {
-                // 初始化策略（v6 - 2026-05-05）：
-        // Hook 侧：5s/8s 注册广播接收器 → 注册成功后 12s 启动 ConfigSyncService
-        // BootReceiver 侧：收到广播后 12s 启动 ConfigSyncService（兜底）
-        // 初始化 XLog：传入 XposedBridge.log(String) 方法引用
+                // 初始化日志桥接，让 Hook 侧日志输出到 LSPosed Manager。
                 try {
                     XLog.init(XposedBridge.class.getMethod("log", String.class));
                 } catch (NoSuchMethodException e) {
@@ -76,6 +77,8 @@ public class WriteHook implements IXposedHookLoadPackage {
             XposedBridge.log(t);
         }
     }
+
+    // ──────────────────────────── Hook 注册 ────────────────────────────
 
     private void hookSelfForActiveStatus(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -123,12 +126,12 @@ public class WriteHook implements IXposedHookLoadPackage {
                         // 记录 Hook 加载时间，用于计算后续触发时间
                         sHookLoadTime = System.currentTimeMillis();
 
-                        // ★ 初始化代码必须用 try-catch 包裹！
+                        // 初始化代码必须用 try-catch 包裹。
                         // 如果这里抛出未捕获的异常，会导致 handleLoadPackage 整体失败，
                         // LSPosed 会标记模块为异常状态并禁用 Hook
                         try {
                             // 开机立即注册必定失败（AMS 未就绪），不再尝试
-                            // 改为两级延迟注册：5s → 8s
+                            // 两级延迟注册：先 5s，失败后 8s 兜底。
                             final Handler initHandler = new Handler(Looper.getMainLooper());
 
                             // 第一级：延迟 5s 注册
@@ -165,8 +168,7 @@ public class WriteHook implements IXposedHookLoadPackage {
         XLog.e(TAG, "WriteHook失败：未找到 setPrimaryClip");
     }
 
-    /** Hook 加载时间，用于计算广播发送时机 */
-    private static volatile long sHookLoadTime = 0;
+    // ──────────────────────────── 配置初始化 ────────────────────────────
 
     /**
      * 尝试注册广播接收器。
@@ -186,8 +188,7 @@ public class WriteHook implements IXposedHookLoadPackage {
             XLog.i(TAG, "[" + tag + "] 广播接收器注册成功");
             loadAllConfig(ctx, tag);
 
-            // ★ Hook 侧触发：注册成功后延迟 5s 直接启动 ConfigSyncService
-            // 绕过 AMS broadcast 检查，消除 "non-protected broadcast" 警告
+            // 注册成功后延迟启动配置同步服务，由 App 侧广播完整配置。
             if (sHookTriggerSent.compareAndSet(false, true)) {
                 Handler hookTriggerHandler = new Handler(Looper.getMainLooper());
                 hookTriggerHandler.postDelayed(() -> {
@@ -198,19 +199,14 @@ public class WriteHook implements IXposedHookLoadPackage {
                             serviceIntent.setComponent(new ComponentName(
                                     MODULE_PKG, MODULE_PKG + ".ConfigSyncService"));
                             serviceIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                            // Android O+ 需要 startForegroundService
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                ctx2.startForegroundService(serviceIntent);
-                            } else {
-                                ctx2.startService(serviceIntent);
-                            }
+                            ctx2.startForegroundService(serviceIntent);
                             XLog.i(TAG, "[Hook触发] 已直接启动 ConfigSyncService (约"
                                     + (System.currentTimeMillis() - sHookLoadTime) + "ms)");
                         }
                     } catch (Throwable t) {
                         XLog.e(TAG, "[Hook触发] 启动服务失败: " + t.getMessage());
                     }
-                }, 7000);  // ★ 注册成功后延迟7s启动：5s注册→12s，8s注册→15s
+                }, 7000); // 5s 注册 + 7s 延迟，整体约 12s；8s 注册则约 15s
             }
         } else {
             XLog.w(TAG, "[" + tag + "] 广播接收器注册失败，将稍后重试");
@@ -229,15 +225,16 @@ public class WriteHook implements IXposedHookLoadPackage {
         XLog.i(TAG, "[" + tag + "] 配置加载完成，writeBlockSet.size=" + PermissionCache.getWriteBlockSetSize());
     }
 
+    // ──────────────────────────── 写入拦截处理 ────────────────────────────
+
     private static class ClipboardServiceHook extends XC_MethodHook {
 
         private static final ThreadLocal<Boolean> sShouldBlock = new ThreadLocal<>();
 
         @Override
-        @SuppressWarnings("RedundantThrows")
-        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-            if (sIsBlockingOperation) return;
-            sIsBlockingOperation = true;
+        protected void beforeHookedMethod(MethodHookParam param) {
+            if (Boolean.TRUE.equals(sIsBlockingOperation.get())) return;
+            sIsBlockingOperation.set(true);
 
             try {
                 if (Boolean.TRUE.equals(sInAfterHook.get())) return;
@@ -266,12 +263,12 @@ public class WriteHook implements IXposedHookLoadPackage {
                 String preview = extractPreview(clipArg);
 
                 if (PermissionCache.isWriteIgnored(pkgName)) {
-                    writeLog(ctx, pkgName, "放行", preview);
+                    writeLog(pkgName, "放行", preview);
                     return;
                 }
 
                 if (!shouldShowPopup(preview)) {
-                    writeLog(ctx, pkgName, "放行(内容过滤)", preview);
+                    writeLog(pkgName, "放行(内容过滤)", preview);
                     return;
                 }
 
@@ -295,20 +292,19 @@ public class WriteHook implements IXposedHookLoadPackage {
                     }
                 }
 
-                handleDecision(ctx, decision, pkgName, preview);
+                handleDecision(decision, pkgName, preview);
 
-                if (decision != PermissionStorage.PERMISSION_IGNORE) {
+                if (decision != PermissionDecision.PERMISSION_IGNORE) {
                     param.setResult(null);
                     sShouldBlock.set(false);
                 }
             } finally {
-                sIsBlockingOperation = false;
+                sIsBlockingOperation.remove();
             }
         }
 
         @Override
-        @SuppressWarnings("RedundantThrows")
-        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+        protected void afterHookedMethod(MethodHookParam param) {
             sShouldBlock.remove();
             sInAfterHook.remove();
         }
@@ -379,29 +375,31 @@ public class WriteHook implements IXposedHookLoadPackage {
         }
 
         private int askUser(Context ctx, String pkgName, String preview) {
-            AtomicInteger result = new AtomicInteger(PermissionStorage.PERMISSION_BLOCK);
+            AtomicInteger result = new AtomicInteger(PermissionDecision.PERMISSION_BLOCK);
             try {
                 InlineDialogManager dialogManager = InlineDialogManager.getInstance(ctx);
                 boolean shown = dialogManager.showWriteDialog(pkgName, preview, result);
-                if (!shown) return PermissionStorage.PERMISSION_BLOCK;
+                if (!shown) return PermissionDecision.PERMISSION_BLOCK;
             } catch (Throwable e) {
                 XLog.e(TAG, "弹窗异常: " + e.getMessage());
-                return PermissionStorage.PERMISSION_BLOCK;
+                return PermissionDecision.PERMISSION_BLOCK;
             }
             return result.get();
         }
 
-        private void handleDecision(Context ctx, int decision, String pkgName, String preview) {
-            writeLog(ctx, pkgName, decision == PermissionStorage.PERMISSION_IGNORE ? "放行" : "拦截", preview);
+        private void handleDecision(int decision, String pkgName, String preview) {
+            writeLog(pkgName, decision == PermissionDecision.PERMISSION_IGNORE ? "放行" : "拦截", preview);
         }
     }
 
-    private static void writeLog(Context ctx, String pkgName, String action, String content) {
-        // 只输出到 LSPosed 日志，不保存到数据库
+    // ──────────────────────────── 公共辅助方法 ────────────────────────────
+
+    private static void writeLog(String pkgName, String action, String content) {
+        // 只输出到 LSPosed 日志，不做本地持久化。
         if (pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
             return;
         if (!PermissionCache.isLsposedLogEnabled()) return;
-        XLog.i(TAG, "[" + pkgName + "] " + action + ": " + PrivacyLogUtils.maskClipboardContent(content));
+        XLog.i(TAG, "[" + pkgName + "] " + action + ": " + XLog.maskClipboardContent(content));
     }
 
     private static Context getSystemServerContextStatic() {

@@ -12,8 +12,11 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+import androidx.annotation.NonNull;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -39,6 +42,8 @@ import java.util.Map;
  */
 public class PermissionProvider extends ContentProvider {
 
+    // ──────────────────────────── Provider 常量 ────────────────────────────
+
     private static final String TAG = "ClipboardGuard.Provider";
     public static final String AUTHORITY = "com.android.clipboardguard.provider";
 
@@ -52,7 +57,6 @@ public class PermissionProvider extends ContentProvider {
     private static final int URI_DELETE_ALL     = 5;
 
     public static final String COL_PACKAGE    = "package_name";
-    public static final String COL_PERMISSION = "permission";
     public static final String COL_DECISION   = "decision";
     public static final String COL_REMEMBER   = "remember";
 
@@ -63,7 +67,6 @@ public class PermissionProvider extends ContentProvider {
     public static final String CALL_METHOD_GET_PENDING = "getPending";
     public static final String CALL_METHOD_GET_FULL_CONFIG = "getFullConfig";
     public static final String CALL_KEY_PACKAGE        = "pkg";
-    public static final String CALL_KEY_PERMISSION     = "perm";
     public static final String CALL_KEY_RESULT         = "result";
     public static final String CALL_KEY_DECISION       = "decision";
     public static final String CALL_KEY_ALL_DATA       = "all_data";
@@ -74,10 +77,9 @@ public class PermissionProvider extends ContentProvider {
     public static final String CALL_KEY_READ_BLOCKED_TOAST_ENABLED = "read_blocked_toast_enabled";
     public static final String CALL_KEY_LSPOSED_LOG_ENABLED = "lsposed_log_enabled";
 
-    private static final String WRITE_BLOCKLIST_FILE = "/data/data/com.android.clipboardguard/files/write_blocklist.txt";
-    private static final String READ_BLOCKLIST_FILE  = "/data/data/com.android.clipboardguard/files/read_blocklist.txt";
-
     private static final String PACKAGE_NAME = "com.android.clipboardguard";
+
+    // ──────────────────────────── URI 匹配 ────────────────────────────
 
     private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
     static {
@@ -88,12 +90,14 @@ public class PermissionProvider extends ContentProvider {
         sUriMatcher.addURI(AUTHORITY, "permission_reset", URI_DELETE_ALL);
     }
 
+    // ──────────────────────────── Pending 结果数据库 ────────────────────────────
+
     private static class LogDbHelper extends SQLiteOpenHelper {
         private static final String DB_NAME    = "clipboardguard.db";
         private static final int    DB_VERSION = 3;
 
         LogDbHelper(Context context) {
-            super(context, "/data/data/" + PACKAGE_NAME + "/databases/" + DB_NAME, null, DB_VERSION);
+            super(context, DB_NAME, null, DB_VERSION);
         }
 
         @Override
@@ -116,6 +120,8 @@ public class PermissionProvider extends ContentProvider {
 
     private LogDbHelper mDbHelper;
 
+    // ──────────────────────────── Provider 生命周期 ────────────────────────────
+
     @Override
     public boolean onCreate() {
         mDbHelper = new LogDbHelper(getContext());
@@ -128,7 +134,7 @@ public class PermissionProvider extends ContentProvider {
     // ═══════════════════════════════════════════════════════════════
 
     @Override
-    public Bundle call(String method, String arg, Bundle extras) {
+    public Bundle call(@NonNull String method, String arg, Bundle extras) {
         if (extras == null) extras = new Bundle();
         long identity = Binder.clearCallingIdentity();
         try {
@@ -160,9 +166,9 @@ public class PermissionProvider extends ContentProvider {
                             }
                         }
                         if ("read".equals(blocklistType)) {
-                            savePermissionsToFile(READ_BLOCKLIST_FILE, perms);
+                            savePermissionsToFile(getReadBlocklistPath(getContext()), perms);
                         } else {
-                            savePermissionsToFile(WRITE_BLOCKLIST_FILE, perms);
+                            savePermissionsToFile(getWriteBlocklistPath(getContext()), perms);
                         }
                         XLog.i(TAG, "批量保存 " + blocklistType + " 完成: " + perms.size() + " 条");
                     }
@@ -171,13 +177,15 @@ public class PermissionProvider extends ContentProvider {
 
                 case CALL_METHOD_GET_ALL: {
                     String blocklistType = extras.getString("type", "write");
-                    String filePath = "read".equals(blocklistType) ? READ_BLOCKLIST_FILE : WRITE_BLOCKLIST_FILE;
+                    String filePath = "read".equals(blocklistType)
+                            ? getReadBlocklistPath(getContext())
+                            : getWriteBlocklistPath(getContext());
                     List<String> blocklist = loadBlocklistFromFile(filePath);
                     String[] flat = new String[blocklist.size() * 2];
                     int i = 0;
                     for (String pkg : blocklist) {
                         flat[i++] = pkg;
-                        flat[i++] = String.valueOf(PermissionStorage.PERMISSION_BLOCK);
+                        flat[i++] = String.valueOf(PermissionDecision.PERMISSION_BLOCK);
                     }
                     Bundle result = new Bundle();
                     result.putStringArray(CALL_KEY_ALL_DATA, flat);
@@ -192,7 +200,7 @@ public class PermissionProvider extends ContentProvider {
                             "pending", null,
                             "package_name = ?", new String[]{pkg},
                             null, null, null)) {
-                        if (c != null && c.moveToFirst()) {
+                        if (c.moveToFirst()) {
                             result.putInt(CALL_KEY_DECISION, c.getInt(c.getColumnIndexOrThrow("decision")));
                             result.putInt(CALL_KEY_RESULT, 1);
                         } else {
@@ -206,9 +214,9 @@ public class PermissionProvider extends ContentProvider {
                     Context context = getContext();
                     Bundle result = new Bundle();
                     result.putStringArrayList(CALL_KEY_WRITE_BLOCKLIST,
-                            new ArrayList<>(loadBlocklistFromFile(WRITE_BLOCKLIST_FILE)));
+                            new ArrayList<>(loadBlocklistFromFile(getWriteBlocklistPath(context))));
                     result.putStringArrayList(CALL_KEY_READ_BLOCKLIST,
-                            new ArrayList<>(loadBlocklistFromFile(READ_BLOCKLIST_FILE)));
+                            new ArrayList<>(loadBlocklistFromFile(getReadBlocklistPath(context))));
                     String writeRulesJson = buildMergedRulesJson(context, "write_rules.json", "write_default_rules.json");
                     if (writeRulesJson != null) result.putString(CALL_KEY_WRITE_RULES_JSON, writeRulesJson);
                     String readRulesJson = buildMergedRulesJson(context, "read_rules.json", "read_default_rules.json");
@@ -231,7 +239,7 @@ public class PermissionProvider extends ContentProvider {
     // ═══════════════════════════════════════════════════════════════
 
     @Override
-    public Cursor query(Uri uri, String[] projection, String selection,
+    public Cursor query(@NonNull Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
         int match = sUriMatcher.match(uri);
 
@@ -244,7 +252,7 @@ public class PermissionProvider extends ContentProvider {
             if (pkg == null) return null;
             Cursor c = mDbHelper.getReadableDatabase().query("pending", null,
                     "package_name = ?", new String[]{pkg}, null, null, null);
-            if (c != null && c.moveToFirst()) {
+            if (c.moveToFirst()) {
                 MatrixCursor result = new MatrixCursor(new String[]{COL_PACKAGE, COL_DECISION, COL_REMEMBER});
                 result.addRow(new Object[]{
                         pkg,
@@ -254,7 +262,7 @@ public class PermissionProvider extends ContentProvider {
                 c.close();
                 return result;
             }
-            if (c != null) c.close();
+            c.close();
             return null;
         }
 
@@ -262,7 +270,7 @@ public class PermissionProvider extends ContentProvider {
     }
 
     @Override
-    public Uri insert(Uri uri, ContentValues values) {
+    public Uri insert(@NonNull Uri uri, ContentValues values) {
         if (values == null) return null;
         int match = sUriMatcher.match(uri);
 
@@ -284,13 +292,13 @@ public class PermissionProvider extends ContentProvider {
     }
 
     @Override
-    public int delete(Uri uri, String selection, String[] selectionArgs) {
+    public int delete(@NonNull Uri uri, String selection, String[] selectionArgs) {
         int match = sUriMatcher.match(uri);
         String pkg = uri.getLastPathSegment();
 
         if (match == URI_DELETE_ALL) {
-            clearBlocklistFile(WRITE_BLOCKLIST_FILE);
-            clearBlocklistFile(READ_BLOCKLIST_FILE);
+            clearBlocklistFile(getWriteBlocklistPath(getContext()));
+            clearBlocklistFile(getReadBlocklistPath(getContext()));
             return 1;
         }
 
@@ -302,13 +310,13 @@ public class PermissionProvider extends ContentProvider {
     }
 
     @Override
-    public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+    public int update(@NonNull Uri uri, ContentValues values, String selection, String[] selectionArgs) {
         insert(uri, values);
         return 1;
     }
 
     @Override
-    public String getType(Uri uri) {
+    public String getType(@NonNull Uri uri) {
         return "vnd.android.cursor.item/permission";
     }
 
@@ -318,18 +326,16 @@ public class PermissionProvider extends ContentProvider {
 
     private static List<String> loadBlocklistFromFile(String filePath) {
         List<String> result = new ArrayList<>();
-        try {
-            File file = new File(filePath);
-            if (!file.exists()) return result;
+        File file = new File(filePath);
+        if (!file.exists()) return result;
 
-            BufferedReader reader = new BufferedReader(new FileReader(file));
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
                 result.add(line);
             }
-            reader.close();
         } catch (IOException e) {
             XLog.e(TAG, "loadBlocklistFromFile 失败: " + filePath + " -> " + e.getMessage());
         }
@@ -341,22 +347,19 @@ public class PermissionProvider extends ContentProvider {
             File file = new File(filePath);
             File parent = file.getParentFile();
             if (parent != null && !parent.exists()) {
-                parent.mkdirs();
+                ensureDirectory(parent);
             }
 
-            BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-            writer.write("# ClipboardGuard Blocklist");
-            writer.newLine();
-            writer.write("# 每行一个包名，表示需要拦截的应用");
-            writer.newLine();
-            for (Map.Entry<String, Integer> entry : permissions.entrySet()) {
-                if (entry.getValue() == PermissionStorage.PERMISSION_BLOCK) {
-                    writer.write(entry.getKey());
-                    writer.newLine();
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                writeBlocklistHeader(writer);
+                for (Map.Entry<String, Integer> entry : permissions.entrySet()) {
+                    if (entry.getValue() == PermissionDecision.PERMISSION_BLOCK) {
+                        writer.write(entry.getKey());
+                        writer.newLine();
+                    }
                 }
+                writer.flush();
             }
-            writer.flush();
-            writer.close();
         } catch (IOException e) {
             XLog.e(TAG, "savePermissionsToFile 失败: " + filePath + " -> " + e.getMessage());
         }
@@ -379,37 +382,47 @@ public class PermissionProvider extends ContentProvider {
             try {
                 File parent = file.getParentFile();
                 if (parent != null && !parent.exists()) {
-                    parent.mkdirs();
+                    ensureDirectory(parent);
                 }
-                BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-                writer.write("# ClipboardGuard Blocklist");
-                writer.newLine();
-                writer.write("# 每行一个包名，表示需要拦截的应用");
-                writer.newLine();
-                writer.flush();
-                writer.close();
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                    writeBlocklistHeader(writer);
+                    writer.flush();
+                }
             } catch (IOException e) {
                 XLog.e(TAG, "ensureBlocklistFile 失败: " + filePath + " -> " + e.getMessage());
             }
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 静态工具方法（App 端调用）
-    // ═══════════════════════════════════════════════════════════════
-
-    public static void savePermission(Context context, String packageName, int permission) {
-        try {
-            Uri uri = Uri.parse("content://" + AUTHORITY);
-            Bundle args = new Bundle();
-            args.putString(CALL_KEY_PACKAGE, packageName);
-            args.putInt(CALL_KEY_PERMISSION, permission);
-            context.getContentResolver().call(uri, CALL_METHOD_SET, null, args);
-            sendReadWriteBlocklistBroadcast(context);
-        } catch (Throwable e) {
-            XLog.e(TAG, "savePermission 失败: " + e.getMessage());
-        }
+    private static void writeBlocklistHeader(BufferedWriter writer) throws IOException {
+        writer.write("# ClipboardGuard Blocklist");
+        writer.newLine();
+        writer.write("# 每行一个包名，表示需要拦截的应用");
+        writer.newLine();
     }
+
+    private static String getWriteBlocklistPath(Context context) {
+        return getBlocklistPath(context, "write_blocklist.txt");
+    }
+
+    private static String getReadBlocklistPath(Context context) {
+        return getBlocklistPath(context, "read_blocklist.txt");
+    }
+
+    private static String getBlocklistPath(Context context, String fileName) {
+        if (context != null) {
+            return new File(context.getFilesDir(), fileName).getPath();
+        }
+        return new File(new File(getPackageDataDir(), "files"), fileName).getPath();
+    }
+
+    private static String getPackageDataDir() {
+        String androidData = System.getenv("ANDROID_DATA");
+        File dataRoot = new File(androidData != null ? androidData : File.separator + "data");
+        return new File(new File(dataRoot, "user/0"), PACKAGE_NAME).getPath();
+    }
+
+    // ═══════════════════════════════════ App 端保存接口 ═══════════════════════════════
 
     public static void saveAllWritePermissions(Context context, Map<String, Integer> permissions) {
         if (permissions == null || permissions.isEmpty()) return;
@@ -449,22 +462,7 @@ public class PermissionProvider extends ContentProvider {
         return flat;
     }
 
-    public static void clearAllPermissions(Context context) {
-        try {
-            Uri uri = Uri.parse("content://" + AUTHORITY + "/permission_reset");
-            context.getContentResolver().delete(uri, null, null);
-        } catch (Throwable e) {
-            XLog.e(TAG, "clearAllPermissions 失败: " + e.getMessage());
-        }
-    }
-
-    /** @deprecated 使用 sendBlocklistBroadcast 或 sendFullConfigBroadcast 代替 */
-    @Deprecated
-    public static void sendPermissionChangedBroadcastStatic(Context context) {
-        sendReadWriteBlocklistBroadcast(context);
-    }
-
-    // ═══════════════════════════════════ 新增：只广播 blocklist ═══════════════════════════════
+    // ═══════════════════════════════════ 配置广播 ═══════════════════════════════
 
     /**
      * 仅发送写入/读取的 blocklist 广播，不携带规则。
@@ -475,12 +473,11 @@ public class PermissionProvider extends ContentProvider {
             Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
 
-            // ★ 重要：无论列表是否为空，都必须携带 key
-            // 这样 Hook 侧才能区分"没有数据"和"数据被清空"两种情况
-            List<String> writeBlocklist = loadBlocklistFromFile(WRITE_BLOCKLIST_FILE);
+            // 无论列表是否为空都携带 key，Hook 侧才能区分“没有数据”和“数据被清空”。
+            List<String> writeBlocklist = loadBlocklistFromFile(getWriteBlocklistPath(context));
             intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
 
-            List<String> readBlocklist = loadBlocklistFromFile(READ_BLOCKLIST_FILE);
+            List<String> readBlocklist = loadBlocklistFromFile(getReadBlocklistPath(context));
             intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
             intent.putExtra("read_blocked_toast_enabled", isReadBlockedToastEnabled(context));
             intent.putExtra("lsposed_log_enabled", isLsposedLogEnabled(context));
@@ -492,19 +489,17 @@ public class PermissionProvider extends ContentProvider {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-
     public static void sendFullConfigBroadcast(Context context) {
         try {
             Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
 
-            // ★ 写入 blocklist：无论是否为空都携带 key
-            List<String> writeBlocklist = loadBlocklistFromFile(WRITE_BLOCKLIST_FILE);
+            // 写入 blocklist：无论是否为空都携带 key。
+            List<String> writeBlocklist = loadBlocklistFromFile(getWriteBlocklistPath(context));
             intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
 
-            // ★ 读取 blocklist：无论是否为空都携带 key
-            List<String> readBlocklist = loadBlocklistFromFile(READ_BLOCKLIST_FILE);
+            // 读取 blocklist：无论是否为空都携带 key。
+            List<String> readBlocklist = loadBlocklistFromFile(getReadBlocklistPath(context));
             intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
 
             // 写入规则 JSON（合并默认规则中启用的规则）
@@ -544,6 +539,14 @@ public class PermissionProvider extends ContentProvider {
         return context.getSharedPreferences("clipboardguard_prefs", Context.MODE_PRIVATE)
                 .getBoolean("lsposed_log_enabled", true);
     }
+
+    private static void ensureDirectory(File directory) throws IOException {
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IOException("创建目录失败: " + directory.getPath());
+        }
+    }
+
+    // ═══════════════════════════════════ 规则合并 ═══════════════════════════════
 
     private static String buildMergedRulesJson(Context context, String rulesFileName, String defaultRulesFileName) {
         try {
@@ -597,11 +600,6 @@ public class PermissionProvider extends ContentProvider {
         }
     }
 
-    @Deprecated
-    private static void sendPermissionChangedBroadcast(Context context) {
-        sendReadWriteBlocklistBroadcast(context);
-    }
-
     private static String readFileContent(File file) {
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             StringBuilder sb = new StringBuilder();
@@ -615,68 +613,46 @@ public class PermissionProvider extends ContentProvider {
         }
     }
 
+    // ═══════════════════════════════════ App 端读取接口 ═══════════════════════════════
+
     /**
      * 从文件加载写入权限列表
      */
     public static List<String[]> getAllWritePermissions(Context context) {
-        return loadBlocklistAsPermissionList(WRITE_BLOCKLIST_FILE);
+        return loadBlocklistAsPermissionList(getWriteBlocklistPath(context));
     }
 
     /**
      * 从文件加载读取权限列表
      */
     public static List<String[]> getAllReadPermissions(Context context) {
-        return loadBlocklistAsPermissionList(READ_BLOCKLIST_FILE);
+        return loadBlocklistAsPermissionList(getReadBlocklistPath(context));
     }
 
     private static List<String[]> loadBlocklistAsPermissionList(String filePath) {
         List<String[]> result = new ArrayList<>();
         List<String> blocklist = loadBlocklistFromFile(filePath);
         for (String pkg : blocklist) {
-            result.add(new String[]{pkg, String.valueOf(PermissionStorage.PERMISSION_BLOCK)});
+            result.add(new String[]{pkg, String.valueOf(PermissionDecision.PERMISSION_BLOCK)});
         }
         return result;
     }
 
     public static Map<String, Integer> getAllWritePermissionsDirect(Context context) {
-        return loadBlocklistAsPermissionMap(WRITE_BLOCKLIST_FILE);
+        return loadBlocklistAsPermissionMap(getWriteBlocklistPath(context));
     }
 
     public static Map<String, Integer> getAllReadPermissionsDirect(Context context) {
-        return loadBlocklistAsPermissionMap(READ_BLOCKLIST_FILE);
+        return loadBlocklistAsPermissionMap(getReadBlocklistPath(context));
     }
 
     private static Map<String, Integer> loadBlocklistAsPermissionMap(String filePath) {
         Map<String, Integer> result = new HashMap<>();
         List<String> blocklist = loadBlocklistFromFile(filePath);
         for (String pkg : blocklist) {
-            result.put(pkg, PermissionStorage.PERMISSION_BLOCK);
+            result.put(pkg, PermissionDecision.PERMISSION_BLOCK);
         }
         return result;
     }
 
-    public static void saveWritePermission(Context context, String packageName, int permission) {
-        Map<String, Integer> current = getAllWritePermissionsDirect(context);
-        if (permission == PermissionStorage.PERMISSION_BLOCK) {
-            current.put(packageName, PermissionStorage.PERMISSION_BLOCK);
-        } else {
-            current.remove(packageName);
-        }
-        saveAllWritePermissions(context, current);
-    }
-
-    public static void writePendingResult(Context context, String packageName,
-                                          int decision, boolean remember) {
-        Uri uri = Uri.parse("content://" + AUTHORITY + "/pending/" + packageName);
-        ContentValues cv = new ContentValues();
-        cv.put(COL_PACKAGE, packageName);
-        cv.put(COL_DECISION, decision);
-        cv.put(COL_REMEMBER, remember ? 1 : 0);
-        cv.put("timestamp", System.currentTimeMillis());
-        try {
-            context.getContentResolver().insert(uri, cv);
-        } catch (Throwable e) {
-            XLog.e(TAG, "写入pending结果失败: " + e.getMessage());
-        }
-    }
 }
