@@ -27,5 +27,11 @@
 -keep class com.android.clipboardguard.WriteHook { *; }
 -keep class com.android.clipboardguard.ReadHook { *; }
 
+# MainActivity 激活状态方法由 WriteHook 通过方法名 Hook，不能被 R8 删除或内联。
+-keepclassmembers,allowoptimization class com.android.clipboardguard.MainActivity {
+    private boolean isModuleActive();
+    private int getXposedApiVersion();
+}
+
 # Hook 入口继承/使用 Xposed API，compileOnly 依赖在运行时由框架提供。
 -dontwarn de.robv.android.xposed.**
