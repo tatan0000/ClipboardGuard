@@ -69,6 +69,7 @@ hook系统服务并不那么容易，需要深入了解 Binder 机制、系统�
 ## 🤝 参考与致谢（排名不分先后）
 ### 开源项目
 - **Thanox**：[https://github.com/Tornaco/Thanox](https://github.com/Tornaco/Thanox)
+- **HMA-OSS**：[https://github.com/frknkrc44/HMA-OSS](https://github.com/frknkrc44/HMA-OSS)
 - **AdClose**：[https://github.com/zjyzip/AdClose](https://github.com/zjyzip/AdClose)
 - **GKD**：[https://github.com/gkd-kit/gkd](https://github.com/gkd-kit/gkd)
 - **Shizuku**：[https://github.com/RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku)
