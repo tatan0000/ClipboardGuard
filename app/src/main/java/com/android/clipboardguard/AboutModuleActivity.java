@@ -4,7 +4,11 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.Html;
+import android.text.Layout;
+import android.text.Spannable;
 import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
+import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -68,11 +72,11 @@ public class AboutModuleActivity extends AppCompatActivity {
         }
         if (tvNotes != null) {
             tvNotes.setText(Html.fromHtml(getString(R.string.about_notes_content), Html.FROM_HTML_MODE_LEGACY));
-            tvNotes.setMovementMethod(LinkMovementMethod.getInstance());
+            tvNotes.setMovementMethod(ExactLinkMovementMethod.getInstance());
         }
         if (tvAck != null) {
             tvAck.setText(Html.fromHtml(getString(R.string.about_ack_content), Html.FROM_HTML_MODE_LEGACY));
-            tvAck.setMovementMethod(LinkMovementMethod.getInstance());
+            tvAck.setMovementMethod(ExactLinkMovementMethod.getInstance());
         }
     }
 
@@ -113,5 +117,53 @@ public class AboutModuleActivity extends AppCompatActivity {
         // 允许内容延伸到刘海区域边缘，和项目其它页面保持一致。
         window.getAttributes().layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+    }
+
+    /** 仅点到链接文字本身时才跳转，避免空白处误触。 */
+    static final class ExactLinkMovementMethod extends LinkMovementMethod {
+        private static final ExactLinkMovementMethod INSTANCE = new ExactLinkMovementMethod();
+
+        public static ExactLinkMovementMethod getInstance() {
+            return INSTANCE;
+        }
+
+        @Override
+        public boolean onTouchEvent(TextView widget, Spannable buffer, MotionEvent event) {
+            int action = event.getAction();
+            if (action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_DOWN) {
+                return super.onTouchEvent(widget, buffer, event);
+            }
+
+            int x = (int) event.getX();
+            int y = (int) event.getY();
+            x -= widget.getTotalPaddingLeft();
+            y -= widget.getTotalPaddingTop();
+            x += widget.getScrollX();
+            y += widget.getScrollY();
+
+            Layout layout = widget.getLayout();
+            if (layout == null) return false;
+
+            int line = layout.getLineForVertical(y);
+            int offset = layout.getOffsetForHorizontal(line, x);
+            ClickableSpan[] spans = buffer.getSpans(offset, offset, ClickableSpan.class);
+            if (spans.length == 0) return false;
+
+            ClickableSpan span = spans[0];
+            int start = buffer.getSpanStart(span);
+            int end = buffer.getSpanEnd(span);
+            if (start < 0 || end <= start) return false;
+
+            float left = layout.getPrimaryHorizontal(start);
+            float right = layout.getPrimaryHorizontal(end);
+            float min = Math.min(left, right);
+            float max = Math.max(left, right);
+            if (x < min || x > max) return false;
+
+            if (action == MotionEvent.ACTION_UP) {
+                span.onClick(widget);
+            }
+            return true;
+        }
     }
 }
