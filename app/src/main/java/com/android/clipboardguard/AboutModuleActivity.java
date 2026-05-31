@@ -6,8 +6,10 @@ import android.os.Bundle;
 import android.text.Html;
 import android.text.Layout;
 import android.text.Spannable;
+import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
+import android.text.style.RelativeSizeSpan;
 import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowInsetsController;
@@ -71,13 +73,33 @@ public class AboutModuleActivity extends AppCompatActivity {
             tvVersion.setText(getString(R.string.about_version_format, getModuleVersion()));
         }
         if (tvNotes != null) {
-            tvNotes.setText(Html.fromHtml(getString(R.string.about_notes_content), Html.FROM_HTML_MODE_LEGACY));
+            tvNotes.setText(buildAboutNotesText());
             tvNotes.setMovementMethod(ExactLinkMovementMethod.getInstance());
         }
         if (tvAck != null) {
             tvAck.setText(Html.fromHtml(getString(R.string.about_ack_content), Html.FROM_HTML_MODE_LEGACY));
             tvAck.setMovementMethod(ExactLinkMovementMethod.getInstance());
         }
+    }
+
+    /** 关于页第一行只稍微放大，避免 HTML big 标签显得过大。 */
+    private Spanned buildAboutNotesText() {
+        Spanned spanned = Html.fromHtml(
+                getString(R.string.about_notes_content),
+                Html.FROM_HTML_MODE_LEGACY);
+        Spannable notes = spanned instanceof Spannable
+                ? (Spannable) spanned
+                : Spannable.Factory.getInstance().newSpannable(spanned);
+        String firstLine = "建议优先使用系统自带功能，避免冲突";
+        String text = notes.toString();
+        int start = text.indexOf(firstLine);
+        if (start >= 0) {
+            notes.setSpan(new RelativeSizeSpan(1.15f),
+                    start,
+                    start + firstLine.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return notes;
     }
 
     /** 获取当前安装包版本，异常时显示占位符，避免关于页启动失败。 */
@@ -145,6 +167,9 @@ public class AboutModuleActivity extends AppCompatActivity {
             if (layout == null) return false;
 
             int line = layout.getLineForVertical(y);
+            if (line < 0 || line >= layout.getLineCount()) return false;
+            if (x < 0 || x > widget.getWidth() - widget.getTotalPaddingRight()) return false;
+            if (y < 0 || y > widget.getHeight() - widget.getTotalPaddingBottom()) return false;
             int offset = layout.getOffsetForHorizontal(line, x);
             ClickableSpan[] spans = buffer.getSpans(offset, offset, ClickableSpan.class);
             if (spans.length == 0) return false;

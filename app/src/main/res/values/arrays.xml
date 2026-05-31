@@ -4,14 +4,13 @@
     <string-array name="xposed_scope">
         <!-- 系统框架：Hook ClipboardService -->
         <item>android</item>
-        <!-- 本模块：激活状态检测 -->
-        <item>com.android.clipboardguard</item>
     </string-array>
 
     <!--
-        全局系统核心包白名单（来自 Thanox）
-        这些包是系统正常运行所必需的，写剪贴板时直接放行，无需弹窗
-        应用列表中默认隐藏这些包，用户可以在设置中开启「显示系统核心应用」查看
+        全局系统核心包白名单（参考 Thanox）
+        这些包属于系统运行关键组件：
+        1. 读取/写入剪贴板时直接放行，不弹窗
+        2. 列表中默认归到系统核心应用组，便于统一隐藏/查看
     -->
     <string-array name="global_whitelist_packages">
         <!-- Android 框架核心 -->

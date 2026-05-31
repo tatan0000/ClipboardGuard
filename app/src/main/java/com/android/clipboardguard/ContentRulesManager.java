@@ -34,15 +34,23 @@ public class ContentRulesManager {
         public String name;
         public java.util.regex.Pattern pattern;
         public boolean enabled;
-        WriteRulePattern(String name, String regex, boolean enabled) {
+        public List<String> applicablePackages;
+        WriteRulePattern(String name, String regex, boolean enabled, List<String> applicablePackages) {
             this.name = name;
             this.enabled = enabled;
+            this.applicablePackages = applicablePackages != null
+                    ? new ArrayList<>(applicablePackages)
+                    : new ArrayList<>();
             try {
                 this.pattern = java.util.regex.Pattern.compile(regex);
             } catch (Exception e) {
                 XLog.e(TAG, "正则编译失败: " + regex + " -> " + e.getMessage());
                 this.pattern = null;
             }
+        }
+
+        boolean appliesToPackage(String packageName) {
+            return ContentRulesManager.appliesToPackage(applicablePackages, packageName);
         }
     }
 
@@ -50,9 +58,13 @@ public class ContentRulesManager {
         public String name;
         public java.util.regex.Pattern pattern;
         public boolean enabled;
-        ReadRulePattern(String name, String regex, boolean enabled) {
+        public List<String> applicablePackages;
+        ReadRulePattern(String name, String regex, boolean enabled, List<String> applicablePackages) {
             this.name = name;
             this.enabled = enabled;
+            this.applicablePackages = applicablePackages != null
+                    ? new ArrayList<>(applicablePackages)
+                    : new ArrayList<>();
             try {
                 this.pattern = java.util.regex.Pattern.compile(regex);
             } catch (Exception e) {
@@ -60,28 +72,10 @@ public class ContentRulesManager {
                 this.pattern = null;
             }
         }
-    }
 
-    // ──────────────────────────── 初始化占位 ────────────────────────────
-
-    /**
-     * 加载写入规则。
-     * 在 system_server 进程中无法直接读取 App 私有目录的文件，
-     * 所以这里只标记为已加载（sLoaded=true），实际数据通过广播推送。
-     */
-    public static synchronized void loadWriteRules() {
-        sWriteLoaded = true;
-        XLog.i(TAG, "loadWriteRules: system_server 中跳过文件读取，等待广播推送规则数据");
-    }
-
-    /**
-     * 加载读取规则。
-     * 在 system_server 进程中无法直接读取 App 私有目录的文件，
-     * 所以这里只标记为已加载（sReadLoaded=true），实际数据通过广播推送。
-     */
-    public static synchronized void loadReadRules() {
-        sReadLoaded = true;
-        XLog.i(TAG, "loadReadRules: system_server 中跳过文件读取，等待广播推送规则数据");
+        boolean appliesToPackage(String packageName) {
+            return ContentRulesManager.appliesToPackage(applicablePackages, packageName);
+        }
     }
 
     // ──────────────────────────── 写入规则查询 ────────────────────────────
@@ -90,14 +84,16 @@ public class ContentRulesManager {
      * 检查文本是否匹配写入内容规则。
      * @return 匹配的规则名称，未匹配返回 null
      */
-    public static String matchesWriteContent(String text) {
+    public static synchronized String matchesWriteContent(String packageName, String text) {
         if (!sWriteEnabled) return null;
+        if (packageName == null || packageName.isEmpty()) return null;
         if (text == null || text.isEmpty()) return null;
         if (sWriteRulePatterns.isEmpty()) return null;
         if (text.length() > 5000) return null;
 
         for (WriteRulePattern rule : sWriteRulePatterns) {
             if (!rule.enabled || rule.pattern == null) continue;
+            if (!rule.appliesToPackage(packageName)) continue;
             try {
                 if (rule.pattern.matcher(text).find()) return rule.name;
             } catch (Exception e) {
@@ -107,19 +103,19 @@ public class ContentRulesManager {
         return null;
     }
 
-    public static boolean isWriteEnabled() { return sWriteEnabled; }
-    public static int getWriteEnabledRuleCount() {
+    public static synchronized boolean isWriteEnabled() { return sWriteEnabled; }
+    public static synchronized int getWriteEnabledRuleCount() {
         int cnt = 0;
         for (WriteRulePattern r : sWriteRulePatterns) if (r.enabled) cnt++;
         return cnt;
     }
 
-    public static boolean hasEnabledWriteRule() {
+    public static synchronized boolean hasEnabledWriteRule() {
         for (WriteRulePattern r : sWriteRulePatterns) if (r.enabled && r.pattern != null) return true;
         return false;
     }
 
-    public static boolean isWriteLoaded() { return sWriteLoaded; }
+    public static synchronized boolean isWriteLoaded() { return sWriteLoaded; }
 
     // ──────────────────────────── 广播规则更新 ────────────────────────────
 
@@ -153,7 +149,12 @@ public class ContentRulesManager {
                         String regex = r.optString("pattern", "");
                         if (regex.isEmpty()) regex = r.optString("regex", "");
                         if (!regex.isEmpty()) {
-                            sReadRulePatterns.add(new ReadRulePattern(name, regex, r.optBoolean("enabled", true)));
+                            sReadRulePatterns.add(new ReadRulePattern(
+                                    name,
+                                    regex,
+                                    r.optBoolean("enabled", true),
+                                    parseApplicablePackages(r)
+                            ));
                         }
                     }
                 }
@@ -170,14 +171,24 @@ public class ContentRulesManager {
                         String regex = r.optString("pattern", "");
                         if (regex.isEmpty()) regex = r.optString("regex", "");
                         if (!regex.isEmpty()) {
-                            sWriteRulePatterns.add(new WriteRulePattern(name, regex, r.optBoolean("enabled", true)));
+                            sWriteRulePatterns.add(new WriteRulePattern(
+                                    name,
+                                    regex,
+                                    r.optBoolean("enabled", true),
+                                    parseApplicablePackages(r)
+                            ));
                         }
                     }
                 }
                 sWriteLoaded = true;
             }
-            XLog.d(TAG, (isReadRules ? "读取" : "写入") + "规则通过广播更新完成: "
-                    + (isReadRules ? getReadEnabledRuleCount() : getWriteEnabledRuleCount()) + " 条启用");
+            String type = isReadRules ? "读取" : "写入";
+            boolean enabled = isReadRules ? sReadEnabled : sWriteEnabled;
+            if (!enabled) {
+                XLog.d(TAG, type + "规则通过广播更新完成: 规则未启用");
+            } else {
+                XLog.d(TAG, type + "规则通过广播更新完成: " + buildRuleSummary(isReadRules));
+            }
         } catch (Exception e) {
             XLog.e(TAG, "解析规则 JSON 失败", e);
             if (isReadRules) {
@@ -200,15 +211,63 @@ public class ContentRulesManager {
         updateReadWriteRulesFromJson(json, true);
     }
 
+    /**
+     * 合并自定义规则文件与默认规则文件，供 Hook 运行时匹配。
+     * customRulesJson：write_rules.json / read_rules.json（含 enabled + content_rules）
+     * defaultRulesJson：write_default_rules.json / read_default_rules.json（JSONArray，只合并 enabled 项）
+     */
+    public static String mergeRulesForRuntime(String customRulesJson, String defaultRulesJson) {
+        try {
+            JSONObject mergedRoot = new JSONObject();
+            JSONArray mergedArr = new JSONArray();
+            boolean enabled = false;
+
+            if (customRulesJson != null && !customRulesJson.isEmpty()) {
+                try {
+                    JSONObject root = new JSONObject(customRulesJson);
+                    enabled = root.optBoolean("enabled", false);
+                    JSONArray arr = root.optJSONArray("content_rules");
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            mergedArr.put(arr.getJSONObject(i));
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (defaultRulesJson != null && !defaultRulesJson.isEmpty()) {
+                try {
+                    JSONArray defaults = new JSONArray(defaultRulesJson);
+                    for (int i = 0; i < defaults.length(); i++) {
+                        JSONObject rule = defaults.getJSONObject(i);
+                        if (rule.optBoolean("enabled", false)) {
+                            mergedArr.put(rule);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            mergedRoot.put("enabled", enabled);
+            mergedRoot.put("content_rules", mergedArr);
+            return mergedRoot.toString();
+        } catch (Exception e) {
+            XLog.e(TAG, "mergeRulesForRuntime 失败: " + e.getMessage());
+            return "{\"enabled\":false,\"content_rules\":[]}";
+        }
+    }
+
     // ──────────────────────────── 读取规则查询 ────────────────────────────
 
-    public static String matchesReadContent(String text) {
+    public static synchronized String matchesReadContent(String packageName, String text) {
         if (!sReadEnabled) return null;
+        if (packageName == null || packageName.isEmpty()) return null;
         if (text == null || text.isEmpty()) return null;
         if (sReadRulePatterns.isEmpty()) return null;
         if (text.length() > 5000) return null;
         for (ReadRulePattern rule : sReadRulePatterns) {
             if (!rule.enabled || rule.pattern == null) continue;
+            if (!rule.appliesToPackage(packageName)) continue;
             try {
                 // 银行卡号容易和快递单号、订单号重叠，正则命中后再用 Luhn 做二次确认。
                 if ("银行卡号".equals(rule.name)) {
@@ -253,19 +312,73 @@ public class ContentRulesManager {
         return sum % 10 == 0;
     }
 
-    public static boolean isReadEnabled() { return sReadEnabled; }
+    public static synchronized boolean isReadEnabled() { return sReadEnabled; }
 
-    public static int getReadEnabledRuleCount() {
+    public static synchronized int getReadEnabledRuleCount() {
         int cnt = 0;
         for (ReadRulePattern r : sReadRulePatterns) if (r.enabled) cnt++;
         return cnt;
     }
 
-    public static boolean hasEnabledReadRule() {
+    public static synchronized boolean hasEnabledReadRule() {
         for (ReadRulePattern r : sReadRulePatterns) if (r.enabled && r.pattern != null) return true;
         return false;
     }
 
-    public static boolean isReadLoaded() { return sReadLoaded; }
+    public static synchronized boolean isReadLoaded() { return sReadLoaded; }
 
+    /** 生成规则摘要日志：名称 + 拦截包列表 + 条数。 */
+    private static String buildRuleSummary(boolean isRead) {
+        List<?> rules = isRead
+                ? new ArrayList<>(sReadRulePatterns)
+                : new ArrayList<>(sWriteRulePatterns);
+        if (rules.isEmpty()) return "无规则";
+
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
+        for (Object obj : rules) {
+            if (isRead) {
+                ReadRulePattern r = (ReadRulePattern) obj;
+                if (r.enabled && r.pattern != null) {
+                    sb.append('[').append(r.name);
+                    if (r.applicablePackages != null && !r.applicablePackages.isEmpty()) {
+                        sb.append(" => ").append(r.applicablePackages);
+                    }
+                    sb.append("] ");
+                    count++;
+                }
+            } else {
+                WriteRulePattern r = (WriteRulePattern) obj;
+                if (r.enabled && r.pattern != null) {
+                    sb.append('[').append(r.name);
+                    if (r.applicablePackages != null && !r.applicablePackages.isEmpty()) {
+                        sb.append(" => ").append(r.applicablePackages);
+                    }
+                    sb.append("] ");
+                    count++;
+                }
+            }
+        }
+        if (count == 0) return "0 条启用";
+        sb.append("(共").append(count).append("条启用)");
+        return sb.toString();
+    }
+
+    private static List<String> parseApplicablePackages(JSONObject ruleJson) {
+        List<String> packages = new ArrayList<>();
+        JSONArray packageArray = ruleJson.optJSONArray("applicable_packages");
+        if (packageArray == null) return packages;
+        for (int index = 0; index < packageArray.length(); index++) {
+            String packageName = packageArray.optString(index, "");
+            if (!packageName.isEmpty()) {
+                packages.add(packageName);
+            }
+        }
+        return packages;
+    }
+
+    private static boolean appliesToPackage(List<String> applicablePackages, String packageName) {
+        return applicablePackages == null || applicablePackages.isEmpty()
+                || applicablePackages.contains(packageName);
+    }
 }

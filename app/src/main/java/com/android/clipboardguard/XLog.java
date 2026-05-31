@@ -7,7 +7,7 @@ import java.lang.reflect.Method;
 /**
  * 日志工具类
  * 设计：
- * - 在 system_server（Hook 侧）：由 WriteHook / ReadHook 通过 init() 传入已获取的
+ * - 在 system_server（Hook 侧）：由 ClipboardHook 通过 init() 传入已获取的
  *   XposedBridge.log() Method 引用，调用后日志输出到 logcat tag "Xposed"，
  *   可被 LSPosed Manager 模块日志页捕获。
  * - 在普通 App 进程：init() 不会被调用，sLogMethod 为 null，回退到 android.util.Log，
@@ -24,7 +24,7 @@ public class XLog {
 
     /**
      * 在 system_server 进程中调用一次，传入 XposedBridge.log(String) 方法引用。
-     * 应在 WriteHook.handleLoadPackage() 中、"android" 包名下调用。
+     * 应在 ClipboardHook.handleLoadPackage() 中、"android" 包名下调用。
      */
     public static void init(Method logMethod) {
         if (logMethod != null) {

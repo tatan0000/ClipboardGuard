@@ -1,2 +1,1 @@
-com.android.clipboardguard.WriteHook
-com.android.clipboardguard.ReadHook
+com.android.clipboardguard.ClipboardHook

@@ -9,11 +9,15 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
+import android.os.Parcel;
 import android.os.SystemClock;
+import android.provider.DocumentsContract;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.LruCache;
@@ -32,6 +36,8 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
@@ -42,11 +48,17 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +66,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -70,6 +87,19 @@ public class MainActivity extends AppCompatActivity {
     public static final int PAGE_WRITE             = 1;
     public static final int PAGE_READ              = 2;
     public static final int PAGE_SETTINGS          = 3;
+
+    private static final String[] BACKUP_FILE_NAMES = {
+            "write_blocklist.txt",
+            "read_blocklist.txt",
+            "write_rules.json",
+            "read_rules.json",
+            "write_default_rules.json",
+            "read_default_rules.json"
+    };
+
+    /** Binder IPC 轮询重试次数与间隔。 */
+    private static final int IPC_RETRY_MAX = 5;
+    private static final long IPC_RETRY_INTERVAL_MS = 1200L;
 
     public static final String PREF_NAME   = ClipboardGuardApp.PREF_NAME;
     public static final String KEY_THEME   = ClipboardGuardApp.KEY_THEME;
@@ -91,6 +121,8 @@ public class MainActivity extends AppCompatActivity {
     private ImageView mIvStatusIcon;
     private TextView mTvXposedSdk, mTvModuleVersion;
     private TextView mTvAndroidVersion, mTvManufacturer, mTvModel;
+    private ActivityResultLauncher<Intent> mBackupFolderLauncher;
+    private ActivityResultLauncher<Intent> mRestoreFileLauncher;
 
     private AppGroupAdapter mWriteAdapter;
     private final List<AppItem> mWriteUserApps   = new ArrayList<>();
@@ -122,14 +154,25 @@ public class MainActivity extends AppCompatActivity {
     private final LruCache<String, Drawable> mIconCache = new LruCache<>(4 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Drawable value) {
-            return value.getIntrinsicWidth() * value.getIntrinsicHeight() * 4;
+            int width = Math.max(1, value.getIntrinsicWidth());
+            int height = Math.max(1, value.getIntrinsicHeight());
+            return width * height * 4;
         }
     };
 
     private static final long FAB_AUTO_HIDE_DELAY = 4000L;
     private static final long BOTTOM_NAV_DOUBLE_CLICK_MS = 350L;
+    private static final long DETAIL_ACTIVITY_CLICK_DEBOUNCE_MS = 600L;
     private long mLastWriteNavClickTime = 0L;
     private long mLastReadNavClickTime = 0L;
+    private long mLastDetailActivityClickTime = 0L;
+    private final AtomicBoolean mIsLoadingApps = new AtomicBoolean(false);
+    private final AtomicBoolean mIsRefreshingPermissions = new AtomicBoolean(false);
+    private final AtomicBoolean mLoadAppsQueued = new AtomicBoolean(false);
+    private final AtomicBoolean mRefreshPermissionsQueued = new AtomicBoolean(false);
+    private final AtomicInteger mLoadAppsGeneration = new AtomicInteger(0);
+    private final AtomicInteger mRefreshPermissionsGeneration = new AtomicInteger(0);
+    private boolean mHasLoadedApps = false;
     private final Runnable mFabAutoHide = () -> {
         if (mFab != null && mFab.getVisibility() == View.VISIBLE) {
             mFab.animate().alpha(0f).scaleX(0.5f).scaleY(0.5f)
@@ -142,6 +185,7 @@ public class MainActivity extends AppCompatActivity {
     // ──────────────────── FAB 显示控制 ────────────────────────────
 
     private void resetFabAutoHide() {
+        if (mFab == null) return;
         mHandler.removeCallbacks(mFabAutoHide);
         if (mFab.getVisibility() != View.VISIBLE && (sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ)) {
             mFab.setVisibility(View.VISIBLE);
@@ -160,6 +204,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         sInstanceRef = new WeakReference<>(this);
+        initBackupRestoreLaunchers();
         setContentView(R.layout.activity_main);
 
         initThemeRadioButtons();
@@ -173,11 +218,12 @@ public class MainActivity extends AppCompatActivity {
         showPage(sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ
                 || sCurrentPage == PAGE_SETTINGS ? sCurrentPage : PAGE_HOME);
 
-        PermissionProvider.sendFullConfigBroadcast(this);
+        PermissionProvider.requestConfigSync(this);
     }
 
     private void applyAppBarInsets() {
         View appBarView = findViewById(R.id.app_bar);
+        if (appBarView == null) return;
         ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             v.setPadding(v.getPaddingLeft(), Math.max(statusH - 8, 0),
@@ -217,11 +263,38 @@ public class MainActivity extends AppCompatActivity {
         loadAppsAsync();
     }
 
+    private void initBackupRestoreLaunchers() {
+        mBackupFolderLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    Intent data = result.getData();
+                    if (result.getResultCode() != RESULT_OK || data == null || data.getData() == null) {
+                        Toast.makeText(this, R.string.backup_cancelled, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    backupConfigToFolder(data.getData());
+                });
+
+        mRestoreFileLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    Intent data = result.getData();
+                    if (result.getResultCode() != RESULT_OK || data == null || data.getData() == null) {
+                        Toast.makeText(this, R.string.restore_cancelled, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    restoreConfigFromFile(data.getData());
+                });
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         initHomePage();
-        loadAppsAsync();
+        if (mHasLoadedApps) {
+            refreshPermissionsAsync();
+        }
+        PermissionProvider.requestConfigSync(this);
     }
 
     @Override
@@ -234,6 +307,18 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         mHandler.removeCallbacksAndMessages(null);
+        mWriteSwipeRefresh = null;
+        mReadSwipeRefresh = null;
+        mWriteExpandableListView = null;
+        mReadExpandableListView = null;
+        mWriteAdapter = null;
+        mReadAdapter = null;
+        mFab = null;
+        MainActivity instance = sInstanceRef != null ? sInstanceRef.get() : null;
+        if (instance == this) {
+            sInstanceRef.clear();
+            sInstanceRef = null;
+        }
     }
 
     // ──────────────────── 读写页面初始化 ────────────────────────────
@@ -242,6 +327,7 @@ public class MainActivity extends AppCompatActivity {
     private void initWritePage() {
         mWriteExpandableListView = findViewById(R.id.expandable_list_write);
         mWriteSwipeRefresh = findViewById(R.id.swipe_refresh_write);
+        if (mWriteExpandableListView == null || mWriteSwipeRefresh == null) return;
 
         mWriteAdapter = new AppGroupAdapter(false);
         mWriteExpandableListView.setAdapter(mWriteAdapter);
@@ -276,15 +362,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         EditText mWriteEtSearch = findViewById(R.id.et_search_write);
-        mWriteEtSearch.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
-            @Override public void afterTextChanged(Editable s) {
-                mWriteCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
-                applyWriteFilter();
-                resetFabAutoHide();
-            }
-        });
+        if (mWriteEtSearch != null) {
+            mWriteEtSearch.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+                @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+                @Override public void afterTextChanged(Editable s) {
+                    mWriteCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
+                    applyWriteFilter();
+                    resetFabAutoHide();
+                }
+            });
+        }
 
         TextView btnSelectAll = findViewById(R.id.btn_select_all_write);
         TextView btnDeselectAll = findViewById(R.id.btn_deselect_all_write);
@@ -305,8 +393,7 @@ public class MainActivity extends AppCompatActivity {
 
         View cardWriteRules = findViewById(R.id.card_write_rules);
         if (cardWriteRules != null) {
-            cardWriteRules.setOnClickListener(v ->
-                    startActivity(new Intent(this, WriteRulesDetailActivity.class)));
+            cardWriteRules.setOnClickListener(v -> openDetailActivity(WriteRulesDetailActivity.class));
         }
     }
 
@@ -314,6 +401,7 @@ public class MainActivity extends AppCompatActivity {
     private void initReadPage() {
         mReadExpandableListView = findViewById(R.id.expandable_list_read);
         mReadSwipeRefresh = findViewById(R.id.swipe_refresh_read);
+        if (mReadExpandableListView == null || mReadSwipeRefresh == null) return;
 
         mReadAdapter = new AppGroupAdapter(true);
         mReadExpandableListView.setAdapter(mReadAdapter);
@@ -348,15 +436,17 @@ public class MainActivity extends AppCompatActivity {
         mReadExpandableListView.setOnGroupClickListener((parent, v, groupPos, id) -> true);
 
         EditText mReadEtSearch = findViewById(R.id.et_search_read);
-        mReadEtSearch.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
-            @Override public void afterTextChanged(Editable s) {
-                mReadCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
-                applyReadFilter();
-                resetFabAutoHide();
-            }
-        });
+        if (mReadEtSearch != null) {
+            mReadEtSearch.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+                @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+                @Override public void afterTextChanged(Editable s) {
+                    mReadCurrentQuery = s.toString().trim().toLowerCase(Locale.ROOT);
+                    applyReadFilter();
+                    resetFabAutoHide();
+                }
+            });
+        }
 
         TextView btnSelectAllRead = findViewById(R.id.btn_select_all_read);
         TextView btnDeselectAllRead = findViewById(R.id.btn_deselect_all_read);
@@ -377,14 +467,14 @@ public class MainActivity extends AppCompatActivity {
 
         View cardReadRules = findViewById(R.id.card_read_rules);
         if (cardReadRules != null) {
-            cardReadRules.setOnClickListener(v ->
-                    startActivity(new Intent(this, ReadRulesDetailActivity.class)));
+            cardReadRules.setOnClickListener(v -> openDetailActivity(ReadRulesDetailActivity.class));
         }
     }
 
     // ──────────────────── 页面切换与底部导航 ────────────────────────────
 
     private void showPage(int page) {
+        if (mPageHome == null || mPageWrite == null || mPageRead == null || mPageSettings == null) return;
         int previousPage = sCurrentPage;
         sCurrentPage = page;
 
@@ -401,17 +491,17 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case PAGE_WRITE:
                 mPageWrite.setVisibility(View.VISIBLE);
-                mFab.setVisibility(View.GONE);
-                mWriteExpandableListView.expandGroup(GROUP_USER);
+                if (mFab != null) mFab.setVisibility(View.GONE);
+                if (mWriteExpandableListView != null) mWriteExpandableListView.expandGroup(GROUP_USER);
                 break;
             case PAGE_READ:
                 mPageRead.setVisibility(View.VISIBLE);
-                mFab.setVisibility(View.GONE);
-                mReadExpandableListView.expandGroup(GROUP_USER);
+                if (mFab != null) mFab.setVisibility(View.GONE);
+                if (mReadExpandableListView != null) mReadExpandableListView.expandGroup(GROUP_USER);
                 break;
             case PAGE_SETTINGS:
                 mPageSettings.setVisibility(View.VISIBLE);
-                mFab.setVisibility(View.GONE);
+                if (mFab != null) mFab.setVisibility(View.GONE);
                 break;
         }
 
@@ -421,6 +511,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateToolbar(int page) {
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        if (toolbar == null) return;
         switch (page) {
             case PAGE_HOME:       toolbar.setTitle(R.string.app_name);         toolbar.setNavigationIcon(null); break;
             case PAGE_WRITE:      toolbar.setTitle(R.string.title_write_block); toolbar.setNavigationIcon(null); break;
@@ -430,6 +521,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateBottomNav(int page) {
+        if (mNavHome == null || mNavApps == null || mNavRead == null || mNavSettings == null) return;
         int sel   = ContextCompat.getColor(this, R.color.nav_selected);
         int unsel = ContextCompat.getColor(this, R.color.nav_unselected);
         tintNavItem(mNavHome,     page == PAGE_HOME,     sel, unsel);
@@ -440,6 +532,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void tintNavItem(LinearLayout nav, boolean selected, int selColor, int unselColor) {
+        if (nav == null || nav.getChildCount() < 2) return;
+        if (!(nav.getChildAt(0) instanceof ImageView) || !(nav.getChildAt(1) instanceof TextView)) return;
         int color = selected ? selColor : unselColor;
         ((ImageView) nav.getChildAt(0)).setColorFilter(color);
         ((TextView)  nav.getChildAt(1)).setTextColor(color);
@@ -468,19 +562,21 @@ public class MainActivity extends AppCompatActivity {
             else if (id == R.id.nav_read)     handleReadNavClick();
             else if (id == R.id.nav_settings) showPage(PAGE_SETTINGS);
         };
-        mNavHome.setOnClickListener(navClick);
-        mNavApps.setOnClickListener(navClick);
-        mNavRead.setOnClickListener(navClick);
-        mNavSettings.setOnClickListener(navClick);
+        if (mNavHome != null) mNavHome.setOnClickListener(navClick);
+        if (mNavApps != null) mNavApps.setOnClickListener(navClick);
+        if (mNavRead != null) mNavRead.setOnClickListener(navClick);
+        if (mNavSettings != null) mNavSettings.setOnClickListener(navClick);
 
-        mFab.setOnClickListener(v -> {
-            if (sCurrentPage == PAGE_WRITE) {
-                saveWriteChanges();
-            } else if (sCurrentPage == PAGE_READ) {
-                saveReadChanges();
-            }
-            resetFabAutoHide();
-        });
+        if (mFab != null) {
+            mFab.setOnClickListener(v -> {
+                if (sCurrentPage == PAGE_WRITE) {
+                    saveWriteChanges();
+                } else if (sCurrentPage == PAGE_READ) {
+                    saveReadChanges();
+                }
+                resetFabAutoHide();
+            });
+        }
     }
 
     private void handleWriteNavClick() {
@@ -521,16 +617,79 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 首页状态信息 ────────────────────────────
 
+    /**
+     * 自定义 Binder 事务码：状态查询。
+     * 与 ClipboardHook.TRANSACTION_CBGUARD_STATUS 一致（"CBGD" = 0x43424744）。
+     * App 通过 clipboard 服务的 onTransact(CBGUARD_STATUS) 直连 system_server 查询状态。
+     */
+    private static final int TRANSACTION_CBGUARD_STATUS = 0x43424744;
+
+    /**
+     * 通过系统 clipboard 服务的自定义事务码查询模块状态。
+     * 原理：system_server 在 ClipboardImpl.onTransact 上 Hook 了 TRANSACTION_CBGUARD_STATUS，
+     * 直接返回 sModuleStatusJson。无需注册新服务，复用已有 clipboard_service SELinux 类型。
+     * @return 状态 JSON，Hook 未就绪、Binder 异常时返回 null
+     */
+    private static String getStatusViaBinder() {
+        try {
+            Class<?> smClass = Class.forName("android.os.ServiceManager");
+            java.lang.reflect.Method getService = smClass.getMethod("getService", String.class);
+            IBinder binder = (IBinder) getService.invoke(null, "clipboard");
+            if (binder == null) return null;
+
+            Parcel data = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+            try {
+                binder.transact(TRANSACTION_CBGUARD_STATUS, data, reply, 0);
+                reply.readException();
+                String json = reply.readString();
+                return (json != null && !json.isEmpty()) ? json : null;
+            } finally {
+                data.recycle();
+                reply.recycle();
+            }
+        } catch (Exception e) {
+            // Binder 未就绪（system_server 尚未 Hook）或 ServiceManager 不可用，静默重试
+            return null;
+        }
+    }
+
+
     @SuppressLint("SetTextI18n")
     private void initHomePage() {
-        updateModuleStatusCard(isModuleActive());
-
-        int xApi = getXposedApiVersion();
-        mTvXposedSdk.setText(xApi > 0 ? String.valueOf(xApi) : "未检测到");
+        final Context appContext = getApplicationContext();
         updateDeviceInfo();
+
+        // 后台线程轮询 Binder IPC，避免阻塞主线程
+        sExecutor.execute(() -> {
+            String current = ConfigManager.readCurrentBootId();
+            boolean active = false;
+            if (!current.isEmpty()) {
+                for (int i = 0; i < IPC_RETRY_MAX; i++) {
+                    String json = getStatusViaBinder();
+                    if (json != null && json.contains(current)) {
+                        active = true;
+                        break;
+                    }
+                    if (i < IPC_RETRY_MAX - 1) {
+                        try { Thread.sleep(IPC_RETRY_INTERVAL_MS); } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+            }
+            boolean finalActive = active;
+            mHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                updateModuleStatusCard(finalActive);
+                mTvXposedSdk.setText(finalActive ? "已激活" : "未激活");
+            });
+        });
     }
 
     private void updateModuleStatusCard(boolean isActive) {
+        if (mTvStatusTitle == null || mTvStatusDesc == null || mIvStatusIcon == null) return;
         if (isActive) {
             mTvStatusTitle.setText(R.string.status_active);
             mTvStatusTitle.setTextColor(ContextCompat.getColor(this, R.color.status_active));
@@ -546,6 +705,9 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetTextI18n")
     private void updateDeviceInfo() {
+        if (mTvModuleVersion == null || mTvAndroidVersion == null || mTvManufacturer == null || mTvModel == null) {
+            return;
+        }
         try {
             PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
             // 使用 getLongVersionCode() 代替已弃用的 versionCode
@@ -558,9 +720,6 @@ public class MainActivity extends AppCompatActivity {
         mTvManufacturer.setText(Build.MANUFACTURER);
         mTvModel.setText(Build.MODEL);
     }
-
-    private boolean isModuleActive() { return false; }
-    private int getXposedApiVersion() { return -1; }
 
     // ──────────────────── 主题与设置页 ────────────────────────────
 
@@ -641,7 +800,7 @@ public class MainActivity extends AppCompatActivity {
             switchReadBlockedToast.setChecked(prefs.getBoolean("read_blocked_toast_enabled", true));
             switchReadBlockedToast.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 prefs.edit().putBoolean("read_blocked_toast_enabled", isChecked).apply();
-                PermissionProvider.sendReadWriteBlocklistBroadcast(this);
+                PermissionProvider.requestReadToastSettingSync(this);
             });
         }
 
@@ -650,15 +809,33 @@ public class MainActivity extends AppCompatActivity {
             switchLsposedLog.setChecked(prefs.getBoolean("lsposed_log_enabled", true));
             switchLsposedLog.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 prefs.edit().putBoolean("lsposed_log_enabled", isChecked).apply();
-                PermissionProvider.sendReadWriteBlocklistBroadcast(this);
+                PermissionProvider.requestLsposedLogSettingSync(this);
             });
+        }
+
+        View itemBackup = findViewById(R.id.item_backup_config);
+        if (itemBackup != null) {
+            itemBackup.setOnClickListener(v -> openBackupFolderPicker());
+        }
+
+        View itemRestore = findViewById(R.id.item_restore_config);
+        if (itemRestore != null) {
+            itemRestore.setOnClickListener(v -> openRestoreFilePicker());
         }
 
         View itemAbout = findViewById(R.id.item_about);
         if (itemAbout != null) {
-            itemAbout.setOnClickListener(v ->
-                    startActivity(new Intent(this, AboutModuleActivity.class)));
+            itemAbout.setOnClickListener(v -> openDetailActivity(AboutModuleActivity.class));
         }
+    }
+
+    private void openDetailActivity(Class<?> activityClass) {
+        long now = SystemClock.elapsedRealtime();
+        if (now - mLastDetailActivityClickTime < DETAIL_ACTIVITY_CLICK_DEBOUNCE_MS) return;
+        mLastDetailActivityClickTime = now;
+        Intent intent = new Intent(this, activityClass);
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
     }
 
     private void setupThemeItem(int viewId, int theme) {
@@ -671,10 +848,217 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // 备份：直接选择一个 zip 文件保存位置，系统会默认进入下载目录附近。
+    private void openBackupFolderPicker() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/zip");
+        intent.putExtra(Intent.EXTRA_TITLE, buildBackupFileName());
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        putInitialDownloadUri(intent);
+        mBackupFolderLauncher.launch(intent);
+    }
+
+    private void openRestoreFilePicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/zip");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        putInitialDownloadUri(intent);
+        mRestoreFileLauncher.launch(intent);
+    }
+
+    private void putInitialDownloadUri(Intent intent) {
+        try {
+            Uri uri = DocumentsContract.buildRootUri(
+                    "com.android.providers.downloads.documents",
+                    "downloads");
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, uri);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    // 备份：把当前配置文件打包成 zip，写入用户选定的位置。
+    private void backupConfigToFolder(Uri fileUri) {
+        final Context appContext = getApplicationContext();
+        sExecutor.execute(() -> {
+            boolean success = false;
+            OutputStream outputStream = null;
+            try {
+                outputStream = getContentResolver().openOutputStream(fileUri);
+                if (outputStream == null) throw new IllegalStateException("打开备份文件失败");
+                writeBackupZip(outputStream);
+                success = true;
+            } catch (Throwable e) {
+                XLog.e("ClipboardGuard", "backupConfigToFolder failed", e);
+            } finally {
+                closeQuietly(outputStream);
+            }
+            boolean finalSuccess = success;
+            mHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                Toast.makeText(appContext,
+                        finalSuccess ? R.string.backup_config_success : R.string.backup_config_failed,
+                        Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+
+    private String buildBackupFileName() {
+        String time = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date());
+        return "ClipboardGuard_" + time + ".zip";
+    }
+
+    // 按固定清单把配置文件写入 zip，避免把其它文件误打进去。
+    private void writeBackupZip(OutputStream outputStream) throws Exception {
+        try (ZipOutputStream zip = new ZipOutputStream(outputStream)) {
+            byte[] buffer = new byte[8192];
+            for (String fileName : BACKUP_FILE_NAMES) {
+                File file = new File(getFilesDir(), fileName);
+                if (!file.exists()) continue;
+                ZipEntry entry = new ZipEntry(fileName);
+                zip.putNextEntry(entry);
+                try (InputStream input = new FileInputStream(file)) {
+                    int read;
+                    while ((read = input.read(buffer)) != -1) {
+                        zip.write(buffer, 0, read);
+                    }
+                }
+                zip.closeEntry();
+            }
+            zip.finish();
+        }
+    }
+
+    // 恢复：选择 zip 后解压到应用配置目录，只接受白名单文件名。
+    private void restoreConfigFromFile(Uri fileUri) {
+        final Context appContext = getApplicationContext();
+        sExecutor.execute(() -> {
+            int restoredCount;
+            InputStream inputStream = null;
+            try {
+                inputStream = getContentResolver().openInputStream(fileUri);
+                if (inputStream == null) throw new IllegalStateException("打开恢复文件失败");
+                restoredCount = restoreConfigZip(inputStream);
+                if (restoredCount > 0) {
+                    mWritePendingChanges.clear();
+                    mReadPendingChanges.clear();
+                    PermissionProvider.requestConfigSync(appContext);
+                }
+            } catch (Throwable e) {
+                restoredCount = -1;
+                XLog.e("ClipboardGuard", "restoreConfigFromFile failed", e);
+            } finally {
+                closeQuietly(inputStream);
+            }
+            int finalRestoredCount = restoredCount;
+            mHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (finalRestoredCount > 0) {
+                    mHasLoadedApps = false;
+                    refreshWritePermissions();
+                    refreshReadPermissions();
+                    loadAppsAsync();
+                    Toast.makeText(appContext, R.string.restore_config_success, Toast.LENGTH_SHORT).show();
+                } else if (finalRestoredCount == 0) {
+                    Toast.makeText(appContext, R.string.restore_config_empty, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(appContext, R.string.restore_config_failed, Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
+
+    // 逐个解压白名单文件到 files 目录，忽略压缩包中的其它内容。
+    private int restoreConfigZip(InputStream inputStream) throws Exception {
+        int restoredCount = 0;
+        byte[] buffer = new byte[8192];
+        try (ZipInputStream zip = new ZipInputStream(inputStream)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                String fileName = entry.getName();
+                if (!entry.isDirectory() && isAllowedBackupFile(fileName)) {
+                    File target = new File(getFilesDir(), fileName);
+                    try (OutputStream output = new FileOutputStream(target, false)) {
+                        int read;
+                        while ((read = zip.read(buffer)) != -1) {
+                            output.write(buffer, 0, read);
+                        }
+                        output.flush();
+                    }
+                    restoredCount++;
+                }
+                zip.closeEntry();
+            }
+        }
+        return restoredCount;
+    }
+
+    // 只允许恢复这几个配置文件，防止目录穿越或误覆盖。
+    private boolean isAllowedBackupFile(String fileName) {
+        if (fileName == null || fileName.contains("/") || fileName.contains("\\")) return false;
+        for (String allowedName : BACKUP_FILE_NAMES) {
+            if (allowedName.equals(fileName)) return true;
+        }
+        return false;
+    }
+
+    private void closeQuietly(java.io.Closeable closeable) {
+        if (closeable == null) return;
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+        }
+    }
+
     // ──────────────────── 应用列表加载与分类 ────────────────────────────
 
     private void loadAppsAsync() {
-        sExecutor.execute(this::loadAllApps);
+        int generation = mLoadAppsGeneration.incrementAndGet();
+        if (!mIsLoadingApps.compareAndSet(false, true)) {
+            mLoadAppsQueued.set(true);
+            return;
+        }
+        sExecutor.execute(() -> loadAllApps(generation));
+    }
+
+    private void refreshPermissionsAsync() {
+        int generation = mRefreshPermissionsGeneration.incrementAndGet();
+        if (!mIsRefreshingPermissions.compareAndSet(false, true)) {
+            mRefreshPermissionsQueued.set(true);
+            return;
+        }
+        sExecutor.execute(() -> {
+            try {
+                List<String[]> savedWritePerms = PermissionProvider.getAllWritePermissions(this);
+                List<String[]> savedReadPerms = PermissionProvider.getAllReadPermissions(this);
+                android.util.ArrayMap<String, Integer> writePermMap = new android.util.ArrayMap<>();
+                for (String[] row : savedWritePerms) putPermissionRow(writePermMap, row);
+                android.util.ArrayMap<String, Integer> readPermMap = new android.util.ArrayMap<>();
+                for (String[] row : savedReadPerms) putPermissionRow(readPermMap, row);
+                runOnUiThread(() -> {
+                    mIsRefreshingPermissions.set(false);
+                    if (isFinishing() || isDestroyed()) {
+                        drainQueuedPermissionRefresh();
+                        return;
+                    }
+                    if (generation != mRefreshPermissionsGeneration.get()) {
+                        drainQueuedPermissionRefresh();
+                        return;
+                    }
+                    refreshWritePermissions(writePermMap);
+                    refreshReadPermissions(readPermMap);
+                    drainQueuedPermissionRefresh();
+                });
+            } catch (Throwable e) {
+                mIsRefreshingPermissions.set(false);
+                XLog.e("ClipboardGuard", "refreshPermissionsAsync failed", e);
+                drainQueuedPermissionRefresh();
+            }
+        });
     }
 
     private static HashSet<String> sCorePackages;
@@ -694,7 +1078,21 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private void loadAllApps() {
+    private void loadAllApps(int generation) {
+        try {
+            loadAllAppsInternal(generation);
+        } catch (Throwable e) {
+            mIsLoadingApps.set(false);
+            XLog.e("ClipboardGuard", "loadAllApps failed", e);
+            runOnUiThread(() -> {
+                if (mWriteSwipeRefresh != null) mWriteSwipeRefresh.setRefreshing(false);
+                if (mReadSwipeRefresh != null) mReadSwipeRefresh.setRefreshing(false);
+            });
+            drainQueuedAppLoad();
+        }
+    }
+
+    private void loadAllAppsInternal(int generation) {
         PackageManager pm = getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
 
@@ -757,7 +1155,20 @@ public class MainActivity extends AppCompatActivity {
         sortReadApps(tmpReadCore);
 
         runOnUiThread(() -> {
-            if (isFinishing() || isDestroyed()) return;
+            mIsLoadingApps.set(false);
+            if (isFinishing() || isDestroyed()) {
+                if (mWriteSwipeRefresh != null) mWriteSwipeRefresh.setRefreshing(false);
+                if (mReadSwipeRefresh != null) mReadSwipeRefresh.setRefreshing(false);
+                drainQueuedAppLoad();
+                return;
+            }
+            if (generation != mLoadAppsGeneration.get()) {
+                if (mWriteSwipeRefresh != null) mWriteSwipeRefresh.setRefreshing(false);
+                if (mReadSwipeRefresh != null) mReadSwipeRefresh.setRefreshing(false);
+                drainQueuedAppLoad();
+                return;
+            }
+            mHasLoadedApps = true;
             mWriteUserApps.clear();   mWriteUserApps.addAll(tmpWriteUser);
             mWriteSystemApps.clear(); mWriteSystemApps.addAll(tmpWriteSystem);
             mWriteCoreApps.clear();   mWriteCoreApps.addAll(tmpWriteCore);
@@ -765,15 +1176,28 @@ public class MainActivity extends AppCompatActivity {
             mReadSystemApps.clear();  mReadSystemApps.addAll(tmpReadSystem);
             mReadCoreApps.clear();    mReadCoreApps.addAll(tmpReadCore);
 
-            refreshWritePermissions();
-            refreshReadPermissions();
+            refreshWritePermissions(writePermMap);
+            refreshReadPermissions(readPermMap);
             applyWriteFilter();
             applyReadFilter();
             if (mWriteExpandableListView != null) mWriteExpandableListView.expandGroup(GROUP_USER);
 
             if (mWriteSwipeRefresh != null) mWriteSwipeRefresh.setRefreshing(false);
             if (mReadSwipeRefresh != null) mReadSwipeRefresh.setRefreshing(false);
+            drainQueuedAppLoad();
         });
+    }
+
+    private void drainQueuedAppLoad() {
+        if (mLoadAppsQueued.compareAndSet(true, false)) {
+            loadAppsAsync();
+        }
+    }
+
+    private void drainQueuedPermissionRefresh() {
+        if (mRefreshPermissionsQueued.compareAndSet(true, false)) {
+            refreshPermissionsAsync();
+        }
     }
 
     private static void sortWriteApps(List<AppItem> list) {
@@ -808,6 +1232,11 @@ public class MainActivity extends AppCompatActivity {
         List<String[]> savedPerms = PermissionProvider.getAllWritePermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
         for (String[] row : savedPerms) putPermissionRow(permMap, row);
+
+        refreshWritePermissions(permMap);
+    }
+
+    private void refreshWritePermissions(android.util.ArrayMap<String, Integer> permMap) {
 
         for (AppItem item : mWriteUserApps)   applyWritePermToItem(item, permMap);
         for (AppItem item : mWriteSystemApps) applyWritePermToItem(item, permMap);
@@ -872,6 +1301,11 @@ public class MainActivity extends AppCompatActivity {
         List<String[]> savedPerms = PermissionProvider.getAllReadPermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
         for (String[] row : savedPerms) putPermissionRow(permMap, row);
+
+        refreshReadPermissions(permMap);
+    }
+
+    private void refreshReadPermissions(android.util.ArrayMap<String, Integer> permMap) {
 
         for (AppItem item : mReadUserApps)   applyReadPermToItem(item, permMap);
         for (AppItem item : mReadSystemApps) applyReadPermToItem(item, permMap);
@@ -986,7 +1420,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         PermissionProvider.saveAllWritePermissions(this, allWritePerms);
-        PermissionProvider.sendReadWriteBlocklistBroadcast(this);
 
         mWritePendingChanges.clear();
         sortWriteAppLists();
@@ -1047,7 +1480,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         PermissionProvider.saveAllReadPermissions(this, allReadPerms);
-        PermissionProvider.sendReadWriteBlocklistBroadcast(this);
         mReadPendingChanges.clear();
         sortReadAppLists();
         applyReadFilter();
@@ -1080,14 +1512,25 @@ public class MainActivity extends AppCompatActivity {
         File file = new File(getFilesDir(), fileName);
         if (!file.exists()) {
             try {
-                writeEmptyJsonFile(file);
+                if ("write_rules.json".equals(fileName) || "read_rules.json".equals(fileName)) {
+                    writeEmptyRuleConfigFile(file);
+                } else {
+                    writeEmptyJsonArrayFile(file);
+                }
             } catch (Exception e) {
                 XLog.e("ClipboardGuard", "initRuleFiles: failed to create " + fileName, e);
             }
         }
     }
 
-    private void writeEmptyJsonFile(File file) throws Exception {
+    private void writeEmptyRuleConfigFile(File file) throws Exception {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write("{\"enabled\":false,\"content_rules\":[]}".getBytes(StandardCharsets.UTF_8));
+            fos.flush();
+        }
+    }
+
+    private void writeEmptyJsonArrayFile(File file) throws Exception {
         try (FileOutputStream fos = new FileOutputStream(file)) {
             fos.write("[]".getBytes(StandardCharsets.UTF_8));
             fos.flush();
@@ -1189,6 +1632,7 @@ public class MainActivity extends AppCompatActivity {
             final int groupPos = g;
             ExpandableListView elv = mIsReadPage ? mReadExpandableListView : mWriteExpandableListView;
             convert.setOnClickListener(v -> {
+                if (elv == null) return;
                 if (elv.isGroupExpanded(groupPos)) {
                     elv.collapseGroup(groupPos);
                 } else {

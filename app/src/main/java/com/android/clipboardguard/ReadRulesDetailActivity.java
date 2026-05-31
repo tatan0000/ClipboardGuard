@@ -83,12 +83,14 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         setContentView(R.layout.activity_read_rules_detail);
 
         View appBarView = findViewById(R.id.app_bar);
+        if (appBarView != null) {
         ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             v.setPadding(v.getPaddingLeft(), Math.max(statusH - 8, 0), v.getPaddingRight(), v.getPaddingBottom());
             return insets;
         });
         ViewCompat.requestApplyInsets(appBarView);
+        }
 
         applyStatusBarAdaptation();
         initToolbar();
@@ -151,22 +153,28 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         TextView readEnableSelected = findViewById(R.id.btn_enable_selected);
         TextView readDisableSelected = findViewById(R.id.btn_disable_selected);
 
-        mSwitchReadRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            mReadRulesEnabled = isChecked;
-            saveReadRules();
-        });
-        btnAddReadRule.setOnClickListener(v -> showEditReadRuleDialog());
+        if (mSwitchReadRulesEnabled != null) {
+            mSwitchReadRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                mReadRulesEnabled = isChecked;
+                saveReadRules();
+            });
+        }
+        if (btnAddReadRule != null) {
+            btnAddReadRule.setOnClickListener(v -> showEditReadRuleDialog());
+        }
 
-        btnSelectAll.setOnClickListener(v -> {
-            if (mReadSelectedRules.size() == mReadRules.size()) mReadSelectedRules.clear();
-            else { mReadSelectedRules.clear(); mReadSelectedRules.addAll(mReadRules); }
-            if (mReadRulesAdapter != null) mReadRulesAdapter.refreshSelectionMode();
-            updateReadSelectedCount();
-        });
+        if (btnSelectAll != null) {
+            btnSelectAll.setOnClickListener(v -> {
+                if (mReadSelectedRules.size() == mReadRules.size()) mReadSelectedRules.clear();
+                else { mReadSelectedRules.clear(); mReadSelectedRules.addAll(mReadRules); }
+                if (mReadRulesAdapter != null) mReadRulesAdapter.refreshSelectionMode();
+                updateReadSelectedCount();
+            });
+        }
 
-        readDeleteSelected.setOnClickListener(v -> deleteReadSelectedRules());
-        readEnableSelected.setOnClickListener(v -> enableReadSelectedRules(true));
-        readDisableSelected.setOnClickListener(v -> enableReadSelectedRules(false));
+        if (readDeleteSelected != null) readDeleteSelected.setOnClickListener(v -> deleteReadSelectedRules());
+        if (readEnableSelected != null) readEnableSelected.setOnClickListener(v -> enableReadSelectedRules(true));
+        if (readDisableSelected != null) readDisableSelected.setOnClickListener(v -> enableReadSelectedRules(false));
 
         View cardDefaultRules = findViewById(R.id.card_read_default_rules);
         if (cardDefaultRules != null) cardDefaultRules.setOnClickListener(v -> showDefaultRulesPage());
@@ -178,13 +186,15 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         TextView btnDisableDefault = findViewById(R.id.btn_disable_selected_default);
         TextView btnSelectAllDefault = findViewById(R.id.btn_select_all_default);
 
-        btnEnableDefault.setOnClickListener(v -> enableReadDefaultSelected(true));
-        btnDisableDefault.setOnClickListener(v -> enableReadDefaultSelected(false));
-        btnSelectAllDefault.setOnClickListener(v -> toggleReadDefaultSelectAll());
+        if (btnEnableDefault != null) btnEnableDefault.setOnClickListener(v -> enableReadDefaultSelected(true));
+        if (btnDisableDefault != null) btnDisableDefault.setOnClickListener(v -> enableReadDefaultSelected(false));
+        if (btnSelectAllDefault != null) btnSelectAllDefault.setOnClickListener(v -> toggleReadDefaultSelectAll());
 
         if (mReadDefaultRulesAdapter == null) mReadDefaultRulesAdapter = new ReadRulesAdapter(mReadDefaultRules, true);
-        rvDefaultRules.setLayoutManager(new LinearLayoutManager(this));
-        rvDefaultRules.setAdapter(mReadDefaultRulesAdapter);
+        if (rvDefaultRules != null) {
+            rvDefaultRules.setLayoutManager(new LinearLayoutManager(this));
+            rvDefaultRules.setAdapter(mReadDefaultRulesAdapter);
+        }
 
         mHandler.post(this::loadDefaultReadRulesAsync);
     }
@@ -195,8 +205,10 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
     private void initReadRulesDetailPage() {
         if (mReadRulesAdapter == null) mReadRulesAdapter = new ReadRulesAdapter(mReadRules);
-        mRvReadRulesDetail.setLayoutManager(new LinearLayoutManager(this));
-        mRvReadRulesDetail.setAdapter(mReadRulesAdapter);
+        if (mRvReadRulesDetail != null) {
+            mRvReadRulesDetail.setLayoutManager(new LinearLayoutManager(this));
+            mRvReadRulesDetail.setAdapter(mReadRulesAdapter);
+        }
         mHandler.post(this::loadReadRulesSync);
     }
 
@@ -320,7 +332,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             File file = new File(getFilesDir(), "read_rules.json");
             writeFile(file, root.toString(2));
 
-            sendMergedReadRulesBroadcast();
+            notifyRulesChanged();
             XLog.i("ClipboardGuard-Rules", "已保存读取规则，自定义规则数=" + arr.length());
         } catch (Exception e) {
             XLog.e("ClipboardGuard-Rules", "saveReadRules failed", e);
@@ -330,7 +342,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     /** 用户操作默认规则时调用：写入文件 + 广播 */
     private void saveDefaultReadRules() {
         saveDefaultReadRulesToFile();
-        sendMergedReadRulesBroadcast();
+        notifyRulesChanged();
         XLog.i("ClipboardGuard-Rules", "已保存并广播默认读取规则更新");
     }
 
@@ -348,30 +360,10 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     }
 
     /**
-     * 发送合并后的读取规则广播（自定义规则 + 启用的默认规则）
+     * 通知 system_server 更新配置（自定义规则与默认规则分文件同步）。
      */
-    private void sendMergedReadRulesBroadcast() {
-        try {
-            JSONObject mergedRoot = new JSONObject();
-            mergedRoot.put("enabled", mReadRulesEnabled);
-            JSONArray mergedArr = new JSONArray();
-
-            for (ContentRule rule : mReadRules) mergedArr.put(rule.toJson());
-            for (ContentRule rule : mReadDefaultRules) {
-                if (rule.enabled) mergedArr.put(rule.toJson());
-            }
-
-            mergedRoot.put("content_rules", mergedArr);
-
-            Intent intent = new Intent(PermissionProvider.ACTION_PERMISSION_CHANGED);
-            intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-            intent.putExtra("read_rules_json", mergedRoot.toString());
-            sendBroadcast(intent);
-
-            XLog.i("ClipboardGuard-Rules", "已发送合并读取规则广播，总规则数=" + mergedArr.length());
-        } catch (Exception e) {
-            XLog.e("ClipboardGuard-Rules", "sendMergedReadRulesBroadcast failed", e);
-        }
+    private void notifyRulesChanged() {
+        PermissionProvider.broadcastRulesOnly(this);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -379,10 +371,12 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     // ═══════════════════════════════════════════════════════════════
 
     private void showViewRuleDialog(ContentRule rule) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_view_rule, null);
         TextView tvName = dialogView.findViewById(R.id.tv_rule_name);
         TextView tvPattern = dialogView.findViewById(R.id.tv_rule_pattern);
         TextView tvStatus = dialogView.findViewById(R.id.tv_rule_status);
+        if (tvName == null || tvPattern == null || tvStatus == null) return;
         tvName.setText(rule.name);
         tvPattern.setText(rule.pattern);
         tvStatus.setText(rule.enabled ? "已启用" : "已禁用");
@@ -401,11 +395,13 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     }
 
     private void showEditRuleDialog(ContentRule rule, boolean isEdit) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_rule, null);
         TextInputLayout tilName = dialogView.findViewById(R.id.til_rule_name);
         TextInputLayout tilPattern = dialogView.findViewById(R.id.til_rule_pattern);
         TextInputEditText etName = dialogView.findViewById(R.id.et_rule_name);
         TextInputEditText etPattern = dialogView.findViewById(R.id.et_rule_pattern);
+        if (tilName == null || tilPattern == null || etName == null || etPattern == null) return;
         if (isEdit && rule != null) {
             etName.setText(rule.name);
             etPattern.setText(rule.pattern);
@@ -415,11 +411,14 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         builder.setTitle(title).setView(dialogView).setPositiveButton(R.string.save, null).setNegativeButton(android.R.string.cancel, null);
         mCurrentRuleDialog = builder.create();
         mCurrentRuleDialog.setCanceledOnTouchOutside(false);
+        mCurrentRuleDialog.setOnDismissListener(dialog -> mCurrentRuleDialog = null);
         mCurrentRuleDialog.setOnShowListener(dialog -> {
-            Button pb = mCurrentRuleDialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            AlertDialog currentDialog = mCurrentRuleDialog;
+            if (currentDialog == null || mDestroyed || isFinishing() || isDestroyed()) return;
+            Button pb = currentDialog.getButton(AlertDialog.BUTTON_POSITIVE);
             if (pb != null) pb.setOnClickListener(v -> attemptSaveRule(etName, etPattern, tilName, tilPattern, rule, isEdit));
-            Button nb = mCurrentRuleDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
-            if (nb != null) nb.setOnClickListener(v -> mCurrentRuleDialog.dismiss());
+            Button nb = currentDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (nb != null) nb.setOnClickListener(v -> currentDialog.dismiss());
         });
         mCurrentRuleDialog.show();
         TextWatcher tw = new TextWatcher() {
@@ -445,6 +444,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
 
     private void attemptSaveRule(TextInputEditText etName, TextInputEditText etPattern,
                                  TextInputLayout tilName, TextInputLayout tilPattern, ContentRule rule, boolean isEdit) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         String name = etName.getText() != null ? etName.getText().toString().trim() : "";
         String pattern = etPattern.getText() != null ? etPattern.getText().toString().trim() : "";
         if (name.isEmpty()) {
@@ -468,8 +468,12 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
         saveReadRules();
         refreshReadRulesAdapter();
-        mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
-        mCurrentRuleDialog.dismiss();
+        if (mRvReadRulesDetail != null) {
+            mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) {
+            mCurrentRuleDialog.dismiss();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -498,16 +502,20 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     }
 
     private void deleteReadSelectedRules() {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         int count = mReadSelectedRules.size();
         if (count == 0) return;
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.rules_delete_confirm_title)
                 .setMessage(getString(R.string.rules_delete_selected_confirm, count))
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
+                    if (mDestroyed || isFinishing() || isDestroyed()) return;
                     mReadRules.removeAll(mReadSelectedRules);
                     saveReadRules();
                     refreshReadRulesAdapter();
-                    mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    if (mRvReadRulesDetail != null) {
+                        mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    }
                     exitReadSelectionMode();
                 })
                 .setNegativeButton(android.R.string.cancel, null)
@@ -515,13 +523,17 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     }
 
     private void deleteReadRule(ContentRule rule) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         new MaterialAlertDialogBuilder(this)
                 .setMessage(R.string.rules_delete_confirm)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
+                    if (mDestroyed || isFinishing() || isDestroyed()) return;
                     mReadRules.remove(rule);
                     saveReadRules();
                     refreshReadRulesAdapter();
-                    mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    if (mRvReadRulesDetail != null) {
+                        mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    }
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
@@ -543,22 +555,34 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         mExecutor.execute(() -> {
             boolean enabled = false;
             List<ContentRule> rules = new ArrayList<>();
+            boolean shouldRewrite = false;
             try {
                 File file = new File(getFilesDir(), "read_rules.json");
                 if (file.exists()) {
                     String content = readFile(file);
-                    JSONObject root = new JSONObject(content);
-                    enabled = root.optBoolean("enabled", false);
-                    JSONArray arr = root.optJSONArray("content_rules");
-                    if (arr != null) {
-                        for (int i = 0; i < arr.length(); i++) {
-                            ContentRule rule = ContentRule.fromJson(arr.getJSONObject(i));
-                            if (!rule.isDefault) rules.add(rule);
+                    if (content != null && !content.isEmpty()) {
+                        JSONObject root = new JSONObject(content);
+                        enabled = root.optBoolean("enabled", false);
+                        JSONArray arr = root.optJSONArray("content_rules");
+                        if (arr != null) {
+                            for (int i = 0; i < arr.length(); i++) {
+                                ContentRule rule = ContentRule.fromJson(arr.getJSONObject(i));
+                                if (!rule.isDefault) rules.add(rule);
+                            }
                         }
+                    } else {
+                        shouldRewrite = true;
                     }
+                } else {
+                    shouldRewrite = true;
                 }
             } catch (Exception e) {
+                shouldRewrite = true;
                 XLog.e("ClipboardGuard-Rules", "loadReadRulesSync failed", e);
+            }
+
+            if (shouldRewrite) {
+                rewriteEmptyReadRulesFile();
             }
             final boolean fe = enabled;
             final List<ContentRule> fr = new ArrayList<>(rules);
@@ -599,12 +623,35 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
     }
 
+    private void rewriteEmptyReadRulesFile() {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("enabled", false);
+            root.put("content_rules", new JSONArray());
+            writeFile(new File(getFilesDir(), "read_rules.json"), root.toString(2));
+        } catch (Exception e) {
+            XLog.e("ClipboardGuard-Rules", "rewriteEmptyReadRulesFile failed", e);
+        }
+    }
+
     private void writeFile(File file, String content) {
-        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
-            fos.write(content.getBytes(StandardCharsets.UTF_8));
-            fos.flush();
+        File tmpFile = new File(file.getParentFile(), file.getName() + ".tmp");
+        try {
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tmpFile)) {
+                fos.write(content.getBytes(StandardCharsets.UTF_8));
+                fos.flush();
+            }
+            // 原子 rename：防止 write 中途被 shutdownNow 中断导致文件损坏
+            if (!tmpFile.renameTo(file)) {
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                    fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    fos.flush();
+                }
+            }
         } catch (Exception e) {
             XLog.e("ClipboardGuard", "writeFile failed", e);
+        } finally {
+            tmpFile.delete();
         }
     }
 
@@ -736,6 +783,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         mHandler.removeCallbacksAndMessages(null);
         mExecutor.shutdownNow();
         if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) mCurrentRuleDialog.dismiss();
+        mCurrentRuleDialog = null;
         super.onDestroy();
     }
 }

@@ -79,7 +79,7 @@
                                 android:layout_height="28dp"
                                 android:layout_gravity="center"
                                 android:src="@drawable/ic_shield_off"
-                                app:tint="?attr/colorOnSurfaceVariant" />
+                                app:tint="@null" />
 
                         </com.google.android.material.card.MaterialCardView>
 

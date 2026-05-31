@@ -7,24 +7,17 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Binder;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 /*
- * PermissionCache - 被动刷新内存缓存
+ * PermissionCache - Hook 侧内存缓存
  *
- * 改造说明：
- * - 移除定时静默刷新，仅依靠广播被动更新
- * - 移除静态 Context 引用，避免内存泄漏
- * - 未加载完成时查询返回 true（放行），避免误拦
+ * 开机：ConfigManager.loadFromDataSystem() 从 /data/system/clipboardguard/ 加载
+ * 运行时：监听 App 配置广播，ConfigManager 落盘并刷新本缓存
  */
 public class PermissionCache {
-
-    // ──────────────────────────── 缓存状态 ────────────────────────────
 
     private static final String TAG = "ClipboardGuard.PermCache";
 
@@ -38,162 +31,35 @@ public class PermissionCache {
 
     private static BroadcastReceiver sRefreshReceiver;
 
-    // ──────────────────────────── 本地缓存加载 ────────────────────────────
-
     public static synchronized void loadWriteBlockSet() {
-        XLog.i(TAG, "loadWriteBlockSet 开始...");
-        long start = System.currentTimeMillis();
-
-        try {
-            sWriteBlockSet.clear();
-            Map<String, Integer> all = PermissionProvider.getAllWritePermissionsDirect(null);
-            for (Map.Entry<String, Integer> e : all.entrySet()) {
-                if (e.getValue() == PermissionDecision.PERMISSION_BLOCK) {
-                    sWriteBlockSet.add(e.getKey());
-                }
-            }
-            sWriteLoaded = true;
-
-            long cost = System.currentTimeMillis() - start;
-            XLog.i(TAG, "loadWriteBlockSet 完成！size=" + sWriteBlockSet.size() + "，耗时=" + cost + "ms");
-        } catch (Throwable e) {
-            XLog.e(TAG, "loadWriteBlockSet 失败: " + e.getMessage());
-            sWriteLoaded = false;
-        }
+        ConfigManager.loadFromDataSystem();
     }
 
     public static synchronized void loadReadBlockSet() {
-        XLog.i(TAG, "loadReadBlockSet 开始...");
-        long start = System.currentTimeMillis();
-
-        try {
-            sReadBlockSet.clear();
-            Map<String, Integer> all = PermissionProvider.getAllReadPermissionsDirect(null);
-            for (Map.Entry<String, Integer> e : all.entrySet()) {
-                if (e.getValue() == PermissionDecision.PERMISSION_BLOCK) {
-                    sReadBlockSet.add(e.getKey());
-                }
-            }
-            sReadLoaded = true;
-
-            long cost = System.currentTimeMillis() - start;
-            XLog.i(TAG, "loadReadBlockSet 完成！size=" + sReadBlockSet.size() + "，耗时=" + cost + "ms");
-        } catch (Throwable e) {
-            XLog.e(TAG, "loadReadBlockSet 失败: " + e.getMessage());
-            sReadLoaded = false;
-        }
+        ConfigManager.loadFromDataSystem();
     }
-
-    // ──────────────────────────── 广播数据更新 ────────────────────────────
 
     public static synchronized void updateFromWriteBlockList(ArrayList<String> blocklist) {
         if (blocklist == null) return;
-        XLog.i(TAG, "updateFromWriteBlockList: 收到 " + blocklist.size() + " 条数据");
         sWriteBlockSet.clear();
         sWriteBlockSet.addAll(blocklist);
         sWriteLoaded = true;
+        XLog.d(TAG, "updateFromWriteBlockList: 收到 " + blocklist.size() + " 条数据");
     }
 
     public static synchronized void updateFromReadBlockList(ArrayList<String> blocklist) {
         if (blocklist == null) return;
-        XLog.i(TAG, "updateFromReadBlockList: 收到 " + blocklist.size() + " 条数据");
         sReadBlockSet.clear();
         sReadBlockSet.addAll(blocklist);
         sReadLoaded = true;
+        XLog.d(TAG, "updateFromReadBlockList: 收到 " + blocklist.size() + " 条数据");
     }
 
-    // ──────────────────────────── Provider / 文件兜底加载 ────────────────────────────
-
-    public static synchronized void refreshWriteBlockSet() {
-        XLog.i(TAG, "被动刷新 writeBlockSet...");
-        loadWriteBlockSet();
+    public static synchronized void updateGlobalFlags(boolean readBlockedToastEnabled, boolean lsposedLogEnabled) {
+        sReadBlockedToastEnabled = readBlockedToastEnabled;
+        sLsposedLogEnabled = lsposedLogEnabled;
     }
 
-    public static synchronized void refreshReadBlockSet() {
-        XLog.i(TAG, "被动刷新 readBlockSet...");
-        loadReadBlockSet();
-    }
-
-    public static synchronized boolean loadFullConfigFromProvider(Context context) {
-        if (context == null) return false;
-        long identity = Binder.clearCallingIdentity();
-        try {
-            // system_server 兜底读取模块私有文件；优先路径仍是 App 侧广播推送。
-            String filesDir = context.createPackageContext(
-                    "com.android.clipboardguard", Context.CONTEXT_IGNORE_SECURITY)
-                    .getFilesDir().getPath();
-            String prefsFile = new java.io.File(filesDir).getParent()
-                    + "/shared_prefs/clipboardguard_prefs.xml";
-
-            updateFromWriteBlockList(loadBlocklistFromFile(filesDir + "/write_blocklist.txt"));
-            updateFromReadBlockList(loadBlocklistFromFile(filesDir + "/read_blocklist.txt"));
-
-            loadRulesFromFileOrDefault(true);
-            loadRulesFromFileOrDefault(false);
-
-            sReadBlockedToastEnabled = readBooleanFromFile(prefsFile, "read_blocked_toast_enabled");
-            sLsposedLogEnabled = readBooleanFromFile(prefsFile, "lsposed_log_enabled");
-            XLog.i(TAG, "loadFullConfigFromProvider 完成，write=" + sWriteBlockSet.size()
-                    + " read=" + sReadBlockSet.size()
-                    + " toast=" + sReadBlockedToastEnabled
-                    + " lsposedLog=" + sLsposedLogEnabled);
-            return true;
-        } catch (Throwable e) {
-            XLog.w(TAG, "loadFullConfigFromProvider 失败: " + e.getMessage());
-            return false;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
-    private static ArrayList<String> loadBlocklistFromFile(String filePath) {
-        ArrayList<String> result = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String pkg = line.trim();
-                if (!pkg.isEmpty()) {
-                    result.add(pkg);
-                }
-            }
-        } catch (Throwable e) {
-            XLog.w(TAG, "loadBlocklistFromFile 失败: " + filePath + " -> " + e.getMessage());
-        }
-        return result;
-    }
-
-    private static void loadRulesFromFileOrDefault(boolean writeRules) {
-        if (writeRules) {
-            ContentRulesManager.loadWriteRules();
-        } else {
-            ContentRulesManager.loadReadRules();
-        }
-    }
-
-    private static boolean readBooleanFromFile(String filePath, String key) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            String prefix = key + "=";
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.startsWith(prefix)) {
-                    return Boolean.parseBoolean(line.substring(prefix.length()).trim());
-                }
-            }
-        } catch (Throwable e) {
-            XLog.w(TAG, "readBooleanFromFile 失败: " + filePath + " -> " + e.getMessage());
-        }
-        return true;
-    }
-
-    // ──────────────────────────── 广播接收器注册 ────────────────────────────
-
-    /**
-     * 注册权限变更广播接收器。
-     *
-     * @param context system_server Context
-     * @return true 注册成功，false 注册失败（系统尚未就绪等）
-     */
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public static synchronized boolean registerRefreshReceiver(Context context) {
         if (sRefreshReceiver != null) return true;
@@ -202,79 +68,57 @@ public class PermissionCache {
             BroadcastReceiver receiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context ctx, Intent intent) {
-                    XLog.d(TAG, "收到权限变更广播");
-
-                    // 写入/读取拦截列表：即使为空也要更新，表示用户清空了勾选项。
-                    ArrayList<String> writeBlocklist = intent.getStringArrayListExtra("write_blocklist");
-                    if (intent.hasExtra("write_blocklist")) {
-                        updateFromWriteBlockList(writeBlocklist != null ? writeBlocklist : new ArrayList<>());
-                    }
-
-                    ArrayList<String> readBlocklist = intent.getStringArrayListExtra("read_blocklist");
-                    if (intent.hasExtra("read_blocklist")) {
-                        updateFromReadBlockList(readBlocklist != null ? readBlocklist : new ArrayList<>());
-                    }
-
-                    // 规则 JSON：只在携带有效内容时更新。
-                    String writeRulesJson = intent.getStringExtra("write_rules_json");
-                    if (intent.hasExtra("write_rules_json") && writeRulesJson != null && !writeRulesJson.isEmpty()) {
-                        ContentRulesManager.updateWriteRulesFromJson(writeRulesJson);
-                    }
-
-                    String readRulesJson = intent.getStringExtra("read_rules_json");
-                    if (intent.hasExtra("read_rules_json") && readRulesJson != null && !readRulesJson.isEmpty()) {
-                        ContentRulesManager.updateReadRulesFromJson(readRulesJson);
-                    }
-
-                    if (intent.hasExtra("read_blocked_toast_enabled")) {
-                        sReadBlockedToastEnabled = intent.getBooleanExtra("read_blocked_toast_enabled", true);
-                        XLog.i(TAG, "updateReadBlockedToastEnabled: " + sReadBlockedToastEnabled);
-                    }
-
-                    if (intent.hasExtra("lsposed_log_enabled")) {
-                        sLsposedLogEnabled = intent.getBooleanExtra("lsposed_log_enabled", true);
-                        XLog.i(TAG, "updateLsposedLogEnabled: " + sLsposedLogEnabled);
-                    }
-
-                    // 如果广播中没有有效数据，尝试基于 ContentProvider 刷新
-                    if (!intent.hasExtra("write_blocklist") && !intent.hasExtra("read_blocklist")
-                            && !intent.hasExtra("write_rules_json") && !intent.hasExtra("read_rules_json")
-                            && !intent.hasExtra("read_blocked_toast_enabled")
-                            && !intent.hasExtra("lsposed_log_enabled")) {
-                        refreshWriteBlockSet();
-                        refreshReadBlockSet();
-                    }
+                    ConfigManager.applyConfigBroadcast(intent);
+                    // App 打开时推送配置，同时更新模块状态 JSON：
+                    // 确保 Binder onTransact 返回最新状态（涵盖 App 进程重建场景）
+                    ClipboardHook.reportHookStatus();
                 }
             };
 
-            IntentFilter filter = new IntentFilter(PermissionProvider.ACTION_PERMISSION_CHANGED);
+            IntentFilter filter = new IntentFilter(PermissionProvider.ACTION_CONFIG_CHANGED);
             long identity = Binder.clearCallingIdentity();
             try {
-                // 广播发送方是 App 进程，接收方在 system_server，必须允许跨进程接收。
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
+                    // 注意：这里必须使用 RECEIVER_EXPORTED。
+                    // 发送端是 App 进程（任意 UID），接收端是 system_server（UID=1000），
+                    // RECEIVER_NOT_EXPORTED 会阻止跨 UID 广播，导致 App 配置变更通知
+                    // 被静默丢弃，system_server 侧永远收不到。安全由 PERMISSION_CONFIG_SYNC
+                    // 签名级权限保证（仅本模块 App 持有）。
+                    context.registerReceiver(
+                            receiver,
+                            filter,
+                            PermissionProvider.PERMISSION_CONFIG_SYNC,
+                            null,
+                            Context.RECEIVER_EXPORTED
+                    );
                 } else {
-                    context.registerReceiver(receiver, filter);
+                    context.registerReceiver(
+                            receiver,
+                            filter,
+                            PermissionProvider.PERMISSION_CONFIG_SYNC,
+                            null
+                    );
                 }
                 sRefreshReceiver = receiver;
-                XLog.i(TAG, "权限变更广播接收器注册成功");
+                XLog.i(TAG, "配置变更广播接收器注册成功");
                 return true;
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
         } catch (NullPointerException npe) {
-            // 系统尚未就绪（IActivityManager 代理为 null），早期启动时正常现象
             XLog.w(TAG, "广播接收器注册失败：系统尚未就绪");
             return false;
         } catch (Throwable e) {
-            XLog.e(TAG, "注册权限变更广播接收器失败: " + e.getMessage());
+            XLog.e(TAG, "注册广播接收器失败: " + e.getMessage());
             return false;
         }
     }
 
-    // ──────────────────────────── 查询接口 ────────────────────────────
-
-    public static boolean isWriteIgnored(String packageName) {
+    /**
+     * 检查包名是否不在写入拦截列表中（即应放行）。
+     * @return true = 放行（不在拦截列表 或 缓存未加载），false = 应拦截
+     */
+    public static synchronized boolean isWriteIgnored(String packageName) {
         if (!sWriteLoaded) {
             XLog.w(TAG, "写入缓存未加载，暂时放行: " + packageName);
             return true;
@@ -282,7 +126,11 @@ public class PermissionCache {
         return !sWriteBlockSet.contains(packageName);
     }
 
-    public static boolean isReadIgnored(String packageName) {
+    /**
+     * 检查包名是否不在读取拦截列表中（即应放行）。
+     * @return true = 放行（不在拦截列表 或 缓存未加载），false = 应拦截
+     */
+    public static synchronized boolean isReadIgnored(String packageName) {
         if (!sReadLoaded) {
             XLog.w(TAG, "读取缓存未加载，暂时放行: " + packageName);
             return true;
@@ -290,16 +138,11 @@ public class PermissionCache {
         return !sReadBlockSet.contains(packageName);
     }
 
-    public static boolean isWriteLoaded() { return sWriteLoaded; }
-
-    public static boolean isReadLoaded() { return sReadLoaded; }
-
+    public static synchronized boolean isWriteLoaded() { return sWriteLoaded; }
+    public static synchronized boolean isReadLoaded() { return sReadLoaded; }
     public static boolean isReadBlockedToastEnabled() { return sReadBlockedToastEnabled; }
-
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean isLsposedLogEnabled() { return sLsposedLogEnabled; }
-
-    public static int getWriteBlockSetSize() { return sWriteBlockSet.size(); }
-
-    public static int getReadBlockSetSize() { return sReadBlockSet.size(); }
+    public static synchronized int getWriteBlockSetSize() { return sWriteBlockSet.size(); }
+    public static synchronized int getReadBlockSetSize() { return sReadBlockSet.size(); }
 }

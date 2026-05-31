@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- 剪贴板拦截配置由用户主动导出/导入，不参与系统自动备份。 -->
+    <exclude domain="file" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="database" path="." />
+</full-backup-content>

@@ -83,6 +83,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         setContentView(R.layout.activity_write_rules_detail);
 
         View appBarView = findViewById(R.id.app_bar);
+        if (appBarView != null) {
         ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
             int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             v.setPadding(v.getPaddingLeft(), Math.max(statusH - 8, 0),
@@ -90,6 +91,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             return insets;
         });
         ViewCompat.requestApplyInsets(appBarView);
+        }
 
         applyStatusBarAdaptation();
         initToolbar();
@@ -160,23 +162,29 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             tvWriteRulesHint.setText(R.string.rules_write_hint);
         }
 
-        mSwitchWriteRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            mWriteRulesEnabled = isChecked;
-            saveWriteRules(); // 用户操作，保存并广播
-        });
+        if (mSwitchWriteRulesEnabled != null) {
+            mSwitchWriteRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                mWriteRulesEnabled = isChecked;
+                saveWriteRules();
+            });
+        }
 
-        btnAddWriteRule.setOnClickListener(v -> showEditWriteRuleDialog());
+        if (btnAddWriteRule != null) {
+            btnAddWriteRule.setOnClickListener(v -> showEditWriteRuleDialog());
+        }
 
-        btnSelectAll.setOnClickListener(v -> {
-            if (mWriteSelectedRules.size() == mWriteRules.size()) mWriteSelectedRules.clear();
-            else { mWriteSelectedRules.clear(); mWriteSelectedRules.addAll(mWriteRules); }
-            if (mWriteRulesAdapter != null) mWriteRulesAdapter.refreshSelectionMode();
-            updateWriteSelectedCount();
-        });
+        if (btnSelectAll != null) {
+            btnSelectAll.setOnClickListener(v -> {
+                if (mWriteSelectedRules.size() == mWriteRules.size()) mWriteSelectedRules.clear();
+                else { mWriteSelectedRules.clear(); mWriteSelectedRules.addAll(mWriteRules); }
+                if (mWriteRulesAdapter != null) mWriteRulesAdapter.refreshSelectionMode();
+                updateWriteSelectedCount();
+            });
+        }
 
-        writeDeleteSelected.setOnClickListener(v -> deleteWriteSelectedRules());
-        writeEnableSelected.setOnClickListener(v -> enableWriteSelectedRules(true));
-        writeDisableSelected.setOnClickListener(v -> enableWriteSelectedRules(false));
+        if (writeDeleteSelected != null) writeDeleteSelected.setOnClickListener(v -> deleteWriteSelectedRules());
+        if (writeEnableSelected != null) writeEnableSelected.setOnClickListener(v -> enableWriteSelectedRules(true));
+        if (writeDisableSelected != null) writeDisableSelected.setOnClickListener(v -> enableWriteSelectedRules(false));
 
         View cardDefaultRules = findViewById(R.id.card_write_default_rules);
         if (cardDefaultRules != null) cardDefaultRules.setOnClickListener(v -> showDefaultRulesPage());
@@ -188,15 +196,17 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         TextView btnDisableDefault = findViewById(R.id.btn_disable_selected_default);
         TextView btnSelectAllDefault = findViewById(R.id.btn_select_all_default);
 
-        btnEnableDefault.setOnClickListener(v -> enableWriteDefaultSelected(true));
-        btnDisableDefault.setOnClickListener(v -> enableWriteDefaultSelected(false));
-        btnSelectAllDefault.setOnClickListener(v -> toggleWriteDefaultSelectAll());
+        if (btnEnableDefault != null) btnEnableDefault.setOnClickListener(v -> enableWriteDefaultSelected(true));
+        if (btnDisableDefault != null) btnDisableDefault.setOnClickListener(v -> enableWriteDefaultSelected(false));
+        if (btnSelectAllDefault != null) btnSelectAllDefault.setOnClickListener(v -> toggleWriteDefaultSelectAll());
 
         if (mWriteDefaultRulesAdapter == null) {
             mWriteDefaultRulesAdapter = new WriteRulesAdapter(mWriteDefaultRules, true);
         }
-        rvDefaultRules.setLayoutManager(new LinearLayoutManager(this));
-        rvDefaultRules.setAdapter(mWriteDefaultRulesAdapter);
+        if (rvDefaultRules != null) {
+            rvDefaultRules.setLayoutManager(new LinearLayoutManager(this));
+            rvDefaultRules.setAdapter(mWriteDefaultRulesAdapter);
+        }
 
         mHandler.post(this::loadDefaultWriteRulesAsync);
     }
@@ -207,8 +217,10 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
     private void initWriteRulesDetailPage() {
         if (mWriteRulesAdapter == null) mWriteRulesAdapter = new WriteRulesAdapter(mWriteRules);
-        mRvWriteRulesDetail.setLayoutManager(new LinearLayoutManager(this));
-        mRvWriteRulesDetail.setAdapter(mWriteRulesAdapter);
+        if (mRvWriteRulesDetail != null) {
+            mRvWriteRulesDetail.setLayoutManager(new LinearLayoutManager(this));
+            mRvWriteRulesDetail.setAdapter(mWriteRulesAdapter);
+        }
         mHandler.post(this::loadWriteRulesSync);
     }
 
@@ -329,7 +341,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             File file = new File(getFilesDir(), "write_rules.json");
             writeFile(file, root.toString(2));
 
-            sendMergedWriteRulesBroadcast();
+            notifyRulesChanged();
             XLog.i("ClipboardGuard-Rules", "已保存写入规则，自定义规则数=" + arr.length());
         } catch (Exception e) {
             XLog.e("ClipboardGuard-Rules", "saveWriteRules failed", e);
@@ -339,7 +351,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     /** 用户操作默认规则后保存并广播 */
     private void saveDefaultWriteRules() {
         saveDefaultWriteRulesToFile();
-        sendMergedWriteRulesBroadcast();
+        notifyRulesChanged();
         XLog.i("ClipboardGuard-Rules", "已保存并广播默认写入规则更新");
     }
 
@@ -359,28 +371,8 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     /**
      * 发送合并后的写入规则广播（自定义规则 + 启用的默认规则）
      */
-    private void sendMergedWriteRulesBroadcast() {
-        try {
-            JSONObject mergedRoot = new JSONObject();
-            mergedRoot.put("enabled", mWriteRulesEnabled);
-            JSONArray mergedArr = new JSONArray();
-
-            for (ContentRule rule : mWriteRules) mergedArr.put(rule.toJson());
-            for (ContentRule rule : mWriteDefaultRules) {
-                if (rule.enabled) mergedArr.put(rule.toJson());
-            }
-
-            mergedRoot.put("content_rules", mergedArr);
-
-            Intent intent = new Intent(PermissionProvider.ACTION_PERMISSION_CHANGED);
-            intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-            intent.putExtra("write_rules_json", mergedRoot.toString());
-            sendBroadcast(intent);
-
-            XLog.i("ClipboardGuard-Rules", "已发送合并写入规则广播，总规则数=" + mergedArr.length());
-        } catch (Exception e) {
-            XLog.e("ClipboardGuard-Rules", "sendMergedWriteRulesBroadcast failed", e);
-        }
+    private void notifyRulesChanged() {
+        PermissionProvider.broadcastRulesOnly(this);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -388,10 +380,12 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     // ═══════════════════════════════════════════════════════════════
 
     private void showViewRuleDialog(ContentRule rule) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_view_rule, null);
         TextView tvName = dialogView.findViewById(R.id.tv_rule_name);
         TextView tvPattern = dialogView.findViewById(R.id.tv_rule_pattern);
         TextView tvStatus = dialogView.findViewById(R.id.tv_rule_status);
+        if (tvName == null || tvPattern == null || tvStatus == null) return;
         tvName.setText(rule.name);
         tvPattern.setText(rule.pattern);
         tvStatus.setText(rule.enabled ? "已启用" : "已禁用");
@@ -408,11 +402,13 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     private void showEditWriteRuleDialog() { showEditRuleDialog(null, false); }
 
     private void showEditRuleDialog(ContentRule rule, boolean isEdit) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_rule, null);
         TextInputLayout tilName = dialogView.findViewById(R.id.til_rule_name);
         TextInputLayout tilPattern = dialogView.findViewById(R.id.til_rule_pattern);
         TextInputEditText etName = dialogView.findViewById(R.id.et_rule_name);
         TextInputEditText etPattern = dialogView.findViewById(R.id.et_rule_pattern);
+        if (tilName == null || tilPattern == null || etName == null || etPattern == null) return;
 
         if (isEdit && rule != null) { etName.setText(rule.name); etPattern.setText(rule.pattern); }
 
@@ -425,12 +421,15 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
 
         mCurrentRuleDialog = builder.create();
         mCurrentRuleDialog.setCanceledOnTouchOutside(false);
+        mCurrentRuleDialog.setOnDismissListener(dialog -> mCurrentRuleDialog = null);
         mCurrentRuleDialog.setOnShowListener(dialog -> {
-            Button positiveButton = mCurrentRuleDialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            AlertDialog currentDialog = mCurrentRuleDialog;
+            if (currentDialog == null || mDestroyed || isFinishing() || isDestroyed()) return;
+            Button positiveButton = currentDialog.getButton(AlertDialog.BUTTON_POSITIVE);
             if (positiveButton != null) positiveButton.setOnClickListener(v ->
                     attemptSaveRule(etName, etPattern, tilName, tilPattern, rule, isEdit));
-            Button negativeButton = mCurrentRuleDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
-            if (negativeButton != null) negativeButton.setOnClickListener(v -> mCurrentRuleDialog.dismiss());
+            Button negativeButton = currentDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (negativeButton != null) negativeButton.setOnClickListener(v -> currentDialog.dismiss());
         });
         mCurrentRuleDialog.show();
 
@@ -458,6 +457,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     private void attemptSaveRule(TextInputEditText etName, TextInputEditText etPattern,
                                  TextInputLayout tilName, TextInputLayout tilPattern,
                                  ContentRule rule, boolean isEdit) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         String name = etName.getText() != null ? etName.getText().toString().trim() : "";
         String pattern = etPattern.getText() != null ? etPattern.getText().toString().trim() : "";
         if (name.isEmpty()) { tilName.setError(getString(R.string.rules_name_required)); return; }
@@ -472,8 +472,12 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         }
         saveWriteRules(); // 用户操作，保存并广播
         refreshWriteRulesAdapter();
-        mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
-        mCurrentRuleDialog.dismiss();
+        if (mRvWriteRulesDetail != null) {
+            mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) {
+            mCurrentRuleDialog.dismiss();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -495,27 +499,35 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         if (mWriteSelectedCount != null) mWriteSelectedCount.setText(getString(R.string.selected_count, mWriteSelectedRules.size()));
     }
     private void deleteWriteSelectedRules() {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         int count = mWriteSelectedRules.size();
         if (count == 0) return;
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.rules_delete_confirm_title)
                 .setMessage(getString(R.string.rules_delete_selected_confirm, count))
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
+                    if (mDestroyed || isFinishing() || isDestroyed()) return;
                     mWriteRules.removeAll(mWriteSelectedRules);
                     saveWriteRules(); // 用户操作，保存并广播
                     refreshWriteRulesAdapter();
-                    mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    if (mRvWriteRulesDetail != null) {
+                        mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    }
                     exitWriteSelectionMode();
                 }).setNegativeButton(android.R.string.cancel, null).show();
     }
     private void deleteWriteRule(ContentRule rule) {
+        if (mDestroyed || isFinishing() || isDestroyed()) return;
         new MaterialAlertDialogBuilder(this)
                 .setMessage(R.string.rules_delete_confirm)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
+                    if (mDestroyed || isFinishing() || isDestroyed()) return;
                     mWriteRules.remove(rule);
                     saveWriteRules(); // 用户操作，保存并广播
                     refreshWriteRulesAdapter();
-                    mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    if (mRvWriteRulesDetail != null) {
+                        mRvWriteRulesDetail.setVisibility(mWriteRules.isEmpty() ? View.GONE : View.VISIBLE);
+                    }
                 }).setNegativeButton(android.R.string.cancel, null).show();
     }
     private void enableWriteSelectedRules(boolean enable) {
@@ -534,21 +546,35 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         mExecutor.execute(() -> {
             boolean enabled = false;
             List<ContentRule> rules = new ArrayList<>();
+            boolean shouldRewrite = false;
             try {
                 File file = new File(getFilesDir(), "write_rules.json");
                 if (file.exists()) {
                     String content = readFile(file);
-                    JSONObject root = new JSONObject(content);
-                    enabled = root.optBoolean("enabled", false);
-                    JSONArray arr = root.optJSONArray("content_rules");
-                    if (arr != null) {
-                        for (int i = 0; i < arr.length(); i++) {
-                            ContentRule rule = ContentRule.fromJson(arr.getJSONObject(i));
-                            if (!rule.isDefault) rules.add(rule);
+                    if (content != null && !content.isEmpty()) {
+                        JSONObject root = new JSONObject(content);
+                        enabled = root.optBoolean("enabled", false);
+                        JSONArray arr = root.optJSONArray("content_rules");
+                        if (arr != null) {
+                            for (int i = 0; i < arr.length(); i++) {
+                                ContentRule rule = ContentRule.fromJson(arr.getJSONObject(i));
+                                if (!rule.isDefault) rules.add(rule);
+                            }
                         }
+                    } else {
+                        shouldRewrite = true;
                     }
+                } else {
+                    shouldRewrite = true;
                 }
-            } catch (Exception e) { XLog.e("ClipboardGuard-Rules", "loadWriteRulesSync failed", e); }
+            } catch (Exception e) {
+                shouldRewrite = true;
+                XLog.e("ClipboardGuard-Rules", "loadWriteRulesSync failed", e);
+            }
+
+            if (shouldRewrite) {
+                rewriteEmptyWriteRulesFile();
+            }
 
             final boolean fe = enabled;
             final List<ContentRule> fr = new ArrayList<>(rules);
@@ -586,10 +612,37 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         } catch (Exception e) { return ""; }
     }
 
+    private void rewriteEmptyWriteRulesFile() {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("enabled", false);
+            root.put("content_rules", new JSONArray());
+            writeFile(new File(getFilesDir(), "write_rules.json"), root.toString(2));
+        } catch (Exception e) {
+            XLog.e("ClipboardGuard-Rules", "rewriteEmptyWriteRulesFile failed", e);
+        }
+    }
+
     private void writeFile(File file, String content) {
-        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
-            fos.write(content.getBytes(StandardCharsets.UTF_8)); fos.flush();
-        } catch (Exception e) { XLog.e("ClipboardGuard", "writeFile failed: " + file.getName(), e); }
+        File tmpFile = new File(file.getParentFile(), file.getName() + ".tmp");
+        try {
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tmpFile)) {
+                fos.write(content.getBytes(StandardCharsets.UTF_8));
+                fos.flush();
+            }
+            // 原子 rename：防止 write 中途被 shutdownNow 中断导致文件损坏
+            if (!tmpFile.renameTo(file)) {
+                // rename 失败时回退覆盖写
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                    fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    fos.flush();
+                }
+            }
+        } catch (Exception e) {
+            XLog.e("ClipboardGuard", "writeFile failed: " + file.getName(), e);
+        } finally {
+            tmpFile.delete();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -701,6 +754,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         mHandler.removeCallbacksAndMessages(null);
         mExecutor.shutdownNow();
         if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) mCurrentRuleDialog.dismiss();
+        mCurrentRuleDialog = null;
         super.onDestroy();
     }
 }

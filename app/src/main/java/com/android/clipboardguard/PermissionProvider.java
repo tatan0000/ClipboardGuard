@@ -12,6 +12,9 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.IBinder;
+import android.os.Process;
+import android.os.SystemClock;
 import androidx.annotation.NonNull;
 
 import org.json.JSONArray;
@@ -35,10 +38,11 @@ import java.util.Map;
  * - write_blocklist.txt：写入拦截列表
  * - read_blocklist.txt：读取拦截列表
  *
- * 跨进程通道：ContentProvider call()
- * Hook 侧缓存：PermissionCache（启动时全量加载，变更时广播刷新）
+ * 跨进程通道：广播（App → system_server）
+ * Hook 侧缓存：PermissionCache（开机加载 + 广播刷新）
  *
- * 日志方案：日志只输出到 XLog（LSPosed Manager），不保存到数据库。
+ * 日志方案：日志由 PermissionCache.isLsposedLogEnabled() 控制，
+ * 输出到 XLog（LSPosed Manager 模块日志页）。
  */
 public class PermissionProvider extends ContentProvider {
 
@@ -46,9 +50,11 @@ public class PermissionProvider extends ContentProvider {
 
     private static final String TAG = "ClipboardGuard.Provider";
     public static final String AUTHORITY = "com.android.clipboardguard.provider";
+    public static final String PERMISSION_CONFIG_SYNC =
+            "com.android.clipboardguard.permission.CONFIG_SYNC";
 
-    public static final String ACTION_PERMISSION_CHANGED =
-            "com.android.clipboardguard.PERMISSION_CHANGED";
+    public static final String ACTION_CONFIG_CHANGED =
+            "com.android.clipboardguard.CONFIG_CHANGED";
 
     private static final int URI_PERMISSION_PKG = 1;
     private static final int URI_PERMISSION_ALL = 2;
@@ -66,18 +72,24 @@ public class PermissionProvider extends ContentProvider {
     public static final String CALL_METHOD_SET_ALL     = "setAllPermissions";
     public static final String CALL_METHOD_GET_PENDING = "getPending";
     public static final String CALL_METHOD_GET_FULL_CONFIG = "getFullConfig";
+    public static final String CALL_METHOD_GET_BLOCKED_PACKAGES = "getBlockedPackages";
     public static final String CALL_KEY_PACKAGE        = "pkg";
     public static final String CALL_KEY_RESULT         = "result";
     public static final String CALL_KEY_DECISION       = "decision";
     public static final String CALL_KEY_ALL_DATA       = "all_data";
+    public static final String CALL_KEY_SCOPE          = "scope";
+    public static final String CALL_KEY_BLOCKED_PACKAGES = "blocked_packages";
     public static final String CALL_KEY_WRITE_BLOCKLIST = "write_blocklist";
     public static final String CALL_KEY_READ_BLOCKLIST = "read_blocklist";
     public static final String CALL_KEY_WRITE_RULES_JSON = "write_rules_json";
     public static final String CALL_KEY_READ_RULES_JSON = "read_rules_json";
+    public static final String CALL_KEY_WRITE_DEFAULT_RULES_JSON = "write_default_rules_json";
+    public static final String CALL_KEY_READ_DEFAULT_RULES_JSON = "read_default_rules_json";
     public static final String CALL_KEY_READ_BLOCKED_TOAST_ENABLED = "read_blocked_toast_enabled";
     public static final String CALL_KEY_LSPOSED_LOG_ENABLED = "lsposed_log_enabled";
 
     private static final String PACKAGE_NAME = "com.android.clipboardguard";
+
 
     // ──────────────────────────── URI 匹配 ────────────────────────────
 
@@ -129,6 +141,14 @@ public class PermissionProvider extends ContentProvider {
         return true;
     }
 
+    /**
+     * App 保存配置后通知 system_server：发广播携带完整配置。
+     * system_server 收到后写入 /data/system/clipboardguard/ 并刷新内存。
+     */
+    public static void requestConfigSync(Context context) {
+        broadcastFullConfigSnapshot(context);
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // call()
     // ═══════════════════════════════════════════════════════════════
@@ -136,6 +156,8 @@ public class PermissionProvider extends ContentProvider {
     @Override
     public Bundle call(@NonNull String method, String arg, Bundle extras) {
         if (extras == null) extras = new Bundle();
+        int callingUid = Binder.getCallingUid();
+        boolean trustedCaller = isTrustedCaller(callingUid);
         long identity = Binder.clearCallingIdentity();
         try {
             switch (method) {
@@ -152,8 +174,14 @@ public class PermissionProvider extends ContentProvider {
                 }
 
                 case CALL_METHOD_SET_ALL: {
+                    if (!trustedCaller) {
+                        XLog.w(TAG, "拒绝未授权调用: " + method + " uid=" + callingUid);
+                        return new Bundle();
+                    }
                     String[] allData = extras.getStringArray(CALL_KEY_ALL_DATA);
                     String blocklistType = extras.getString("type", "write");
+                    Context ctx = getContext();
+                    if (ctx == null) return new Bundle();
                     if (allData != null) {
                         Map<String, Integer> perms = new HashMap<>();
                         for (int i = 0; i < allData.length - 1; i += 2) {
@@ -166,20 +194,23 @@ public class PermissionProvider extends ContentProvider {
                             }
                         }
                         if ("read".equals(blocklistType)) {
-                            savePermissionsToFile(getReadBlocklistPath(getContext()), perms);
+                            savePermissionsToFile(getReadBlocklistPath(ctx), perms);
                         } else {
-                            savePermissionsToFile(getWriteBlocklistPath(getContext()), perms);
+                            savePermissionsToFile(getWriteBlocklistPath(ctx), perms);
                         }
+                        broadcastBlocklistsOnly(ctx);
                         XLog.i(TAG, "批量保存 " + blocklistType + " 完成: " + perms.size() + " 条");
                     }
                     return new Bundle();
                 }
 
                 case CALL_METHOD_GET_ALL: {
+                    Context ctx = getContext();
+                    if (ctx == null) return new Bundle();
                     String blocklistType = extras.getString("type", "write");
                     String filePath = "read".equals(blocklistType)
-                            ? getReadBlocklistPath(getContext())
-                            : getWriteBlocklistPath(getContext());
+                            ? getReadBlocklistPath(ctx)
+                            : getWriteBlocklistPath(ctx);
                     List<String> blocklist = loadBlocklistFromFile(filePath);
                     String[] flat = new String[blocklist.size() * 2];
                     int i = 0;
@@ -211,20 +242,52 @@ public class PermissionProvider extends ContentProvider {
                 }
 
                 case CALL_METHOD_GET_FULL_CONFIG: {
+                    if (!trustedCaller) {
+                        XLog.w(TAG, "拒绝未授权调用: " + method + " uid=" + callingUid);
+                        return new Bundle();
+                    }
                     Context context = getContext();
+                    if (context == null) return new Bundle();
+                    ensureConfigFiles(context);
                     Bundle result = new Bundle();
                     result.putStringArrayList(CALL_KEY_WRITE_BLOCKLIST,
                             new ArrayList<>(loadBlocklistFromFile(getWriteBlocklistPath(context))));
                     result.putStringArrayList(CALL_KEY_READ_BLOCKLIST,
                             new ArrayList<>(loadBlocklistFromFile(getReadBlocklistPath(context))));
-                    String writeRulesJson = buildMergedRulesJson(context, "write_rules.json", "write_default_rules.json");
+                    String writeRulesJson = readAppRulesFile(context, "write_rules.json");
                     if (writeRulesJson != null) result.putString(CALL_KEY_WRITE_RULES_JSON, writeRulesJson);
-                    String readRulesJson = buildMergedRulesJson(context, "read_rules.json", "read_default_rules.json");
+                    String writeDefaultJson = readAppRulesFile(context, "write_default_rules.json");
+                    if (writeDefaultJson != null) {
+                        result.putString(CALL_KEY_WRITE_DEFAULT_RULES_JSON, writeDefaultJson);
+                    }
+                    String readRulesJson = readAppRulesFile(context, "read_rules.json");
                     if (readRulesJson != null) result.putString(CALL_KEY_READ_RULES_JSON, readRulesJson);
+                    String readDefaultJson = readAppRulesFile(context, "read_default_rules.json");
+                    if (readDefaultJson != null) {
+                        result.putString(CALL_KEY_READ_DEFAULT_RULES_JSON, readDefaultJson);
+                    }
                     result.putBoolean(CALL_KEY_READ_BLOCKED_TOAST_ENABLED, isReadBlockedToastEnabled(context));
                     result.putBoolean(CALL_KEY_LSPOSED_LOG_ENABLED, isLsposedLogEnabled(context));
                     return result;
                 }
+
+                case CALL_METHOD_GET_BLOCKED_PACKAGES: {
+                    if (!trustedCaller) {
+                        XLog.w(TAG, "拒绝未授权调用: " + method + " uid=" + callingUid);
+                        return new Bundle();
+                    }
+                    Context context = getContext();
+                    if (context == null) return new Bundle();
+                    String scope = extras.getString(CALL_KEY_SCOPE, "write");
+                    ArrayList<String> blockedPackages = new ArrayList<>(
+                            "read".equals(scope)
+                                    ? getBlockedReadPackagesDirect(context)
+                                    : getBlockedWritePackagesDirect(context));
+                    Bundle result = new Bundle();
+                    result.putStringArrayList(CALL_KEY_BLOCKED_PACKAGES, blockedPackages);
+                    return result;
+                }
+
             }
         } catch (Throwable e) {
             XLog.e(TAG, "call()失败: " + e.getMessage());
@@ -241,6 +304,10 @@ public class PermissionProvider extends ContentProvider {
     @Override
     public Cursor query(@NonNull Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
+        if (!isTrustedCaller(Binder.getCallingUid())) {
+            XLog.w(TAG, "拒绝未授权 query: " + uri);
+            return null;
+        }
         int match = sUriMatcher.match(uri);
 
         if (match == URI_PERMISSION_PKG || match == URI_QUERY_ALL) {
@@ -250,19 +317,18 @@ public class PermissionProvider extends ContentProvider {
         if (match == URI_PENDING_PKG) {
             String pkg = uri.getLastPathSegment();
             if (pkg == null) return null;
-            Cursor c = mDbHelper.getReadableDatabase().query("pending", null,
-                    "package_name = ?", new String[]{pkg}, null, null, null);
-            if (c.moveToFirst()) {
-                MatrixCursor result = new MatrixCursor(new String[]{COL_PACKAGE, COL_DECISION, COL_REMEMBER});
-                result.addRow(new Object[]{
-                        pkg,
-                        c.getInt(c.getColumnIndexOrThrow(COL_DECISION)),
-                        c.getInt(c.getColumnIndexOrThrow(COL_REMEMBER))
-                });
-                c.close();
-                return result;
+            try (Cursor c = mDbHelper.getReadableDatabase().query("pending", null,
+                    "package_name = ?", new String[]{pkg}, null, null, null)) {
+                if (c.moveToFirst()) {
+                    MatrixCursor result = new MatrixCursor(new String[]{COL_PACKAGE, COL_DECISION, COL_REMEMBER});
+                    result.addRow(new Object[]{
+                            pkg,
+                            c.getInt(c.getColumnIndexOrThrow(COL_DECISION)),
+                            c.getInt(c.getColumnIndexOrThrow(COL_REMEMBER))
+                    });
+                    return result;
+                }
             }
-            c.close();
             return null;
         }
 
@@ -271,6 +337,10 @@ public class PermissionProvider extends ContentProvider {
 
     @Override
     public Uri insert(@NonNull Uri uri, ContentValues values) {
+        if (!isTrustedCaller(Binder.getCallingUid())) {
+            XLog.w(TAG, "拒绝未授权 insert: " + uri);
+            return null;
+        }
         if (values == null) return null;
         int match = sUriMatcher.match(uri);
 
@@ -293,12 +363,18 @@ public class PermissionProvider extends ContentProvider {
 
     @Override
     public int delete(@NonNull Uri uri, String selection, String[] selectionArgs) {
+        if (!isTrustedCaller(Binder.getCallingUid())) {
+            XLog.w(TAG, "拒绝未授权 delete: " + uri);
+            return 0;
+        }
         int match = sUriMatcher.match(uri);
         String pkg = uri.getLastPathSegment();
 
         if (match == URI_DELETE_ALL) {
-            clearBlocklistFile(getWriteBlocklistPath(getContext()));
-            clearBlocklistFile(getReadBlocklistPath(getContext()));
+            Context context = getContext();
+            if (context == null) return 0;
+            clearBlocklistFile(getWriteBlocklistPath(context));
+            clearBlocklistFile(getReadBlocklistPath(context));
             return 1;
         }
 
@@ -311,6 +387,10 @@ public class PermissionProvider extends ContentProvider {
 
     @Override
     public int update(@NonNull Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+        if (!isTrustedCaller(Binder.getCallingUid())) {
+            XLog.w(TAG, "拒绝未授权 update: " + uri);
+            return 0;
+        }
         insert(uri, values);
         return 1;
     }
@@ -409,11 +489,17 @@ public class PermissionProvider extends ContentProvider {
         return getBlocklistPath(context, "read_blocklist.txt");
     }
 
-    private static String getBlocklistPath(Context context, String fileName) {
+    private static String getBlocklistPathCompat(Context context, String fileName) {
         if (context != null) {
             return new File(context.getFilesDir(), fileName).getPath();
         }
         return new File(new File(getPackageDataDir(), "files"), fileName).getPath();
+    }
+
+    private static String getBlocklistPath(Context context, String fileName) {
+        // App 进程（untrusted_app）无法写入 /data/system/clipboardguard/（SELinux EACCES）
+        // 始终使用 App 私有目录，system_server 通过广播读取数据
+        return getBlocklistPathCompat(context, fileName);
     }
 
     private static String getPackageDataDir() {
@@ -422,10 +508,41 @@ public class PermissionProvider extends ContentProvider {
         return new File(new File(dataRoot, "user/0"), PACKAGE_NAME).getPath();
     }
 
+    private static void ensureConfigFiles(Context context) {
+        if (context == null) return;
+        ensureBlocklistFile(getWriteBlocklistPath(context));
+        ensureBlocklistFile(getReadBlocklistPath(context));
+        ensureJsonFile(context, "write_rules.json");
+        ensureJsonFile(context, "read_rules.json");
+        ensureJsonFile(context, "write_default_rules.json");
+        ensureJsonFile(context, "read_default_rules.json");
+    }
+
+    private static void ensureJsonFile(Context context, String fileName) {
+        File file = new File(context.getFilesDir(), fileName);
+        if (file.exists()) return;
+        try {
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                ensureDirectory(parent);
+            }
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                if ("write_rules.json".equals(fileName) || "read_rules.json".equals(fileName)) {
+                    writer.write("{\"enabled\":false,\"content_rules\":[]}");
+                } else {
+                    writer.write("[]");
+                }
+                writer.flush();
+            }
+        } catch (IOException e) {
+            XLog.e(TAG, "ensureJsonFile 失败: " + fileName + " -> " + e.getMessage());
+        }
+    }
+
     // ═══════════════════════════════════ App 端保存接口 ═══════════════════════════════
 
     public static void saveAllWritePermissions(Context context, Map<String, Integer> permissions) {
-        if (permissions == null || permissions.isEmpty()) return;
+        if (permissions == null) return;
         try {
             Uri uri = Uri.parse("content://" + AUTHORITY);
             Bundle args = new Bundle();
@@ -439,7 +556,7 @@ public class PermissionProvider extends ContentProvider {
     }
 
     public static void saveAllReadPermissions(Context context, Map<String, Integer> permissions) {
-        if (permissions == null || permissions.isEmpty()) return;
+        if (permissions == null) return;
         try {
             Uri uri = Uri.parse("content://" + AUTHORITY);
             Bundle args = new Bundle();
@@ -464,64 +581,176 @@ public class PermissionProvider extends ContentProvider {
 
     // ═══════════════════════════════════ 配置广播 ═══════════════════════════════
 
+    public static void requestReadToastSettingSync(Context context) {
+        broadcastFlagsOnly(context);
+    }
+
+    public static void requestLsposedLogSettingSync(Context context) {
+        broadcastFlagsOnly(context);
+    }
+
     /**
-     * 仅发送写入/读取的 blocklist 广播，不携带规则。
-     * 用于包名拦截变更后通知 Hook 侧。
+     * 创建配置变更广播 Intent。
+     *
+     * 注意：接收端在 system_server (package="android")，不能调用
+     * setPackage("com.android.clipboardguard")，否则广播永远不会送达。
+     * 安全由接收端注册时声明的 PERMISSION_CONFIG_SYNC 签名权限保证。
      */
-    public static void sendReadWriteBlocklistBroadcast(Context context) {
-        try {
-            Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
-            intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+    private static Intent createConfigChangedIntent() {
+        Intent intent = new Intent(ACTION_CONFIG_CHANGED);
+        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+        return intent;
+    }
 
-            // 无论列表是否为空都携带 key，Hook 侧才能区分“没有数据”和“数据被清空”。
-            List<String> writeBlocklist = loadBlocklistFromFile(getWriteBlocklistPath(context));
-            intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
-
-            List<String> readBlocklist = loadBlocklistFromFile(getReadBlocklistPath(context));
-            intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
-            intent.putExtra("read_blocked_toast_enabled", isReadBlockedToastEnabled(context));
-            intent.putExtra("lsposed_log_enabled", isLsposedLogEnabled(context));
-
-            context.sendBroadcast(intent);
-            XLog.d(TAG, "已发送 blocklist 广播，写入=" + writeBlocklist.size() + " 读取=" + readBlocklist.size());
-        } catch (Throwable e) {
-            XLog.w(TAG, "发送 blocklist 广播失败: " + e.getMessage());
+    private static void writeTextFile(File file, String content) throws IOException {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            writer.write(content);
+            writer.flush();
         }
     }
 
-    public static void sendFullConfigBroadcast(Context context) {
-        try {
-            Intent intent = new Intent(ACTION_PERMISSION_CHANGED);
-            intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-
-            // 写入 blocklist：无论是否为空都携带 key。
-            List<String> writeBlocklist = loadBlocklistFromFile(getWriteBlocklistPath(context));
-            intent.putStringArrayListExtra("write_blocklist", new ArrayList<>(writeBlocklist));
-
-            // 读取 blocklist：无论是否为空都携带 key。
-            List<String> readBlocklist = loadBlocklistFromFile(getReadBlocklistPath(context));
-            intent.putStringArrayListExtra("read_blocklist", new ArrayList<>(readBlocklist));
-
-            // 写入规则 JSON（合并默认规则中启用的规则）
-            String writeRulesJson = buildMergedRulesJson(context, "write_rules.json", "write_default_rules.json");
-            if (writeRulesJson != null && !writeRulesJson.isEmpty()) {
-                intent.putExtra("write_rules_json", writeRulesJson);
+    private static String readTextFile(File file) {
+        if (file == null || !file.exists()) return null;
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
             }
-
-            // 读取规则 JSON（合并默认规则中启用的规则）
-            String readRulesJson = buildMergedRulesJson(context, "read_rules.json", "read_default_rules.json");
-            if (readRulesJson != null && !readRulesJson.isEmpty()) {
-                intent.putExtra("read_rules_json", readRulesJson);
-            }
-
-            intent.putExtra("read_blocked_toast_enabled", isReadBlockedToastEnabled(context));
-            intent.putExtra("lsposed_log_enabled", isLsposedLogEnabled(context));
-
-            context.sendBroadcast(intent);
-            XLog.d(TAG, "已发送完整配置广播");
-        } catch (Throwable e) {
-            XLog.w(TAG, "发送完整配置广播失败: " + e.getMessage());
+            return sb.toString();
+        } catch (IOException e) {
+            return null;
         }
+    }
+
+    public static void broadcastFullConfigSnapshot(Context context) {
+        if (context == null) return;
+        try {
+            Intent intent = createConfigChangedIntent();
+
+            List<String> writeBlocklist = loadBlocklistFromFile(getWriteBlocklistPath(context));
+            intent.putStringArrayListExtra(CALL_KEY_WRITE_BLOCKLIST, new ArrayList<>(writeBlocklist));
+
+            List<String> readBlocklist = loadBlocklistFromFile(getReadBlocklistPath(context));
+            intent.putStringArrayListExtra(CALL_KEY_READ_BLOCKLIST, new ArrayList<>(readBlocklist));
+
+            String writeRulesJson = readAppRulesFile(context, "write_rules.json");
+            if (writeRulesJson != null && !writeRulesJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_WRITE_RULES_JSON, writeRulesJson);
+            }
+
+            String writeDefaultJson = readAppRulesFile(context, "write_default_rules.json");
+            if (writeDefaultJson != null && !writeDefaultJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_WRITE_DEFAULT_RULES_JSON, writeDefaultJson);
+            }
+
+            String readRulesJson = readAppRulesFile(context, "read_rules.json");
+            if (readRulesJson != null && !readRulesJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_READ_RULES_JSON, readRulesJson);
+            }
+
+            String readDefaultJson = readAppRulesFile(context, "read_default_rules.json");
+            if (readDefaultJson != null && !readDefaultJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_READ_DEFAULT_RULES_JSON, readDefaultJson);
+            }
+
+            intent.putExtra(CALL_KEY_READ_BLOCKED_TOAST_ENABLED, isReadBlockedToastEnabled(context));
+            intent.putExtra(CALL_KEY_LSPOSED_LOG_ENABLED, isLsposedLogEnabled(context));
+
+            context.sendBroadcast(intent, PERMISSION_CONFIG_SYNC);
+            XLog.d(TAG, "已发送全量配置变更广播 → system_server 落盘");
+        } catch (Throwable e) {
+            XLog.w(TAG, "发送配置广播失败: " + e.getMessage());
+        }
+    }
+
+    /** 仅同步写入/读取拦截名单，不发规则和开关状态。 */
+    public static void broadcastBlocklistsOnly(Context context) {
+        if (context == null) return;
+        try {
+            Intent intent = createConfigChangedIntent();
+
+            List<String> writeBlocklist = loadBlocklistFromFile(getWriteBlocklistPath(context));
+            intent.putStringArrayListExtra(CALL_KEY_WRITE_BLOCKLIST, new ArrayList<>(writeBlocklist));
+
+            List<String> readBlocklist = loadBlocklistFromFile(getReadBlocklistPath(context));
+            intent.putStringArrayListExtra(CALL_KEY_READ_BLOCKLIST, new ArrayList<>(readBlocklist));
+
+            context.sendBroadcast(intent, PERMISSION_CONFIG_SYNC);
+            XLog.d(TAG, "已发送拦截名单广播: 写入" + writeBlocklist.size()
+                    + "条, 读取" + readBlocklist.size() + "条");
+        } catch (Throwable e) {
+            XLog.w(TAG, "发送拦截名单广播失败: " + e.getMessage());
+        }
+    }
+
+    /** 仅同步写入/读取规则，不发拦截名单和开关状态。 */
+    public static void broadcastRulesOnly(Context context) {
+        if (context == null) return;
+        try {
+            Intent intent = createConfigChangedIntent();
+
+            String writeRulesJson = readAppRulesFile(context, "write_rules.json");
+            if (writeRulesJson != null && !writeRulesJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_WRITE_RULES_JSON, writeRulesJson);
+            }
+
+            String writeDefaultJson = readAppRulesFile(context, "write_default_rules.json");
+            if (writeDefaultJson != null && !writeDefaultJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_WRITE_DEFAULT_RULES_JSON, writeDefaultJson);
+            }
+
+            String readRulesJson = readAppRulesFile(context, "read_rules.json");
+            if (readRulesJson != null && !readRulesJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_READ_RULES_JSON, readRulesJson);
+            }
+
+            String readDefaultJson = readAppRulesFile(context, "read_default_rules.json");
+            if (readDefaultJson != null && !readDefaultJson.isEmpty()) {
+                intent.putExtra(CALL_KEY_READ_DEFAULT_RULES_JSON, readDefaultJson);
+            }
+
+            context.sendBroadcast(intent, PERMISSION_CONFIG_SYNC);
+            XLog.d(TAG, "已发送规则变更广播");
+        } catch (Throwable e) {
+            XLog.w(TAG, "发送规则广播失败: " + e.getMessage());
+        }
+    }
+
+    /** 仅同步设置页两个开关状态，不发名单和规则。 */
+    public static void broadcastFlagsOnly(Context context) {
+        if (context == null) return;
+        try {
+            Intent intent = createConfigChangedIntent();
+
+            intent.putExtra(CALL_KEY_READ_BLOCKED_TOAST_ENABLED, isReadBlockedToastEnabled(context));
+            intent.putExtra(CALL_KEY_LSPOSED_LOG_ENABLED, isLsposedLogEnabled(context));
+
+            context.sendBroadcast(intent, PERMISSION_CONFIG_SYNC);
+            XLog.d(TAG, "已发送开关状态广播: toast=" + isReadBlockedToastEnabled(context)
+                    + ", log=" + isLsposedLogEnabled(context));
+        } catch (Throwable e) {
+            XLog.w(TAG, "发送开关广播失败: " + e.getMessage());
+        }
+    }
+
+    private boolean isTrustedCaller(int callingUid) {
+        Context context = getContext();
+        if (context == null) return false;
+        if (callingUid == Process.myUid()) return true;
+        if (callingUid == Process.SYSTEM_UID) return true;
+        String[] packages = context.getPackageManager().getPackagesForUid(callingUid);
+        if (packages == null) return false;
+        for (String pkg : packages) {
+            if (PACKAGE_NAME.equals(pkg) || "android".equals(pkg)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -546,58 +775,11 @@ public class PermissionProvider extends ContentProvider {
         }
     }
 
-    // ═══════════════════════════════════ 规则合并 ═══════════════════════════════
+    // ═══════════════════════════════════ 规则文件读取 ═══════════════════════════════
 
-    private static String buildMergedRulesJson(Context context, String rulesFileName, String defaultRulesFileName) {
-        try {
-            JSONObject mergedRoot = new JSONObject();
-            JSONArray mergedArr = new JSONArray();
-
-            // 读取自定义规则文件，获取 enabled 开关状态
-            File rulesFile = new File(context.getFilesDir(), rulesFileName);
-            if (rulesFile.exists()) {
-                String content = readFileContent(rulesFile);
-                if (content != null && !content.isEmpty()) {
-                    try {
-                        JSONObject root = new JSONObject(content);
-                        mergedRoot.put("enabled", root.optBoolean("enabled", false));
-                        JSONArray arr = root.optJSONArray("content_rules");
-                        if (arr != null) {
-                            for (int i = 0; i < arr.length(); i++) {
-                                mergedArr.put(arr.getJSONObject(i));
-                            }
-                        }
-                    } catch (Exception e) {
-                        mergedRoot.put("enabled", false);
-                    }
-                }
-            } else {
-                mergedRoot.put("enabled", false);
-            }
-
-            // 读取默认规则文件，只添加启用的默认规则
-            File defaultFile = new File(context.getFilesDir(), defaultRulesFileName);
-            if (defaultFile.exists()) {
-                String content = readFileContent(defaultFile);
-                if (content != null && !content.isEmpty()) {
-                    try {
-                        JSONArray arr = new JSONArray(content);
-                        for (int i = 0; i < arr.length(); i++) {
-                            JSONObject rule = arr.getJSONObject(i);
-                            if (rule.optBoolean("enabled", false)) {
-                                mergedArr.put(rule);
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }
-            }
-
-            mergedRoot.put("content_rules", mergedArr);
-            return mergedRoot.toString();
-        } catch (Exception e) {
-            XLog.e(TAG, "buildMergedRulesJson failed: " + rulesFileName, e);
-            return null;
-        }
+    private static String readAppRulesFile(Context context, String fileName) {
+        if (context == null) return null;
+        return readFileContent(new File(context.getFilesDir(), fileName));
     }
 
     private static String readFileContent(File file) {
@@ -615,16 +797,10 @@ public class PermissionProvider extends ContentProvider {
 
     // ═══════════════════════════════════ App 端读取接口 ═══════════════════════════════
 
-    /**
-     * 从文件加载写入权限列表
-     */
     public static List<String[]> getAllWritePermissions(Context context) {
         return loadBlocklistAsPermissionList(getWriteBlocklistPath(context));
     }
 
-    /**
-     * 从文件加载读取权限列表
-     */
     public static List<String[]> getAllReadPermissions(Context context) {
         return loadBlocklistAsPermissionList(getReadBlocklistPath(context));
     }
@@ -638,21 +814,16 @@ public class PermissionProvider extends ContentProvider {
         return result;
     }
 
-    public static Map<String, Integer> getAllWritePermissionsDirect(Context context) {
-        return loadBlocklistAsPermissionMap(getWriteBlocklistPath(context));
+    public static List<String> getBlockedWritePackagesDirect(Context context) {
+        return loadBlocklistAsPackageList(getWriteBlocklistPath(context));
     }
 
-    public static Map<String, Integer> getAllReadPermissionsDirect(Context context) {
-        return loadBlocklistAsPermissionMap(getReadBlocklistPath(context));
+    public static List<String> getBlockedReadPackagesDirect(Context context) {
+        return loadBlocklistAsPackageList(getReadBlocklistPath(context));
     }
 
-    private static Map<String, Integer> loadBlocklistAsPermissionMap(String filePath) {
-        Map<String, Integer> result = new HashMap<>();
-        List<String> blocklist = loadBlocklistFromFile(filePath);
-        for (String pkg : blocklist) {
-            result.put(pkg, PermissionDecision.PERMISSION_BLOCK);
-        }
-        return result;
+    private static List<String> loadBlocklistAsPackageList(String filePath) {
+        return new ArrayList<>(loadBlocklistFromFile(filePath));
     }
 
 }
