@@ -73,6 +73,7 @@ public class XLog {
 
     // ──────────────────────────── 对外日志接口 ────────────────────────────
 
+    /** 输出 DEBUG 级别日志，Hook 侧走 XposedBridge，App 侧走 Log.d */
     public static void d(String tag, String msg) {
         if (sLogMethod != null) {
             xposedLog("[D][" + tag + "] " + msg);
@@ -81,6 +82,7 @@ public class XLog {
         }
     }
 
+    /** 输出 INFO 级别日志，Hook 侧走 XposedBridge，App 侧走 Log.i */
     public static void i(String tag, String msg) {
         if (sLogMethod != null) {
             xposedLog("[I][" + tag + "] " + msg);
@@ -89,6 +91,7 @@ public class XLog {
         }
     }
 
+    /** 输出 WARN 级别日志，Hook 侧走 XposedBridge，App 侧走 Log.w */
     public static void w(String tag, String msg) {
         if (sLogMethod != null) {
             xposedLog("[W][" + tag + "] " + msg);
@@ -97,6 +100,7 @@ public class XLog {
         }
     }
 
+    /** 输出 ERROR 级别日志，Hook 侧走 XposedBridge，App 侧走 Log.e */
     public static void e(String tag, String msg) {
         if (sLogMethod != null) {
             xposedLog("[E][" + tag + "] " + msg);
@@ -105,6 +109,7 @@ public class XLog {
         }
     }
 
+    /** 输出 ERROR 级别日志（带异常堆栈），Hook 侧走 XposedBridge，App 侧走 Log.e */
     public static void e(String tag, String msg, Throwable t) {
         if (sLogMethod != null) {
             xposedLog("[E][" + tag + "] " + msg);
@@ -116,6 +121,7 @@ public class XLog {
         }
     }
 
+    /** 输出 WARN 级别日志（带异常堆栈），Hook 侧走 XposedBridge，App 侧走 Log.w */
     public static void w(String tag, String msg, Throwable t) {
         if (sLogMethod != null) {
             xposedLog("[W][" + tag + "] " + msg);

@@ -52,6 +52,20 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.ClipboardGuard" />
 
+        <!-- 写入规则应用选择页 -->
+        <activity
+            android:name=".WriteRuleAppsActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ClipboardGuard" />
+
+        <!-- 读取规则应用选择页 -->
+        <activity
+            android:name=".ReadRuleAppsActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ClipboardGuard" />
+
         <!-- 关于模块页 -->
         <activity
             android:name=".AboutModuleActivity"

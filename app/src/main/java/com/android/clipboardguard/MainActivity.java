@@ -68,10 +68,25 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.json.JSONObject;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * 主界面 Activity，包含 4 个页面：首页 / 写入拦截 / 读取拦截 / 设置。
+ *
+ * 页面切换通过 View 可见性控制（非 Fragment），底部导航栏切换页面。
+ *
+ * 核心职责：
+ * - 首页：显示模块激活状态（通过 Binder IPC 轮询 system_server）
+ * - 写入拦截页：管理写入拦截名单（ExpandableListView 分组：用户/系统/核心应用）
+ * - 读取拦截页：管理读取拦截名单（同上结构）
+ * - 设置页：主题切换、开关设置、备份恢复、关于页面入口
+ *
+ * 配置同步：保存后通过 PermissionProvider 广播到 system_server 侧刷新内存。
+ * 备份恢复：支持 ZIP 格式的配置导入导出。
+ */
 public class MainActivity extends AppCompatActivity {
 
     private static WeakReference<MainActivity> sInstanceRef;
@@ -98,8 +113,8 @@ public class MainActivity extends AppCompatActivity {
     };
 
     /** Binder IPC 轮询重试次数与间隔。 */
-    private static final int IPC_RETRY_MAX = 5;
-    private static final long IPC_RETRY_INTERVAL_MS = 1200L;
+    private static final int IPC_RETRY_MAX = 24;
+    private static final long IPC_RETRY_INTERVAL_MS = 5000L;
 
     public static final String PREF_NAME   = ClipboardGuardApp.PREF_NAME;
     public static final String KEY_THEME   = ClipboardGuardApp.KEY_THEME;
@@ -145,7 +160,7 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, Integer> mReadPendingChanges = new HashMap<>();
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
-    private static final ExecutorService sExecutor = Executors.newSingleThreadExecutor(r -> {
+    private static final ExecutorService sExecutor = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "ClipboardGuard-Worker");
         t.setDaemon(true);
         return t;
@@ -172,7 +187,8 @@ public class MainActivity extends AppCompatActivity {
     private final AtomicBoolean mRefreshPermissionsQueued = new AtomicBoolean(false);
     private final AtomicInteger mLoadAppsGeneration = new AtomicInteger(0);
     private final AtomicInteger mRefreshPermissionsGeneration = new AtomicInteger(0);
-    private boolean mHasLoadedApps = false;
+    private volatile boolean mHasLoadedApps = false;
+    private volatile boolean mInitialConfigSyncDone = false;
     private final Runnable mFabAutoHide = () -> {
         if (mFab != null && mFab.getVisibility() == View.VISIBLE) {
             mFab.animate().alpha(0f).scaleX(0.5f).scaleY(0.5f)
@@ -184,6 +200,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── FAB 显示控制 ────────────────────────────
 
+    /** 重置 FAB 自动隐藏计时器 */
     private void resetFabAutoHide() {
         if (mFab == null) return;
         mHandler.removeCallbacks(mFabAutoHide);
@@ -199,6 +216,7 @@ public class MainActivity extends AppCompatActivity {
     // ──────────────────── 生命周期与基础初始化 ────────────────────────────
 
     @Override
+    /** Activity 创建：初始化视图、主题、页面、数据加载 */
     protected void onCreate(Bundle savedInstanceState) {
         applyThemeNoView();
         super.onCreate(savedInstanceState);
@@ -213,14 +231,30 @@ public class MainActivity extends AppCompatActivity {
         applyAppBarInsets();
         bindMainViews();
 
+        // 版本号：主线程直接读（自家包名，PMS 缓存命中，不阻塞）
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            String verText = "v" + pi.versionName + " (" + pi.getLongVersionCode() + ")";
+            if (mTvModuleVersion != null) {
+                mTvModuleVersion.setText(verText);
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            if (mTvModuleVersion != null) {
+                mTvModuleVersion.setText("--");
+            }
+        }
+
+        // 先初始化规则文件，再检测模块激活状态
+        // 避免 checkModuleActive() 触发配置同步时规则文件尚未创建
         initPagesAndData();
+
+        checkModuleActive();
 
         showPage(sCurrentPage == PAGE_WRITE || sCurrentPage == PAGE_READ
                 || sCurrentPage == PAGE_SETTINGS ? sCurrentPage : PAGE_HOME);
-
-        PermissionProvider.requestConfigSync(this);
     }
 
+    /** 给顶部应用栏补上状态栏高度，避免标题与系统状态栏重叠 */
     private void applyAppBarInsets() {
         View appBarView = findViewById(R.id.app_bar);
         if (appBarView == null) return;
@@ -233,6 +267,7 @@ public class MainActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(appBarView);
     }
 
+    /** 绑定主界面所有 View 控件 */
     private void bindMainViews() {
         mPageHome             = findViewById(R.id.page_home);
         mPageWrite            = findViewById(R.id.page_write);
@@ -253,16 +288,35 @@ public class MainActivity extends AppCompatActivity {
         mTvModel              = findViewById(R.id.tv_model);
     }
 
+    private boolean mWritePageInited = false;
+    private boolean mReadPageInited  = false;
+
+    /** 初始化页面和数据加载 */
     private void initPagesAndData() {
-        initWritePage();
-        initReadPage();
-        initRuleFiles();
         initHomePage();
         setupBottomNav();
         setupSettingsPage();
+        // 文件 I/O 放到后台，但使用 CountDownLatch 确保完成后再继续
+        // 避免 checkModuleActive() 触发配置同步时规则文件尚未创建
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(6);
+        String filesDir = getFilesDir().getPath();
+        sExecutor.execute(() -> { PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt"); latch.countDown(); });
+        sExecutor.execute(() -> { PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt"); latch.countDown(); });
+        sExecutor.execute(() -> { ensureEmptyJsonFile("write_rules.json"); latch.countDown(); });
+        sExecutor.execute(() -> { ensureEmptyJsonFile("read_rules.json"); latch.countDown(); });
+        sExecutor.execute(() -> { ensureEmptyJsonFile("write_default_rules.json"); latch.countDown(); });
+        sExecutor.execute(() -> { ensureEmptyJsonFile("read_default_rules.json"); latch.countDown(); });
+        // 等待所有文件初始化完成（最多 3 秒）
+        try {
+            latch.await(3, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            XLog.w("ClipboardGuard", "等待规则文件初始化被中断");
+        }
         loadAppsAsync();
     }
 
+    /** 初始化备份恢复的 ActivityResultLauncher */
     private void initBackupRestoreLaunchers() {
         mBackupFolderLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -288,27 +342,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    /** Activity 恢复：刷新权限状态、同步配置 */
     protected void onResume() {
         super.onResume();
-        initHomePage();
         if (mHasLoadedApps) {
             refreshPermissionsAsync();
         }
-        PermissionProvider.requestConfigSync(this);
+        // 配置同步已移至 checkModuleActive() 中，仅首次激活时执行一次
     }
 
     @Override
+    /** Activity 暂停：丢弃未提交的更改（用户需点 FAB 保存） */
     protected void onPause() {
         discardPendingChangesForPage(sCurrentPage);
         super.onPause();
     }
 
     @Override
+    /** Activity 销毁：清理资源 */
     protected void onDestroy() {
         super.onDestroy();
         mHandler.removeCallbacksAndMessages(null);
-        mWriteSwipeRefresh = null;
-        mReadSwipeRefresh = null;
+        mIconCache.evictAll();
+        if (mWriteSwipeRefresh != null) {
+            mWriteSwipeRefresh.setRefreshing(false);
+            mWriteSwipeRefresh = null;
+        }
+        if (mReadSwipeRefresh != null) {
+            mReadSwipeRefresh.setRefreshing(false);
+            mReadSwipeRefresh = null;
+        }
         mWriteExpandableListView = null;
         mReadExpandableListView = null;
         mWriteAdapter = null;
@@ -324,6 +387,7 @@ public class MainActivity extends AppCompatActivity {
     // ──────────────────── 读写页面初始化 ────────────────────────────
 
     @SuppressLint("ClickableViewAccessibility")
+    /** 初始化写入拦截页面（ExpandableListView、搜索、FAB） */
     private void initWritePage() {
         mWriteExpandableListView = findViewById(R.id.expandable_list_write);
         mWriteSwipeRefresh = findViewById(R.id.swipe_refresh_write);
@@ -398,6 +462,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @SuppressLint("ClickableViewAccessibility")
+    /** 初始化读取拦截页面（ExpandableListView、搜索、FAB） */
     private void initReadPage() {
         mReadExpandableListView = findViewById(R.id.expandable_list_read);
         mReadSwipeRefresh = findViewById(R.id.swipe_refresh_read);
@@ -473,6 +538,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 页面切换与底部导航 ────────────────────────────
 
+    /** 切换显示指定页面 */
     private void showPage(int page) {
         if (mPageHome == null || mPageWrite == null || mPageRead == null || mPageSettings == null) return;
         int previousPage = sCurrentPage;
@@ -490,11 +556,13 @@ public class MainActivity extends AppCompatActivity {
                 mFab.setVisibility(View.GONE);
                 break;
             case PAGE_WRITE:
+                if (!mWritePageInited) { initWritePage(); mWritePageInited = true; }
                 mPageWrite.setVisibility(View.VISIBLE);
                 if (mFab != null) mFab.setVisibility(View.GONE);
                 if (mWriteExpandableListView != null) mWriteExpandableListView.expandGroup(GROUP_USER);
                 break;
             case PAGE_READ:
+                if (!mReadPageInited) { initReadPage(); mReadPageInited = true; }
                 mPageRead.setVisibility(View.VISIBLE);
                 if (mFab != null) mFab.setVisibility(View.GONE);
                 if (mReadExpandableListView != null) mReadExpandableListView.expandGroup(GROUP_USER);
@@ -509,6 +577,7 @@ public class MainActivity extends AppCompatActivity {
         updateBottomNav(page);
     }
 
+    /** 更新顶部工具栏标题 */
     private void updateToolbar(int page) {
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         if (toolbar == null) return;
@@ -520,6 +589,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 更新底部导航栏选中状态 */
     private void updateBottomNav(int page) {
         if (mNavHome == null || mNavApps == null || mNavRead == null || mNavSettings == null) return;
         int sel   = ContextCompat.getColor(this, R.color.nav_selected);
@@ -531,6 +601,7 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    /** 设置导航项颜色（选中/未选中） */
     private void tintNavItem(LinearLayout nav, boolean selected, int selColor, int unselColor) {
         if (nav == null || nav.getChildCount() < 2) return;
         if (!(nav.getChildAt(0) instanceof ImageView) || !(nav.getChildAt(1) instanceof TextView)) return;
@@ -539,6 +610,7 @@ public class MainActivity extends AppCompatActivity {
         ((TextView)  nav.getChildAt(1)).setTextColor(color);
     }
 
+    /** 丢弃指定页面的未保存更改 */
     private void discardPendingChangesForPage(int page) {
         if (page != PAGE_WRITE && page != PAGE_READ) return;
         mHandler.removeCallbacks(mFabAutoHide);
@@ -554,6 +626,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 设置底部导航栏点击事件 */
     private void setupBottomNav() {
         View.OnClickListener navClick = v -> {
             int id = v.getId();
@@ -579,6 +652,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 处理写入导航点击（双击回到顶部） */
     private void handleWriteNavClick() {
         long now = SystemClock.elapsedRealtime();
         if (sCurrentPage == PAGE_WRITE) {
@@ -591,6 +665,7 @@ public class MainActivity extends AppCompatActivity {
         mLastWriteNavClickTime = now;
     }
 
+    /** 处理读取导航点击（双击回到顶部） */
     private void handleReadNavClick() {
         long now = SystemClock.elapsedRealtime();
         if (sCurrentPage == PAGE_READ) {
@@ -603,12 +678,14 @@ public class MainActivity extends AppCompatActivity {
         mLastReadNavClickTime = now;
     }
 
+    /** 滚动写入列表到顶部 */
     private void scrollWriteListToTop() {
         if (mWriteExpandableListView != null) {
             mWriteExpandableListView.setSelection(0);
         }
     }
 
+    /** 滚动读取列表到顶部 */
     private void scrollReadListToTop() {
         if (mReadExpandableListView != null) {
             mReadExpandableListView.setSelection(0);
@@ -654,40 +731,109 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private static String getXposedApiText(String statusJson) {
+        if (statusJson == null || statusJson.isEmpty()) {
+            return "";
+        }
+        try {
+            int api = new JSONObject(statusJson).optInt("xposed_api", 0);
+            return api > 0 ? String.valueOf(api) : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
 
     @SuppressLint("SetTextI18n")
+    /** 初始化首页（模块状态卡片、设备信息） */
     private void initHomePage() {
-        final Context appContext = getApplicationContext();
-        updateDeviceInfo();
+        // 设备信息（都是常量，直接设置）
+        if (mTvAndroidVersion != null) mTvAndroidVersion.setText(Build.VERSION.RELEASE);
+        if (mTvManufacturer != null) mTvManufacturer.setText(Build.MANUFACTURER);
+        if (mTvModel != null) mTvModel.setText(Build.MODEL);
+    }
 
-        // 后台线程轮询 Binder IPC，避免阻塞主线程
+    /**
+     * 快速检测模块激活状态，在 showPage 之前提交后台任务，
+     * 使用 postAtFrontOfQueue 让回调尽可能在首帧渲染前执行，消除"未激活"闪变。
+     */
+    /** 通过 Binder IPC 轮询检测模块激活状态（最多 24 次，每次 5 秒） */
+    private void checkModuleActive() {
         sExecutor.execute(() -> {
             String current = ConfigManager.readCurrentBootId();
-            boolean active = false;
-            if (!current.isEmpty()) {
-                for (int i = 0; i < IPC_RETRY_MAX; i++) {
-                    String json = getStatusViaBinder();
-                    if (json != null && json.contains(current)) {
-                        active = true;
-                        break;
+            if (current.isEmpty()) {
+                mHandler.postAtFrontOfQueue(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        updateModuleStatusCard(false);
                     }
-                    if (i < IPC_RETRY_MAX - 1) {
-                        try { Thread.sleep(IPC_RETRY_INTERVAL_MS); } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
+                });
+                return;
+            }
+
+            // 首次尝试（不 sleep，即刻查询）
+            String json = getStatusViaBinder();
+            if (json != null && json.contains(current)) {
+                PermissionProvider.sModuleActive = true;
+                String apiText = getXposedApiText(json);
+                String finalApiText = !apiText.isEmpty() ? apiText : getString(R.string.info_xposed_api_unknown);
+                mHandler.postAtFrontOfQueue(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        updateModuleStatusCard(true);
+                        if (mTvXposedSdk != null) mTvXposedSdk.setText(finalApiText);
+                    }
+                });
+                // 首次激活成功，触发配置同步
+                if (!mInitialConfigSyncDone) {
+                    mInitialConfigSyncDone = true;
+                    PermissionProvider.requestConfigSync(MainActivity.this);
+                }
+                return;
+            }
+
+            // 首次失败 → 进入 24 × 5s 重试循环
+            mHandler.postAtFrontOfQueue(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    updateModuleStatusCard(false);
+                }
+            });
+            boolean active = false;
+            String xposedApiText = getString(R.string.info_xposed_api_unknown);
+            for (int i = 0; i < IPC_RETRY_MAX; i++) {
+                json = getStatusViaBinder();
+                if (json != null && json.contains(current)) {
+                    active = true;
+                    String apiText = getXposedApiText(json);
+                    if (!apiText.isEmpty()) {
+                        xposedApiText = apiText;
+                    }
+                    break;
+                }
+                if (i < IPC_RETRY_MAX - 1) {
+                    try { Thread.sleep(IPC_RETRY_INTERVAL_MS); } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
                     }
                 }
             }
             boolean finalActive = active;
+            if (finalActive) {
+                PermissionProvider.sModuleActive = true;
+                // 重试成功，触发配置同步
+                if (!mInitialConfigSyncDone) {
+                    mInitialConfigSyncDone = true;
+                    PermissionProvider.requestConfigSync(MainActivity.this);
+                }
+            }
+            String finalApiText = xposedApiText;
             mHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 updateModuleStatusCard(finalActive);
-                mTvXposedSdk.setText(finalActive ? "已激活" : "未激活");
+                mTvXposedSdk.setText(finalApiText);
             });
         });
     }
 
+    /** 更新模块状态卡片 UI */
     private void updateModuleStatusCard(boolean isActive) {
         if (mTvStatusTitle == null || mTvStatusDesc == null || mIvStatusIcon == null) return;
         if (isActive) {
@@ -703,26 +849,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("SetTextI18n")
-    private void updateDeviceInfo() {
-        if (mTvModuleVersion == null || mTvAndroidVersion == null || mTvManufacturer == null || mTvModel == null) {
-            return;
-        }
-        try {
-            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            // 使用 getLongVersionCode() 代替已弃用的 versionCode
-            mTvModuleVersion.setText("v" + pi.versionName + " (" + pi.getLongVersionCode() + ")");
-        } catch (PackageManager.NameNotFoundException e) {
-            mTvModuleVersion.setText("--");
-        }
-
-        mTvAndroidVersion.setText(Build.VERSION.RELEASE);
-        mTvManufacturer.setText(Build.MANUFACTURER);
-        mTvModel.setText(Build.MODEL);
-    }
-
     // ──────────────────── 主题与设置页 ────────────────────────────
 
+    /** 应用主题（不刷新 View，用于 onCreate 之前） */
     private void applyThemeNoView() {
         if (sCurrentTheme < 0) {
             sCurrentTheme = getApplicationContext()
@@ -732,6 +861,7 @@ public class MainActivity extends AppCompatActivity {
         applyNightMode(sCurrentTheme);
     }
 
+    /** 应用主题并刷新 UI */
     private void applyTheme() {
         int theme = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM);
         boolean isDark = (theme == THEME_DARK)
@@ -751,6 +881,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 切换主题（静态方法，供其他页面调用） */
     public static void switchTheme(int theme) {
         if (theme < THEME_LIGHT || theme > THEME_SYSTEM) return;
         sCurrentTheme = theme;
@@ -764,6 +895,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
 
+    /** 应用夜间模式设置 */
     private static void applyNightMode(int theme) {
         switch (theme) {
             case THEME_LIGHT:  AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);          break;
@@ -772,6 +904,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 更新主题单选按钮选中状态 */
     private void updateThemeRadioButtons(int theme) {
         RadioButton rb0 = findViewById(R.id.rb_theme_light);
         RadioButton rb1 = findViewById(R.id.rb_theme_dark);
@@ -782,12 +915,14 @@ public class MainActivity extends AppCompatActivity {
         rb2.setChecked(theme == THEME_SYSTEM);
     }
 
+    /** 初始化主题单选按钮点击事件 */
     private void initThemeRadioButtons() {
         updateThemeRadioButtons(sCurrentTheme >= 0 ? sCurrentTheme
                 : getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM));
     }
 
     @SuppressLint("SetTextI18n")
+    /** 初始化设置页面（主题、开关、备份恢复、关于） */
     private void setupSettingsPage() {
         setupThemeItem(R.id.item_theme_light,  THEME_LIGHT);
         setupThemeItem(R.id.item_theme_dark,   THEME_DARK);
@@ -829,6 +964,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 打开规则详情页面（带防抖） */
     private void openDetailActivity(Class<?> activityClass) {
         long now = SystemClock.elapsedRealtime();
         if (now - mLastDetailActivityClickTime < DETAIL_ACTIVITY_CLICK_DEBOUNCE_MS) return;
@@ -838,6 +974,7 @@ public class MainActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
+    /** 设置主题选项点击事件 */
     private void setupThemeItem(int viewId, int theme) {
         View item = findViewById(viewId);
         if (item != null) {
@@ -849,6 +986,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 备份：直接选择一个 zip 文件保存位置，系统会默认进入下载目录附近。
+    /** 打开备份文件夹选择器 */
     private void openBackupFolderPicker() {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -861,6 +999,7 @@ public class MainActivity extends AppCompatActivity {
         mBackupFolderLauncher.launch(intent);
     }
 
+    /** 打开恢复文件选择器 */
     private void openRestoreFilePicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -871,6 +1010,7 @@ public class MainActivity extends AppCompatActivity {
         mRestoreFileLauncher.launch(intent);
     }
 
+    /** 设置初始下载目录 URI */
     private void putInitialDownloadUri(Intent intent) {
         try {
             Uri uri = DocumentsContract.buildRootUri(
@@ -882,6 +1022,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 备份：把当前配置文件打包成 zip，写入用户选定的位置。
+    /** 备份配置到指定文件夹（ZIP 格式） */
     private void backupConfigToFolder(Uri fileUri) {
         final Context appContext = getApplicationContext();
         sExecutor.execute(() -> {
@@ -913,6 +1054,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 按固定清单把配置文件写入 zip，避免把其它文件误打进去。
+    /** 写入备份 ZIP 文件内容 */
     private void writeBackupZip(OutputStream outputStream) throws Exception {
         try (ZipOutputStream zip = new ZipOutputStream(outputStream)) {
             byte[] buffer = new byte[8192];
@@ -934,6 +1076,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 恢复：选择 zip 后解压到应用配置目录，只接受白名单文件名。
+    /** 从 ZIP 文件恢复配置 */
     private void restoreConfigFromFile(Uri fileUri) {
         final Context appContext = getApplicationContext();
         sExecutor.execute(() -> {
@@ -974,6 +1117,8 @@ public class MainActivity extends AppCompatActivity {
 
     // 逐个解压白名单文件到 files 目录，忽略压缩包中的其它内容。
     private int restoreConfigZip(InputStream inputStream) throws Exception {
+        // 单个文件大小限制 5MB，防止恶意 ZIP 填满磁盘
+        final long MAX_ENTRY_SIZE = 5 * 1024 * 1024L;
         int restoredCount = 0;
         byte[] buffer = new byte[8192];
         try (ZipInputStream zip = new ZipInputStream(inputStream)) {
@@ -982,13 +1127,34 @@ public class MainActivity extends AppCompatActivity {
                 String fileName = entry.getName();
                 if (!entry.isDirectory() && isAllowedBackupFile(fileName)) {
                     File target = new File(getFilesDir(), fileName);
-                    try (OutputStream output = new FileOutputStream(target, false)) {
+                    // 原子写入：先写临时文件，成功后再 rename，避免异常时留下半截配置
+                    File tmpFile = new File(getFilesDir(), fileName + ".tmp");
+                    try (OutputStream output = new FileOutputStream(tmpFile)) {
+                        long totalBytes = 0;
                         int read;
                         while ((read = zip.read(buffer)) != -1) {
+                            totalBytes += read;
+                            if (totalBytes > MAX_ENTRY_SIZE) {
+                                throw new IOException("ZIP entry too large (>5MB): " + fileName);
+                            }
                             output.write(buffer, 0, read);
                         }
                         output.flush();
                     }
+                    // 写入成功，原子 rename 到目标文件
+                    if (!tmpFile.renameTo(target)) {
+                        // rename 失败时回退覆盖写
+                        try (OutputStream output = new FileOutputStream(target)) {
+                            try (InputStream tmpIn = new FileInputStream(tmpFile)) {
+                                int read;
+                                while ((read = tmpIn.read(buffer)) != -1) {
+                                    output.write(buffer, 0, read);
+                                }
+                            }
+                        }
+                    }
+                    // 清理临时文件
+                    if (tmpFile.exists()) tmpFile.delete();
                     restoredCount++;
                 }
                 zip.closeEntry();
@@ -1006,6 +1172,7 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    /** 安静关闭 Closeable（忽略异常） */
     private void closeQuietly(java.io.Closeable closeable) {
         if (closeable == null) return;
         try {
@@ -1016,6 +1183,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 应用列表加载与分类 ────────────────────────────
 
+    /** 异步加载所有应用列表 */
     private void loadAppsAsync() {
         int generation = mLoadAppsGeneration.incrementAndGet();
         if (!mIsLoadingApps.compareAndSet(false, true)) {
@@ -1025,6 +1193,7 @@ public class MainActivity extends AppCompatActivity {
         sExecutor.execute(() -> loadAllApps(generation));
     }
 
+    /** 异步刷新权限状态 */
     private void refreshPermissionsAsync() {
         int generation = mRefreshPermissionsGeneration.incrementAndGet();
         if (!mIsRefreshingPermissions.compareAndSet(false, true)) {
@@ -1063,6 +1232,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static HashSet<String> sCorePackages;
 
+    /** 初始化核心包白名单 */
     private void initCorePackages() {
         if (sCorePackages != null) return;
         sCorePackages = new HashSet<>();
@@ -1078,6 +1248,7 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    /** 加载所有应用（带代次检查，防止过期请求覆盖新数据） */
     private void loadAllApps(int generation) {
         try {
             loadAllAppsInternal(generation);
@@ -1092,6 +1263,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 内部实现：加载所有应用并分类（用户/系统/核心） */
     private void loadAllAppsInternal(int generation) {
         PackageManager pm = getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
@@ -1188,18 +1360,21 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /** 处理排队的应用加载请求 */
     private void drainQueuedAppLoad() {
         if (mLoadAppsQueued.compareAndSet(true, false)) {
             loadAppsAsync();
         }
     }
 
+    /** 处理排队的权限刷新请求 */
     private void drainQueuedPermissionRefresh() {
         if (mRefreshPermissionsQueued.compareAndSet(true, false)) {
             refreshPermissionsAsync();
         }
     }
 
+    /** 按名称排序写入应用列表 */
     private static void sortWriteApps(List<AppItem> list) {
         list.sort((a, b) -> {
             if (a.isBlockedWrite != b.isBlockedWrite) return a.isBlockedWrite ? -1 : 1;
@@ -1207,6 +1382,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /** 按名称排序读取应用列表 */
     private static void sortReadApps(List<AppItem> list) {
         list.sort((a, b) -> {
             if (a.isBlockedRead != b.isBlockedRead) return a.isBlockedRead ? -1 : 1;
@@ -1214,12 +1390,14 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /** 排序写入应用列表（用户/系统/核心） */
     private void sortWriteAppLists() {
         sortWriteApps(mWriteUserApps);
         sortWriteApps(mWriteSystemApps);
         sortWriteApps(mWriteCoreApps);
     }
 
+    /** 排序读取应用列表（用户/系统/核心） */
     private void sortReadAppLists() {
         sortReadApps(mReadUserApps);
         sortReadApps(mReadSystemApps);
@@ -1228,6 +1406,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 写入权限列表 ────────────────────────────
 
+    /** 刷新写入权限状态 */
     private void refreshWritePermissions() {
         List<String[]> savedPerms = PermissionProvider.getAllWritePermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
@@ -1236,6 +1415,7 @@ public class MainActivity extends AppCompatActivity {
         refreshWritePermissions(permMap);
     }
 
+    /** 刷新写入权限状态（使用指定权限 Map） */
     private void refreshWritePermissions(android.util.ArrayMap<String, Integer> permMap) {
 
         for (AppItem item : mWriteUserApps)   applyWritePermToItem(item, permMap);
@@ -1248,6 +1428,7 @@ public class MainActivity extends AppCompatActivity {
         applyWriteFilter();
     }
 
+    /** 将写入权限应用到应用项 */
     private void applyWritePermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
         Integer saved = permMap.get(item.packageName);
         item.isBlockedWrite = (saved != null && saved == PermissionDecision.PERMISSION_BLOCK);
@@ -1257,6 +1438,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 应用写入列表搜索过滤 */
     private void applyWriteFilter() {
         mWriteFilteredUser.clear();
         mWriteFilteredSystem.clear();
@@ -1297,6 +1479,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 读取权限列表 ────────────────────────────
 
+    /** 刷新读取权限状态 */
     private void refreshReadPermissions() {
         List<String[]> savedPerms = PermissionProvider.getAllReadPermissions(this);
         android.util.ArrayMap<String, Integer> permMap = new android.util.ArrayMap<>();
@@ -1305,6 +1488,7 @@ public class MainActivity extends AppCompatActivity {
         refreshReadPermissions(permMap);
     }
 
+    /** 刷新读取权限状态（使用指定权限 Map） */
     private void refreshReadPermissions(android.util.ArrayMap<String, Integer> permMap) {
 
         for (AppItem item : mReadUserApps)   applyReadPermToItem(item, permMap);
@@ -1317,6 +1501,7 @@ public class MainActivity extends AppCompatActivity {
         applyReadFilter();
     }
 
+    /** 将读取权限应用到应用项 */
     private void applyReadPermToItem(AppItem item, android.util.ArrayMap<String, Integer> permMap) {
         Integer saved = permMap.get(item.packageName);
         item.isBlockedRead = (saved != null && saved == PermissionDecision.PERMISSION_BLOCK);
@@ -1326,6 +1511,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 应用读取列表搜索过滤 */
     private void applyReadFilter() {
         mReadFilteredUser.clear();
         mReadFilteredSystem.clear();
@@ -1354,6 +1540,7 @@ public class MainActivity extends AppCompatActivity {
                 || safeText(item.packageName).toLowerCase(Locale.ROOT).contains(mReadCurrentQuery);
     }
 
+    /** 将权限行添加到 Map */
     private static void putPermissionRow(android.util.ArrayMap<String, Integer> target, String[] row) {
         if (row == null || row.length < 2 || row[0] == null || row[0].isEmpty()) return;
         try {
@@ -1376,6 +1563,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 写入权限保存 ────────────────────────────
 
+    /** 全选/全不选写入应用 */
     private void setAllWriteApps(boolean blocked) {
         int perm = blocked ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         for (AppItem i : mWriteUserApps)   { i.isBlockedWrite = blocked; mWritePendingChanges.put(i.packageName, perm); }
@@ -1383,6 +1571,7 @@ public class MainActivity extends AppCompatActivity {
         applyWriteFilter();
     }
 
+    /** 切换写入分组选择状态 */
     private void toggleWriteGroupSelection(int groupPos, boolean select) {
         int perm = select ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         List<AppItem> list;
@@ -1403,6 +1592,7 @@ public class MainActivity extends AppCompatActivity {
         mWriteAdapter.notifyDataSetChanged();
     }
 
+    /** 保存写入拦截名单更改并广播同步 */
     private void saveWriteChanges() {
         if (mWritePendingChanges.isEmpty()) {
             Toast.makeText(this, "没有更改需要保存", Toast.LENGTH_SHORT).show();
@@ -1436,6 +1626,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 读取权限保存 ────────────────────────────
 
+    /** 全选/全不选读取应用 */
     private void setAllReadApps(boolean blocked) {
         int perm = blocked ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         for (AppItem i : mReadUserApps)   { i.isBlockedRead = blocked; mReadPendingChanges.put(i.packageName, perm); }
@@ -1443,6 +1634,7 @@ public class MainActivity extends AppCompatActivity {
         applyReadFilter();
     }
 
+    /** 切换读取分组选择状态 */
     private void toggleReadGroupSelection(int groupPos, boolean select) {
         int perm = select ? PermissionDecision.PERMISSION_BLOCK : PermissionDecision.PERMISSION_IGNORE;
         List<AppItem> list;
@@ -1463,6 +1655,7 @@ public class MainActivity extends AppCompatActivity {
         if (mReadAdapter != null) mReadAdapter.notifyDataSetChanged();
     }
 
+    /** 保存读取拦截名单更改并广播同步 */
     private void saveReadChanges() {
         if (mReadPendingChanges.isEmpty()) {
             Toast.makeText(this, "没有更改需要保存", Toast.LENGTH_SHORT).show();
@@ -1496,33 +1689,31 @@ public class MainActivity extends AppCompatActivity {
     // ──────────────────── 规则文件初始化 ────────────────────────────
 
     @SuppressLint("SdCardPath")
+    /** 初始化规则文件（确保文件存在） */
     private void initRuleFiles() {
-        // 使用 Context.getFilesDir().getPath() 代替硬编码 /data/
+        // 6 个文件操作用同一线程池并发执行，替代顺序 I/O
         String filesDir = getFilesDir().getPath();
-        PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt");
-        PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt");
-
-        ensureEmptyJsonFile("write_rules.json");
-        ensureEmptyJsonFile("read_rules.json");
-        ensureEmptyJsonFile("write_default_rules.json");
-        ensureEmptyJsonFile("read_default_rules.json");
+        sExecutor.execute(() -> PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt"));
+        sExecutor.execute(() -> PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt"));
+        sExecutor.execute(() -> ensureEmptyJsonFile("write_rules.json"));
+        sExecutor.execute(() -> ensureEmptyJsonFile("read_rules.json"));
+        sExecutor.execute(() -> ensureEmptyJsonFile("write_default_rules.json"));
+        sExecutor.execute(() -> ensureEmptyJsonFile("read_default_rules.json"));
     }
 
+    /** 确保 JSON 文件存在，不存在则创建空规则文件 */
     private void ensureEmptyJsonFile(String fileName) {
         File file = new File(getFilesDir(), fileName);
         if (!file.exists()) {
             try {
-                if ("write_rules.json".equals(fileName) || "read_rules.json".equals(fileName)) {
-                    writeEmptyRuleConfigFile(file);
-                } else {
-                    writeEmptyJsonArrayFile(file);
-                }
+                writeEmptyRuleConfigFile(file);
             } catch (Exception e) {
                 XLog.e("ClipboardGuard", "initRuleFiles: failed to create " + fileName, e);
             }
         }
     }
 
+    /** 写入空规则配置文件 */
     private void writeEmptyRuleConfigFile(File file) throws Exception {
         try (FileOutputStream fos = new FileOutputStream(file)) {
             fos.write("{\"enabled\":false,\"content_rules\":[]}".getBytes(StandardCharsets.UTF_8));
@@ -1530,15 +1721,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void writeEmptyJsonArrayFile(File file) throws Exception {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            fos.write("[]".getBytes(StandardCharsets.UTF_8));
-            fos.flush();
-        }
-    }
-
     // ──────────────────── 数据模型 ────────────────────────────
 
+    /** 应用列表项数据模型 */
     static class AppItem {
         String  packageName;
         String  appName;
@@ -1572,6 +1757,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── Adapter ────────────────────────────
 
+    /** 应用分组适配器（ExpandableListView） */
     class AppGroupAdapter extends BaseExpandableListAdapter {
 
         private final boolean mIsReadPage;

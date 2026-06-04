@@ -97,7 +97,7 @@
                                 android:text="@string/status_not_active"
                                 android:textSize="17sp"
                                 android:textStyle="bold"
-                                android:textColor="?attr/colorOnSurface" />
+                                android:textColor="@color/status_inactive" />
 
                             <TextView
                                 android:id="@+id/tv_status_desc"
@@ -162,7 +162,7 @@
                                 android:id="@+id/tv_xposed_sdk"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="@string/default_value"
+                                android:text="@string/info_xposed_api_unknown"
                                 android:textSize="15sp"
                                 android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>

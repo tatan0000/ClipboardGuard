@@ -6,14 +6,11 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.widget.Toast;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -69,13 +66,14 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     /** 写入端广播接收器是否已注册（仅热更新）。 */
     private static volatile boolean sWriteReceiverRegistered = false;
 
-    /** 写入端 Hook 加载时间。 */
-    private static volatile long sWriteHookLoadTime = 0L;
-
     /**
      * 缓存 system_server Context（使用 ActivityThread.getSystemContext()）。
      * 参考 Thanox ThanoxHookImpl 的实现。
+     *
+     * <p>静态持有 Context 在 system_server 中是安全的：
+     * system_server 是系统级进程，生命周期与系统一致，不存在 Activity 泄漏风险。
      */
+    @SuppressWarnings("StaticFieldLeak")
     private static volatile Context sSystemServerContext;
 
     // ──────────────────────── 读取端字段 ────────────────────────
@@ -133,9 +131,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
      *  与写入标志分离：避免写入触发兜底后读取被错误跳过（反之亦然）。 */
     private static volatile boolean sEnsureReadLoadAttempted = false;
 
-    /** 读取端 Hook 加载时间。 */
-    private static volatile long sReadHookLoadTime = 0L;
-
     /**
      * 复用 Toast Handler，避免每次创建新 Handler。
      * 延迟初始化：LSPosed 在 system_server 早期加载类时，主线程 Looper 尚未就绪。
@@ -149,22 +144,11 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     /** 读取 Hook 安装成功标志。 */
     private static volatile boolean sReadHookInstalled = false;
 
-    /** 首个 Hook 安装时间（system.currentTimeMillis）。 */
-    private static volatile long sHookInstallTime = 0L;
-
-    /** 首个 Hook 安装时的 elapsedRealtime，用于计算 bootMark。 */
-    private static volatile long sHookInstallElapsed = 0L;
-
-    /** 首个 Hook 安装时的 PID。 */
-    private static volatile int sHookInstallPid = -1;
-
-    /** 首个 Hook 安装时的 Xposed API 版本。 */
-    private static volatile int sHookXposedApi = -1;
-
     // ══════════════════════════════════════════════════════
     //  Xposed 入口
     // ══════════════════════════════════════════════════════
 
+    /** Xposed 模块入口：在 system_server 进程中初始化日志、安装 Hook、加载配置 */
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -209,7 +193,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     if ("setPrimaryClip".equals(m.getName())) {
                         m.setAccessible(true);
                         XposedBridge.hookMethod(m, new SetPrimaryClipHook());
-                        sWriteHookLoadTime = System.currentTimeMillis();
                         XLog.i(TAG, "写入 Hook 成功: " + className);
                         sWriteHookInstalled = true;
 
@@ -265,7 +248,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     if ("getPrimaryClip".equals(m.getName())) {
                         m.setAccessible(true);
                         XposedBridge.hookMethod(m, new GetPrimaryClipHook());
-                        sReadHookLoadTime = System.currentTimeMillis();
                         XLog.i(TAG, "读取 Hook 成功: " + className);
                         sReadHookInstalled = true;
 
@@ -361,6 +343,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         }
     }
 
+    /** 构建 Hook 状态详情字符串 */
     private static String buildHookStatusDetail() {
         if (sWriteHookInstalled && sReadHookInstalled) return "Write + Read";
         if (sWriteHookInstalled) return "Write only";
@@ -478,6 +461,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     //  写入拦截块（SetPrimaryClipHook）
     // ══════════════════════════════════════════════════════
 
+    /** 写入拦截 Hook：拦截 ClipboardService.setPrimaryClip 调用 */
     private static class SetPrimaryClipHook extends XC_MethodHook {
 
         @Override
@@ -494,7 +478,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     return;
                 }
 
-                String pkgName = getCallingWritePackageName();
+                String pkgName = getCallingWritePackageName(param);
                 if (pkgName == null || pkgName.isEmpty()) {
                     XLog.w(TAG, "无法获取写入调用者包名，保守放行");
                     return;
@@ -508,13 +492,15 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                 }
 
                 Object clipArg = (param.args != null && param.args.length > 0) ? param.args[0] : null;
-                String preview = extractClipPreview(clipArg);
+                // 完整内容用于规则匹配，预览用于弹窗/日志
+                String fullContent = extractClipFullContent(clipArg);
+                String preview = fullContent.length() > 100 ? fullContent.substring(0, 100) + "…" : fullContent;
 
                 if (PermissionCache.isWriteIgnored(pkgName)) {
                     writeLog(pkgName, "放行", preview);
                     return;
                 }
-                if (!shouldShowWritePopup(pkgName, preview)) {
+                if (!shouldShowWritePopup(pkgName, fullContent)) {
                     writeLog(pkgName, "放行(内容过滤)", preview);
                     return;
                 }
@@ -531,7 +517,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     }
                 }
                 if (decision < 0) {
-                    decision = askWriteUser(ctx, pkgName, preview, (ClipData) clipArg);
+                    decision = askWriteUser(ctx, pkgName, preview);
                 }
 
                 writeLog(pkgName, decision == PermissionDecision.PERMISSION_IGNORE ? "放行" : "拦截", preview);
@@ -548,16 +534,24 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             sInAfterHook.remove();
         }
 
-        private boolean shouldShowWritePopup(String pkgName, String preview) {
-            // 规则未启用或没有启用的规则 → 弹窗询问
-            if (!ContentRulesManager.isWriteEnabled()
-                    || !ContentRulesManager.isWriteLoaded()
-                    || !ContentRulesManager.hasEnabledWriteRule()) {
+        /**
+         * 判断是否应该显示写入拦截弹窗（基于规则匹配）。
+         * @param pkgName 调用者包名
+         * @param fullContent 完整剪贴板内容（用于规则匹配，非截断预览）
+         */
+        private boolean shouldShowWritePopup(String pkgName, String fullContent) {
+            // 规则完全未启用 → 弹窗询问（基础行为）
+            if (!ContentRulesManager.isWriteEnabled() || !ContentRulesManager.isWriteLoaded()) {
                 XLog.i(TAG, "写入规则未启用，弹窗询问: " + pkgName);
                 return true;
             }
-            // 规则已启用 → 匹配命中才弹窗，未命中放行
-            String matchedRule = ContentRulesManager.matchesWriteContent(pkgName, preview);
+            // 规则已启用，但当前包不在任何规则的适用域内 → 放行
+            if (!ContentRulesManager.hasEnabledWriteRuleForPackage(pkgName)) {
+                XLog.i(TAG, "写入规则已启用但当前包不在适用域，放行: " + pkgName);
+                return false;
+            }
+            // 规则已启用且当前包在适用域内 → 匹配命中才弹窗，未命中放行
+            String matchedRule = ContentRulesManager.matchesWriteContent(pkgName, fullContent);
             if (matchedRule != null) {
                 XLog.i(TAG, "写入内容命中规则 [" + matchedRule + "]，弹窗");
                 return true;
@@ -566,8 +560,19 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             return false;
         }
 
-        private String getCallingWritePackageName() {
+        /** 获取写入操作调用者的包名 */
+        private String getCallingWritePackageName(MethodHookParam param) {
             try {
+                // 优先从 ClipData 参数中提取 callingPackage
+                // ClipboardService.setPrimaryClip(ClipData, String, String, int, int)
+                // 第二个参数通常是 callingPackage
+                if (param.args != null && param.args.length > 1 && param.args[1] instanceof String) {
+                    String callingPkg = (String) param.args[1];
+                    if (callingPkg != null && !callingPkg.isEmpty()) {
+                        return callingPkg;
+                    }
+                }
+                // 回退到 getPackagesForUid
                 int uid = Binder.getCallingUid();
                 if (uid <= 0) return null;
                 Context ctx = getSystemServerContext();
@@ -580,7 +585,8 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             return null;
         }
 
-        private int askWriteUser(Context ctx, String pkgName, String preview, ClipData clipData) {
+        /** 显示写入拦截弹窗并同步等待用户决策（CountDownLatch 阻塞） */
+        private int askWriteUser(Context ctx, String pkgName, String preview) {
             CountDownLatch latch = new CountDownLatch(1);
             AtomicInteger resultHolder = new AtomicInteger(PermissionDecision.PERMISSION_BLOCK);
             boolean owner = true;
@@ -591,7 +597,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     latch = existingLatch;
                     resultHolder = existingResult;
                     owner = false;
-                    sWriteDecisionWaiters.put(pkgName, sWriteDecisionWaiters.getOrDefault(pkgName, 1) + 1);
+                    sWriteDecisionWaiters.merge(pkgName, 1, Integer::sum);
                     XLog.i(TAG, "写入弹窗已有等待请求，沿用当前弹窗结果: " + pkgName);
                 } else {
                     sWriteDecisionLatches.put(pkgName, latch);
@@ -603,7 +609,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             if (owner) {
                 try {
                     InlineDialogManager dm = InlineDialogManager.getInstance(ctx);
-                    dm.showWriteDialogAsync(pkgName, preview, clipData);
+                    dm.showWriteDialogAsync(pkgName, preview);
                 } catch (Throwable e) {
                     XLog.e(TAG, "写入弹窗异常: " + e.getMessage());
                     synchronized (sWriteLatchLock) {
@@ -629,7 +635,8 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             }
 
             synchronized (sWriteLatchLock) {
-                int waiters = sWriteDecisionWaiters.getOrDefault(pkgName, 1) - 1;
+                Integer curW = sWriteDecisionWaiters.get(pkgName);
+                int waiters = (curW != null ? curW : 1) - 1;
                 if (waiters <= 0) {
                     sWriteDecisionLatches.remove(pkgName);
                     sWriteDecisionResults.remove(pkgName);
@@ -650,6 +657,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     //  读取拦截块（GetPrimaryClipHook）
     // ══════════════════════════════════════════════════════
 
+    /** 读取拦截 Hook：拦截 ClipboardService.getPrimaryClip 调用 */
     private static class GetPrimaryClipHook extends XC_MethodHook {
 
         @Override
@@ -662,7 +670,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     return;
                 }
 
-                String pkgName = getCallingReadPackageName();
+                String pkgName = getCallingReadPackageName(param);
                 if (pkgName == null || pkgName.isEmpty()) {
                     XLog.w(TAG, "无法获取读取调用者包名，保守放行");
                     return;
@@ -680,12 +688,16 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                 String content = extractClipContent(clipData);
                 String preview = trimPreview(content);
 
-                // 规则未启用或没有启用的规则 → 直接拦截
-                if (!ContentRulesManager.isReadEnabled()
-                        || !ContentRulesManager.hasEnabledReadRule()) {
+                // 规则完全未启用 → 直接拦截（基础行为）
+                if (!ContentRulesManager.isReadEnabled()) {
                     XLog.i(TAG, "读取规则未启用，直接拦截: " + pkgName);
                     rejectRead(param, ctx, pkgName, preview,
                             PermissionCache.isReadBlockedToastEnabled());
+                    return;
+                }
+                // 规则已启用，但当前包不在任何规则的适用域内 → 放行
+                if (!ContentRulesManager.hasEnabledReadRuleForPackage(pkgName)) {
+                    XLog.i(TAG, "读取规则已启用但当前包不在适用域，放行: " + pkgName);
                     return;
                 }
 
@@ -697,7 +709,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                 }
                 XLog.i(TAG, "读取内容命中规则 [" + matchedRule + "]，弹窗");
 
-                ReadDecisionResult result = getReadDecision(ctx, pkgName, preview, matchedRule, clipData);
+                ReadDecisionResult result = getReadDecision(ctx, pkgName, preview, matchedRule);
                 int decision = result.decision;
                 if (decision == PermissionDecision.PERMISSION_IGNORE) {
                     writeReadLog(pkgName, "允许读取", preview);
@@ -715,6 +727,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             }
         }
 
+        /** 拒绝读取操作，可选显示 Toast 提示 */
         private void rejectRead(MethodHookParam param, Context ctx, String pkgName,
                 String preview, boolean showToast) {
             param.setResult(null);
@@ -722,8 +735,9 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             if (showToast) showReadBlockedToast(ctx, pkgName);
         }
 
+        /** 获取读取决策（先查防抖缓存，无缓存则弹窗等待用户选择） */
         private ReadDecisionResult getReadDecision(Context ctx, String pkgName,
-                String preview, String matchedRule, ClipData clipData) {
+                String preview, String matchedRule) {
             // 1. 检查防抖缓存
             synchronized (sReadDebounceLock) {
                 long now = System.currentTimeMillis();
@@ -751,7 +765,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                     latch = existingLatch;
                     resultHolder = existingResult;
                     owner = false;
-                    sReadDecisionWaiters.put(pkgName, sReadDecisionWaiters.getOrDefault(pkgName, 1) + 1);
+                    sReadDecisionWaiters.merge(pkgName, 1, Integer::sum);
                     XLog.i(TAG, "读取弹窗已有等待请求，沿用当前弹窗结果: " + pkgName);
                 } else {
                     sReadDecisionLatches.put(pkgName, latch);
@@ -763,7 +777,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             if (owner) {
                 try {
                     InlineDialogManager dm = InlineDialogManager.getInstance(ctx);
-                    dm.showReadDialogAsync(pkgName, preview, matchedRule, clipData);
+                    dm.showReadDialogAsync(pkgName, preview, matchedRule);
                 } catch (Throwable e) {
                     XLog.e(TAG, "读取弹窗异常: " + e.getMessage());
                     synchronized (sReadLatchLock) {
@@ -791,7 +805,8 @@ public class ClipboardHook implements IXposedHookLoadPackage {
 
             // 清理 latch 引用
             synchronized (sReadLatchLock) {
-                int waiters = sReadDecisionWaiters.getOrDefault(pkgName, 1) - 1;
+                Integer curR = sReadDecisionWaiters.get(pkgName);
+                int waiters = (curR != null ? curR : 1) - 1;
                 if (waiters <= 0) {
                     sReadDecisionLatches.remove(pkgName);
                     sReadDecisionResults.remove(pkgName);
@@ -812,8 +827,19 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             return new ReadDecisionResult(decision, shouldClear);
         }
 
-        private String getCallingReadPackageName() {
+        /** 获取读取操作调用者的包名 */
+        private String getCallingReadPackageName(MethodHookParam param) {
             try {
+                // 优先从方法参数中提取 callingPackage
+                // ClipboardService.getPrimaryClip(String, String, int, int)
+                // 第一个参数通常是 callingPackage
+                if (param.args != null && param.args.length > 0 && param.args[0] instanceof String) {
+                    String callingPkg = (String) param.args[0];
+                    if (callingPkg != null && !callingPkg.isEmpty()) {
+                        return callingPkg;
+                    }
+                }
+                // 回退到 getPackagesForUid
                 int uid = Binder.getCallingUid();
                 if (uid <= 0) return null;
                 Context ctx = getSystemServerContext();
@@ -826,6 +852,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             return null;
         }
 
+        /** 从 ClipData 提取文本内容 */
         private String extractClipContent(ClipData clipData) {
             if (clipData == null) return "";
             try {
@@ -843,11 +870,13 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             return "(非文本内容)";
         }
 
+        /** 截取预览文本（最多 100 字符） */
         private String trimPreview(String text) {
             if (text == null || text.isEmpty()) return "";
             return text.length() > 100 ? text.substring(0, 100) + "…" : text;
         }
 
+        /** 清空剪贴板内容 */
         private void clearClipboard(Context ctx) {
             sIsClearOperation.set(true);
             try {
@@ -865,6 +894,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             }
         }
 
+        /** 显示读取拦截 Toast 提示（带防抖） */
         private void showReadBlockedToast(Context ctx, String pkgName) {
             try {
                 long now = System.currentTimeMillis();
@@ -881,6 +911,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             }
         }
 
+        /** 获取应用显示名称 */
         private String getAppName(Context ctx, String pkgName) {
             long id = Binder.clearCallingIdentity();
             try {
@@ -900,6 +931,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     //  读取决策结果
     // ══════════════════════════════════════════════════════
 
+    /** 读取决策结果：包含决策值和是否需要清空剪贴板 */
     private static class ReadDecisionResult {
         final int decision;
         final boolean shouldClearClipboard;
@@ -975,6 +1007,29 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         return null;
     }
 
+    /** 从 ClipData 提取完整文本内容（用于规则匹配） */
+    private static String extractClipFullContent(Object arg) {
+        if (arg == null) return "";
+        try {
+            ClipData data = (ClipData) arg;
+            if (data.getItemCount() > 0) {
+                ClipData.Item item = data.getItemAt(0);
+                CharSequence text = item.getText();
+                if (text != null && text.length() > 0) {
+                    return text.toString().trim();
+                }
+                String html = item.getHtmlText();
+                if (html != null && !html.isEmpty()) {
+                    return html.replaceAll("<[^>]+>", "").trim();
+                }
+            }
+        } catch (Throwable e) {
+            XLog.w(TAG, "提取写入内容失败: " + e.getMessage());
+        }
+        return "";
+    }
+
+    /** 从 ClipData 提取预览文本（最多 100 字符，用于弹窗/日志） */
     private static String extractClipPreview(Object arg) {
         if (arg == null) return "";
         try {
@@ -999,6 +1054,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         return "(非文本内容)";
     }
 
+    /** 输出写入操作日志（带脱敏） */
     private static void writeLog(String pkgName, String action, String content) {
         if (pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
             return;
@@ -1006,6 +1062,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         XLog.i(TAG, "[Write][" + pkgName + "] " + action + ": " + XLog.maskClipboardContent(content));
     }
 
+    /** 输出读取操作日志（带脱敏） */
     private static void writeReadLog(String pkgName, String action, String content) {
         if (pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
             return;
@@ -1013,6 +1070,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         XLog.i(TAG, "[Read][" + pkgName + "] " + action + ": " + XLog.maskClipboardContent(content));
     }
 
+    /** 检查是否为核心系统包（白名单，永不拦截） */
     private static boolean isCorePackage(String pkgName) {
         if (pkgName == null) return true;
         HashSet<String> corePackages = getCorePackages();
@@ -1026,6 +1084,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     private static final Object sCorePackagesLock = new Object();
     private static volatile HashSet<String> sCorePackages;
 
+    /** 获取核心包白名单（带缓存） */
     private static HashSet<String> getCorePackages() {
         HashSet<String> cached = sCorePackages;
         if (cached != null) return cached;
@@ -1056,6 +1115,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         }
     }
 
+    /** 获取模块资源 Context（用于读取白名单配置） */
     private static Context getModuleContext() {
         Context systemContext = getSystemServerContext();
         if (systemContext == null) return null;

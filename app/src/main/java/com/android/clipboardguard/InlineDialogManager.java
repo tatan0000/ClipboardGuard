@@ -1,6 +1,5 @@
 package com.android.clipboardguard;
 
-import android.content.ClipData;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -78,6 +77,7 @@ public class InlineDialogManager {
         mWindowManager = (WindowManager) mSystemContext.getSystemService(Context.WINDOW_SERVICE);
     }
 
+    /** 获取单例实例 */
     public static synchronized InlineDialogManager getInstance(Context context) {
         if (sInstance == null) {
             sInstance = new InlineDialogManager(context);
@@ -90,7 +90,7 @@ public class InlineDialogManager {
     /**
      * 异步显示写入拦截弹窗，ClipboardHook 会等待 notifyWriteDecision() 回传当前选择。
      */
-    public void showWriteDialogAsync(String pkgName, String contentPreview, ClipData clipData) {
+    public void showWriteDialogAsync(String pkgName, String contentPreview) {
         showDialogAsync(pkgName, contentPreview, null, "write", false);
     }
 
@@ -98,7 +98,7 @@ public class InlineDialogManager {
      * 异步显示读取拦截弹窗（不阻塞 Binder 线程）。
      * ClipboardHook 会用 CountDownLatch 等待 notifyReadDecision() 回传当前选择。
      */
-    public void showReadDialogAsync(String pkgName, String contentPreview, String matchedRule, ClipData clipData) {
+    public void showReadDialogAsync(String pkgName, String contentPreview, String matchedRule) {
         showDialogAsync(pkgName, contentPreview, matchedRule, "read", true);
     }
 
@@ -138,6 +138,7 @@ public class InlineDialogManager {
 
     // ──────────────────────────── 视图构建 ────────────────────────────
 
+    /** 创建并显示拦截弹窗（全代码构建 UI，无 XML 布局） */
     private void createAndShowDialog(String pkgName, String contentPreview, String matchedRule,
             String operationType, boolean showClearButton) {
         synchronized (mLock) {
@@ -457,10 +458,7 @@ public class InlineDialogManager {
 
     // ──────────────────────────── 弹窗清理 ────────────────────────────
 
-    private void dismissCurrentDialog(String expectedPkgName) {
-        dismissCurrentDialog(expectedPkgName, false);
-    }
-
+    /** 关闭当前弹窗，可选是否通知 Hook 侧阻止操作 */
     private void dismissCurrentDialog(String expectedPkgName, boolean notifyBlocked) {
         if (expectedPkgName != null && !Objects.equals(expectedPkgName, mCurrentPackageName)) {
             return;
@@ -507,6 +505,7 @@ public class InlineDialogManager {
         }
     }
 
+    /** 通知 Hook 侧用户决策，写入防抖缓存并唤醒等待线程 */
     private void notifyDecision(String operationType, String pkgName, int decision) {
         if (pkgName == null) return;
         try {
@@ -524,11 +523,13 @@ public class InlineDialogManager {
 
     // ──────────────────────────── 通用工具 ────────────────────────────
 
+    /** dp 转 px */
     private int dpToPx(int dp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp,
                 mSystemContext.getResources().getDisplayMetrics());
     }
 
+    /** 检查当前是否为深色模式 */
     private boolean isDarkMode() {
         int nightModeFlags = mSystemContext.getResources().getConfiguration().uiMode
                 & android.content.res.Configuration.UI_MODE_NIGHT_MASK;

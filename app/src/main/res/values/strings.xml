@@ -48,6 +48,7 @@
     <!-- 首页信息卡片 -->
     <string name="info_card_title">模块信息</string>
     <string name="info_xposed_api">Xposed API</string>
+    <string name="info_xposed_api_unknown">--</string>
     <string name="info_module_version">模块版本</string>
     <string name="info_hook_target">Hook 目标</string>
     <string name="info_hook_target_value">ClipboardService</string>
@@ -62,8 +63,8 @@
     <string name="usage_content">• 在"写入"页勾选应用：未开启写入正则时写入剪贴板会弹窗询问；开启正则后命中规则才弹窗询问，未勾选则放行\n• 在"读取"页勾选应用：未开启读取正则时直接拒绝读取；开启正则后命中敏感内容才弹窗询问\n• 写入/读取规则页可配置内容检测规则，默认规则可查看、开启或关闭，自定义规则可新增、编辑、删除\n• LSPosed 日志开关开启后会记录读写行为，剪贴板内容会自动脱敏\n• 永久允许/永久拦截 由 AppOps/Thanox 等工具管理</string>
 
     <!-- 写入页与读取页提示 -->
-    <string name="write_tip">勾选 = 拦截（写入剪贴板时弹窗询问），未勾选 = 放行</string>
-    <string name="read_tip">勾选 = 拦截（读取剪贴板时弹窗询问），未勾选 = 放行</string>
+    <string name="write_tip">勾选 = 拦截（写入剪贴板时），未勾选 = 放行</string>
+    <string name="read_tip">勾选 = 拦截（读取剪贴板时），未勾选 = 放行</string>
 
     <!-- 规则页 Tabs 与说明 -->
     <string name="tab_write_rules">写入规则</string>
@@ -108,6 +109,17 @@
     <string name="rules_dialog_name_helper">名称示例：验证码</string>
     <string name="rules_regex_error">正则表达式格式错误</string>
     <string name="rules_name_required">规则名称不能为空</string>
+    <string name="rules_name_duplicate">规则名称已存在</string>
+    <string name="rules_pattern_duplicate">相同正则规则已存在</string>
+
+    <!-- 规则应用选择页 -->
+    <string name="rule_apps_title_write">写入规则 · 应用</string>
+    <string name="rule_apps_title_read">读取规则 · 应用</string>
+    <string name="rule_apps_scope_title">规则适用域</string>
+    <string name="rule_apps_tip">选择此规则要生效的应用。\n未勾选的应用不会应用此规则。\n默认已勾选当前拦截的应用。</string>
+    <string name="rule_apps_saved">已保存，规则应用于 %d 个应用</string>
+    <string name="rule_apps_saved_none">已保存，无应用勾选，规则已自动关闭</string>
+    <string name="rules_btn_apps">应用</string>
 
     <!-- 设置页：规则入口 -->
     <string name="settings_rules">内容拦截规则</string>

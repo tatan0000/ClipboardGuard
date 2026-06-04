@@ -35,12 +35,26 @@ import org.json.JSONObject;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * 读取规则详情管理页。
+ *
+ * 功能：
+ * - 管理自定义读取规则（添加/编辑/删除/启用/禁用）
+ * - 管理默认读取规则（内置手机号、身份证、银行卡等识别规则）
+ * - 支持批量选择操作（全选/批量启用/批量禁用/批量删除）
+ * - 每条规则可独立配置适用域（指定哪些应用触发该规则）
+ *
+ * 数据流：规则 JSON 文件 ↔ UI 操作 → 广播同步到 system_server
+ * 自定义规则与默认规则分文件存储（read_rules.json / read_default_rules.json），
+ * 加载到 Hook 侧时由 ContentRulesManager.mergeRulesForRuntime() 合并。
+ */
 public class ReadRulesDetailActivity extends AppCompatActivity {
 
     private RecyclerView mRvReadRulesDetail;
@@ -72,6 +86,12 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     private volatile boolean mDestroyed = false;
 
     private AlertDialog mCurrentRuleDialog;
+
+    // Adapter 精确刷新类型：INSERT/REMOVE/CHANGE 传确切 position，FULL 走 notifyDataSetChanged
+    private static final int REFRESH_INSERT = 1;
+    private static final int REFRESH_REMOVE = 2;
+    private static final int REFRESH_CHANGE = 3;
+    private static final int REFRESH_FULL   = 4;
 
     // ═══════════════════════════════════════════════════════════════
     // 生命周期与基础初始化
@@ -106,6 +126,18 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 else { setEnabled(false); getOnBackPressedDispatcher().onBackPressed(); }
             }
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 从应用选择页返回后刷新规则（applicablePackages 可能已变更）
+        if (mReadRulesAdapter != null) {
+            mHandler.post(this::loadReadRulesSync);
+        }
+        if (mShowDefaultRules) {
+            mExecutor.execute(this::loadDefaultReadRulesAsync);
+        }
     }
 
     private void initToolbar() {
@@ -156,7 +188,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         if (mSwitchReadRulesEnabled != null) {
             mSwitchReadRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 mReadRulesEnabled = isChecked;
-                saveReadRules();
+                saveEnabledOnly(isChecked);
             });
         }
         if (btnAddReadRule != null) {
@@ -195,8 +227,6 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             rvDefaultRules.setLayoutManager(new LinearLayoutManager(this));
             rvDefaultRules.setAdapter(mReadDefaultRulesAdapter);
         }
-
-        mHandler.post(this::loadDefaultReadRulesAsync);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -220,7 +250,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             mToolbar.setTitle(R.string.default_rules_title);
             mToolbar.setNavigationIcon(R.drawable.ic_back);
         }
-        loadDefaultReadRulesAsync();
+        mExecutor.execute(this::loadDefaultReadRulesAsync);
     }
 
     private void showMainRulesPage() {
@@ -234,32 +264,87 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
     }
 
+    // 加载默认规则：
+    // 1. 文件不存在 → 模板初始化（名字 + 正则，适用域为空），写盘
+    // 2. 文件存在 + 正则与模板一致 → 直接从文件加载
+    // 3. 文件存在 + 正则与模板不同（App 更新改了正则） → 合并：
+    //    用模板的正则，保留用户的 enabled + applicablePackages，写盘
     private void loadDefaultReadRulesAsync() {
         File file = new File(getFilesDir(), "read_default_rules.json");
-        String[][] template = getReadDefaultRulesTemplate();
-        Map<String, Boolean> oldEnabledStates = new HashMap<>();
+
         if (file.exists()) {
             try {
                 String content = readFile(file);
-                JSONArray arr = new JSONArray(content);
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject obj = arr.getJSONObject(i);
-                    oldEnabledStates.put(obj.getString("name"), obj.getBoolean("enabled"));
+                JSONObject root = new JSONObject(content);
+                JSONArray arr = root.optJSONArray("content_rules");
+                if (arr == null || arr.length() == 0) {
+                    if (!file.delete()) {
+                        XLog.w("ClipboardGuard-Rules", "Failed to delete empty default rules file");
+                    }
+                    initDefaultReadRulesFromTemplate();
+                } else {
+                    // 加载文件中的规则，以 name 为 key
+                    Map<String, ContentRule> fileRules = new LinkedHashMap<>();
+                    for (int i = 0; i < arr.length(); i++) {
+                        ContentRule rule = ContentRule.fromJson(arr.getJSONObject(i));
+                        fileRules.put(rule.name, rule);
+                    }
+
+                    // 检查是否需要合并：模板中任一规则在文件中不存在或正则不同
+                    boolean needsMerge = false;
+                    String[][] template = getReadDefaultRulesTemplate();
+                    for (String[] ruleDef : template) {
+                        ContentRule fileRule = fileRules.get(ruleDef[0]);
+                        if (fileRule == null || !ruleDef[1].equals(fileRule.pattern)) {
+                            needsMerge = true;
+                            break;
+                        }
+                    }
+
+                    if (needsMerge) {
+                        mergeDefaultReadRules(template, fileRules);
+                        saveDefaultReadRulesToFile();
+                    } else {
+                        // 正则完全一致，直接使用文件数据
+                        mReadDefaultRules.clear();
+                        mReadDefaultRules.addAll(fileRules.values());
+                        for (ContentRule r : mReadDefaultRules) r.isDefault = true;
+                    }
                 }
             } catch (Exception e) {
-                XLog.e("ClipboardGuard-Rules", "loadDefaultReadRules failed", e);
+                XLog.e("ClipboardGuard-Rules", "loadDefaultReadRules failed, fallback to template", e);
+                if (!file.delete()) {
+                    XLog.w("ClipboardGuard-Rules", "Failed to delete corrupted default rules file");
+                }
+                initDefaultReadRulesFromTemplate();
             }
+        } else {
+            initDefaultReadRulesFromTemplate();
         }
+
+        mHandler.post(this::refreshReadDefaultRulesAdapter);
+    }
+
+    // 合并：模板提供名字和正则，文件提供 enabled 和 applicablePackages
+    private void mergeDefaultReadRules(String[][] template, Map<String, ContentRule> fileRules) {
         mReadDefaultRules.clear();
         for (String[] ruleDef : template) {
-            Boolean oldEnabled = oldEnabledStates.get(ruleDef[0]);
-            mReadDefaultRules.add(new ContentRule(ruleDef[0], ruleDef[1], oldEnabled != null && oldEnabled, true));
+            ContentRule oldRule = fileRules.get(ruleDef[0]);
+            boolean enabled = oldRule != null && oldRule.enabled;
+            ContentRule newRule = new ContentRule(ruleDef[0], ruleDef[1], enabled, true);
+            if (oldRule != null && !oldRule.applicablePackages.isEmpty()) {
+                newRule.applicablePackages.addAll(oldRule.applicablePackages);
+            }
+            mReadDefaultRules.add(newRule);
         }
-        // 如果文件不存在（首次），仅创建文件，不发送广播
-        if (!file.exists()) {
-            saveDefaultReadRulesToFile();
+    }
+
+    private void initDefaultReadRulesFromTemplate() {
+        mReadDefaultRules.clear();
+        for (String[] ruleDef : getReadDefaultRulesTemplate()) {
+            mReadDefaultRules.add(new ContentRule(ruleDef[0], ruleDef[1], false, true));
         }
-        mHandler.post(this::refreshReadDefaultRulesAdapter);
+        saveDefaultReadRulesToFile();
     }
 
     private String[][] getReadDefaultRulesTemplate() {
@@ -322,6 +407,30 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     // 保存方法
     // ═══════════════════════════════════════════════════════════════
 
+    /** 仅更新 enabled 字段，不重写整个规则数组 */
+    private void saveEnabledOnly(boolean enabled) {
+        try {
+            File file = new File(getFilesDir(), "read_rules.json");
+            JSONObject root;
+            if (file.exists()) {
+                String content = readFile(file);
+                root = content.isEmpty() ? new JSONObject() : new JSONObject(content);
+            } else {
+                root = new JSONObject();
+            }
+            root.put("enabled", enabled);
+            if (!root.has("content_rules")) root.put("content_rules", new JSONArray());
+            if (!writeFile(file, root.toString(2))) {
+                XLog.e("ClipboardGuard-Rules", "读取规则总开关保存失败");
+                return;
+            }
+            notifyRulesChanged();
+            XLog.i("ClipboardGuard-Rules", "读取规则总开关已" + (enabled ? "开启" : "关闭"));
+        } catch (Exception e) {
+            XLog.e("ClipboardGuard-Rules", "读取规则总开关保存异常", e);
+        }
+    }
+
     private void saveReadRules() {
         try {
             JSONObject root = new JSONObject();
@@ -330,32 +439,45 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             for (ContentRule rule : mReadRules) arr.put(rule.toJson());
             root.put("content_rules", arr);
             File file = new File(getFilesDir(), "read_rules.json");
-            writeFile(file, root.toString(2));
+            if (!writeFile(file, root.toString(2))) {
+                XLog.e("ClipboardGuard-Rules", "读取规则保存失败，跳过同步");
+                return;
+            }
 
             notifyRulesChanged();
-            XLog.i("ClipboardGuard-Rules", "已保存读取规则，自定义规则数=" + arr.length());
+            XLog.i("ClipboardGuard-Rules", "读取规则已保存并同步，自定义规则数=" + arr.length());
         } catch (Exception e) {
-            XLog.e("ClipboardGuard-Rules", "saveReadRules failed", e);
+            XLog.e("ClipboardGuard-Rules", "读取规则保存异常", e);
         }
     }
 
     /** 用户操作默认规则时调用：写入文件 + 广播 */
     private void saveDefaultReadRules() {
-        saveDefaultReadRulesToFile();
-        notifyRulesChanged();
-        XLog.i("ClipboardGuard-Rules", "已保存并广播默认读取规则更新");
+        if (saveDefaultReadRulesToFile()) {
+            notifyRulesChanged();
+            XLog.i("ClipboardGuard-Rules", "默认读取规则已保存并同步");
+        }
     }
 
-    /** 仅写入文件，不广播（首次初始化等场景） */
-    private void saveDefaultReadRulesToFile() {
+    /** 仅写入文件，不广播（首次初始化等场景）。统一使用 { "enabled": ..., "content_rules": [...] } 格式 */
+    private boolean saveDefaultReadRulesToFile() {
         try {
             JSONArray arr = new JSONArray();
-            for (ContentRule rule : mReadDefaultRules) arr.put(rule.toJson());
+            boolean hasEnabled = false;
+            for (ContentRule rule : mReadDefaultRules) {
+                arr.put(rule.toJson());
+                if (rule.enabled) hasEnabled = true;
+            }
+            JSONObject root = new JSONObject();
+            root.put("enabled", hasEnabled);
+            root.put("content_rules", arr);
             File file = new File(getFilesDir(), "read_default_rules.json");
-            writeFile(file, arr.toString());
-            XLog.i("ClipboardGuard-Rules", "已写入默认读取规则文件");
+            boolean ok = writeFile(file, root.toString());
+            if (ok) XLog.i("ClipboardGuard-Rules", "已写入默认读取规则文件");
+            return ok;
         } catch (Exception e) {
             XLog.e("ClipboardGuard-Rules", "saveDefaultReadRulesToFile failed", e);
+            return false;
         }
     }
 
@@ -363,7 +485,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
      * 通知 system_server 更新配置（自定义规则与默认规则分文件同步）。
      */
     private void notifyRulesChanged() {
-        PermissionProvider.broadcastRulesOnly(this);
+        PermissionProvider.broadcastRulesOnly(this, "read");
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -457,17 +579,54 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             tilPattern.setError(null);
         } catch (Exception e) {
             tilPattern.setError(getString(R.string.rules_regex_error));
+            shakeView(tilPattern);
             return;
+        }
+
+        // 检测危险正则模式（可能导致灾难性回溯）
+        String dangerWarning = ContentRule.checkDangerousPattern(pattern);
+        if (dangerWarning != null) {
+            tilPattern.setError(dangerWarning);
+            shakeView(tilPattern);
+            return;
+        }
+
+        // 检查命名重复
+        for (ContentRule r : mReadRules) {
+            if (r == rule) continue; // 编辑时跳过自身
+            if (name.equals(r.name)) {
+                tilName.setError(getString(R.string.rules_name_duplicate));
+                shakeView(tilName);
+                return;
+            }
+        }
+        // 检查正则重复
+        for (ContentRule r : mReadRules) {
+            if (r == rule) continue;
+            if (pattern.equals(r.pattern)) {
+                tilPattern.setError(getString(R.string.rules_pattern_duplicate));
+                shakeView(tilPattern);
+                return;
+            }
         }
         if (isEdit && rule != null) {
             rule.name = name;
             rule.pattern = pattern;
             rule.compilePattern();
         } else {
-            mReadRules.add(new ContentRule(name, pattern, true));
+            ContentRule newRule = new ContentRule(name, pattern, true);
+            // 新建规则自动勾选当前拦截名单
+            List<String> blocked = PermissionProvider.getBlockedReadPackagesDirect(this);
+            if (!blocked.isEmpty()) newRule.applicablePackages.addAll(blocked);
+            mReadRules.add(newRule);
         }
         saveReadRules();
-        refreshReadRulesAdapter();
+        if (isEdit && rule != null) {
+            int pos = mReadRules.indexOf(rule);
+            if (pos >= 0) refreshReadRulesAdapter(REFRESH_CHANGE, pos);
+        } else {
+            refreshReadRulesAdapter(REFRESH_INSERT, mReadRules.size() - 1);
+        }
         if (mRvReadRulesDetail != null) {
             mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
         }
@@ -512,7 +671,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                     if (mDestroyed || isFinishing() || isDestroyed()) return;
                     mReadRules.removeAll(mReadSelectedRules);
                     saveReadRules();
-                    refreshReadRulesAdapter();
+                    refreshReadRulesAdapter(REFRESH_FULL, 0);
                     if (mRvReadRulesDetail != null) {
                         mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
                     }
@@ -528,9 +687,10 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 .setMessage(R.string.rules_delete_confirm)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
                     if (mDestroyed || isFinishing() || isDestroyed()) return;
+                    int pos = mReadRules.indexOf(rule);
                     mReadRules.remove(rule);
                     saveReadRules();
-                    refreshReadRulesAdapter();
+                    refreshReadRulesAdapter(pos >= 0 ? REFRESH_REMOVE : REFRESH_FULL, Math.max(pos, 0));
                     if (mRvReadRulesDetail != null) {
                         mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
                     }
@@ -543,7 +703,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         if (mReadSelectedRules.isEmpty()) return;
         for (ContentRule rule : mReadSelectedRules) rule.enabled = enable;
         saveReadRules();
-        refreshReadRulesAdapter();
+        refreshReadRulesAdapter(REFRESH_FULL, 0);
         exitReadSelectionMode();
     }
 
@@ -560,7 +720,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 File file = new File(getFilesDir(), "read_rules.json");
                 if (file.exists()) {
                     String content = readFile(file);
-                    if (content != null && !content.isEmpty()) {
+                    if (!content.isEmpty()) {
                         JSONObject root = new JSONObject(content);
                         enabled = root.optBoolean("enabled", false);
                         JSONArray arr = root.optJSONArray("content_rules");
@@ -597,14 +757,33 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                     mSwitchReadRulesEnabled.setChecked(fe);
                     mSwitchReadRulesEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
                         mReadRulesEnabled = isChecked;
-                        saveReadRules();
+                        saveEnabledOnly(isChecked);
                     });
                 }
-                refreshReadRulesAdapter();
+                refreshReadRulesAdapter(REFRESH_FULL, 0);
                 if (mRvReadRulesDetail != null)
                     mRvReadRulesDetail.setVisibility(mReadRules.isEmpty() ? View.GONE : View.VISIBLE);
             });
         });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 工具方法
+    // ═══════════════════════════════════════════════════════════════
+
+    private void shakeView(View view) {
+        view.animate()
+                .translationX(20).setDuration(50)
+                .withEndAction(() -> view.animate()
+                        .translationX(-20).setDuration(50)
+                        .withEndAction(() -> view.animate()
+                                .translationX(10).setDuration(50)
+                                .withEndAction(() -> view.animate()
+                                        .translationX(0).setDuration(50)
+                                        .start())
+                                .start())
+                        .start())
+                .start();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -634,7 +813,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
     }
 
-    private void writeFile(File file, String content) {
+    private boolean writeFile(File file, String content) {
         File tmpFile = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
             try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tmpFile)) {
@@ -648,10 +827,14 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                     fos.flush();
                 }
             }
+            return true;
         } catch (Exception e) {
-            XLog.e("ClipboardGuard", "writeFile failed", e);
+            XLog.e("ClipboardGuard", "writeFile failed: " + file.getName(), e);
+            return false;
         } finally {
-            tmpFile.delete();
+            if (tmpFile.exists() && !tmpFile.delete()) {
+                XLog.w("ClipboardGuard", "Failed to delete tmp file: " + tmpFile.getName());
+            }
         }
     }
 
@@ -710,12 +893,28 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 holder.switchEnabled.setChecked(rule.enabled);
                 holder.switchEnabled.setOnCheckedChangeListener((btn, ch) -> {
                     rule.enabled = ch;
+                    if (ch && rule.applicablePackages.isEmpty()) {
+                        // 开启且无适用域 → 默认使用当前拦截名单
+                        List<String> blocked = PermissionProvider.getBlockedReadPackagesDirect(ReadRulesDetailActivity.this);
+                        if (!blocked.isEmpty()) rule.applicablePackages.addAll(blocked);
+                    }
                     if (mIsDefaultRules) saveDefaultReadRules(); else saveReadRules();
                 });
                 holder.btnDelete.setVisibility(rule.isDefault ? View.GONE : View.VISIBLE);
                 holder.btnEdit.setVisibility(rule.isDefault ? View.GONE : View.VISIBLE);
+                holder.btnApps.setVisibility(View.VISIBLE); // 默认规则也显示应用按钮
                 holder.btnEdit.setOnClickListener(v -> showEditRuleDialog(rule, true));
                 holder.btnDelete.setOnClickListener(v -> { if (!mIsDefaultRules) deleteReadRule(rule); });
+                holder.btnApps.setOnClickListener(v -> {
+                    int idx = mRulesList.indexOf(rule);
+                    if (idx >= 0) {
+                        Intent intent = new Intent(ReadRulesDetailActivity.this, ReadRuleAppsActivity.class);
+                        intent.putExtra(ReadRuleAppsActivity.EXTRA_RULE_INDEX, idx);
+                        intent.putExtra(ReadRuleAppsActivity.EXTRA_IS_DEFAULT_RULE, mIsDefaultRules);
+                        intent.putExtra(ReadRuleAppsActivity.EXTRA_RULE_NAME, rule.name);
+                        startActivity(intent);
+                    }
+                });
                 if (mIsDefaultRules) {
                     holder.itemView.setOnClickListener(v -> showViewRuleDialog(rule));
                     holder.itemView.setOnLongClickListener(v -> { enterReadDefaultSelectionMode(rule); return true; });
@@ -739,7 +938,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             View layoutNormal;
             SwitchCompat switchEnabled;
             TextView tvName, tvPattern;
-            View btnEdit, btnDelete;
+            View btnEdit, btnDelete, btnApps;
             View layoutSelection;
             CheckBox cbSelected;
             TextView tvNameSel, tvPatternSel, tvRuleStatus;
@@ -752,6 +951,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
                 tvPattern = iv.findViewById(R.id.tv_rule_pattern);
                 btnEdit = iv.findViewById(R.id.btn_rule_edit);
                 btnDelete = iv.findViewById(R.id.btn_rule_delete);
+                btnApps = iv.findViewById(R.id.btn_rule_apps);
                 layoutSelection = iv.findViewById(R.id.layout_selection);
                 cbSelected = iv.findViewById(R.id.cb_rule_selected);
                 tvNameSel = iv.findViewById(R.id.tv_rule_name_sel);
@@ -761,9 +961,21 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
         }
     }
 
-    private void refreshReadRulesAdapter() {
-        if (mReadRulesAdapter != null) {
-            mReadRulesAdapter.refreshSelectionMode();
+    private void refreshReadRulesAdapter(int type, int pos) {
+        if (mReadRulesAdapter == null) return;
+        switch (type) {
+            case REFRESH_INSERT:
+                mReadRulesAdapter.notifyItemInserted(pos);
+                break;
+            case REFRESH_REMOVE:
+                mReadRulesAdapter.notifyItemRemoved(pos);
+                break;
+            case REFRESH_CHANGE:
+                mReadRulesAdapter.notifyItemChanged(pos);
+                break;
+            default:
+                mReadRulesAdapter.notifyDataSetChanged();
+                break;
         }
     }
 
@@ -781,7 +993,15 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     protected void onDestroy() {
         mDestroyed = true;
         mHandler.removeCallbacksAndMessages(null);
-        mExecutor.shutdownNow();
+        mExecutor.shutdown();
+        try {
+            if (!mExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                mExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            mExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
         if (mCurrentRuleDialog != null && mCurrentRuleDialog.isShowing()) mCurrentRuleDialog.dismiss();
         mCurrentRuleDialog = null;
         super.onDestroy();

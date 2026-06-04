@@ -25,8 +25,10 @@ public class ContentRule {
 
     // ──────────────────────────── 构造与校验 ────────────────────────────
 
+    /** 默认构造函数，用于 JSON 反序列化 */
     public ContentRule() {}
 
+    /** 创建自定义规则（非默认规则） */
     public ContentRule(String name, String pattern, boolean enabled) {
         this.name = name;
         this.pattern = pattern;
@@ -35,6 +37,7 @@ public class ContentRule {
         compilePattern();
     }
 
+    /** 创建规则，可指定是否为默认规则 */
     public ContentRule(String name, String pattern, boolean enabled, boolean isDefault) {
         this.name = name;
         this.pattern = pattern;
@@ -43,12 +46,7 @@ public class ContentRule {
         compilePattern();
     }
 
-    public boolean appliesToPackage(String packageName) {
-        if (packageName == null || packageName.isEmpty()) return false;
-        if (applicablePackages == null || applicablePackages.isEmpty()) return true;
-        return applicablePackages.contains(packageName);
-    }
-
+    /** 编译正则表达式，失败时 compiledPattern 设为 null */
     public void compilePattern() {
         if (pattern == null || pattern.isEmpty()) {
             compiledPattern = null;
@@ -61,8 +59,31 @@ public class ContentRule {
         }
     }
 
+    /**
+     * 检测正则是否包含潜在危险模式（可能导致灾难性回溯）。
+     * @return null 表示安全，非 null 返回警告信息
+     */
+    public static String checkDangerousPattern(String regex) {
+        if (regex == null || regex.isEmpty()) return null;
+
+        // 检测嵌套量词：(X+)+、(X*)*、(X?)+ 等
+        // 这种模式在回溯时会导致指数级复杂度
+        if (regex.matches(".*\\([^)]*[+*][^)]*\\)[+*?].*")) {
+            return "包含嵌套量词（如 (a+)+），可能导致匹配卡死";
+        }
+
+        // 检测量词内的交替嵌套：(a|b)+ 中 a 和 b 有重叠
+        // 简化检测：括号内有 | 且外面有量词
+        if (regex.matches(".*\\([^)]*\\|[^)]*\\)[+*].*")) {
+            return "包含交替嵌套量词（如 (a|b)+），可能存在风险";
+        }
+
+        return null;
+    }
+
     // ──────────────────────────── JSON 转换 ────────────────────────────
 
+    /** 将规则序列化为 JSON 对象 */
     public JSONObject toJson() {
         JSONObject json = new JSONObject();
         try {
@@ -84,6 +105,7 @@ public class ContentRule {
         return json;
     }
 
+    /** 从 JSON 对象反序列化为规则实例 */
     public static ContentRule fromJson(JSONObject json) {
         ContentRule rule = new ContentRule();
         try {

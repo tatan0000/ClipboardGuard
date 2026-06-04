@@ -51,12 +51,22 @@
 
         </LinearLayout>
 
+        <!-- 应用按钮 -->
+        <ImageButton
+            android:id="@+id/btn_rule_apps"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_apps"
+            android:contentDescription="@string/rules_btn_apps"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
         <!-- 编辑按钮 -->
         <ImageButton
             android:id="@+id/btn_rule_edit"
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:layout_marginStart="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_edit"
             android:contentDescription="@string/rules_btn_edit"

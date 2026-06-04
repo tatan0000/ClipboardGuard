@@ -1,10 +1,8 @@
 package com.android.clipboardguard;
 
 import android.content.Intent;
-import android.os.Bundle;
 import android.os.SystemClock;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -32,9 +30,6 @@ public final class ConfigManager {
     public static final String MODULE_STATUS_FILE_NAME = "module_status.json";
     /** Hook 运行时开关：拒绝读取 Toast、LSPosed 日志输出 */
     public static final String GLOBAL_FLAGS_FILE_NAME = "global_flags.json";
-    /** @deprecated 旧文件名，加载时自动迁移 */
-    @Deprecated
-    private static final String LEGACY_GLOBAL_FLAGS_FILE_NAME = "config.json";
 
     private ConfigManager() {}
 
@@ -133,11 +128,16 @@ public final class ConfigManager {
             }
         }
 
-        if (intent.hasExtra(PermissionProvider.CALL_KEY_WRITE_RULES_JSON)
-                || intent.hasExtra(PermissionProvider.CALL_KEY_WRITE_DEFAULT_RULES_JSON)
-                || intent.hasExtra(PermissionProvider.CALL_KEY_READ_RULES_JSON)
-                || intent.hasExtra(PermissionProvider.CALL_KEY_READ_DEFAULT_RULES_JSON)) {
+        boolean hasWriteRules = intent.hasExtra(PermissionProvider.CALL_KEY_WRITE_RULES_JSON)
+                || intent.hasExtra(PermissionProvider.CALL_KEY_WRITE_DEFAULT_RULES_JSON);
+        boolean hasReadRules = intent.hasExtra(PermissionProvider.CALL_KEY_READ_RULES_JSON)
+                || intent.hasExtra(PermissionProvider.CALL_KEY_READ_DEFAULT_RULES_JSON);
+        if (hasWriteRules && hasReadRules) {
             applyMergedRulesFromDisk(new File(CONFIG_DIR));
+        } else if (hasWriteRules) {
+            applyMergedRulesFromDisk(new File(CONFIG_DIR), "write");
+        } else if (hasReadRules) {
+            applyMergedRulesFromDisk(new File(CONFIG_DIR), "read");
         }
 
         boolean toastChanged = intent.hasExtra(PermissionProvider.CALL_KEY_READ_BLOCKED_TOAST_ENABLED);
@@ -213,6 +213,7 @@ public final class ConfigManager {
 
     // ──────────────────────────── 磁盘 → 内存 ────────────────────────────
 
+    /** 从磁盘加载拦截名单到内存 */
     private static void applyBlocklistsFromDisk(File dir) throws IOException {
         List<String> writeList = readBlocklistFile(new File(dir, "write_blocklist.txt"));
         PermissionCache.updateFromWriteBlockList(new ArrayList<>(writeList));
@@ -221,11 +222,12 @@ public final class ConfigManager {
         PermissionCache.updateFromReadBlockList(new ArrayList<>(readList));
     }
 
+    /** 从磁盘加载规则到内存 */
     private static void applyRulesFromDisk(File dir) {
         applyMergedRulesFromDisk(dir);
     }
 
-    /** 自定义规则与默认规则分文件存储，加载到内存时再合并。 */
+    /** 自定义规则与默认规则分文件存储，加载到内存时再合并（全量）。 */
     private static void applyMergedRulesFromDisk(File dir) {
         String writeCustom = readTextFile(new File(dir, "write_rules.json"));
         String writeDefault = readTextFile(new File(dir, "write_default_rules.json"));
@@ -238,11 +240,25 @@ public final class ConfigManager {
         ContentRulesManager.updateReadRulesFromJson(mergedRead);
     }
 
+    /** 按类型重载规则：type="write" 只重载写入，type="read" 只重载读取。 */
+    private static void applyMergedRulesFromDisk(File dir, String type) {
+        if ("write".equals(type)) {
+            String writeCustom = readTextFile(new File(dir, "write_rules.json"));
+            String writeDefault = readTextFile(new File(dir, "write_default_rules.json"));
+            String mergedWrite = ContentRulesManager.mergeRulesForRuntime(writeCustom, writeDefault);
+            ContentRulesManager.updateWriteRulesFromJson(mergedWrite);
+        } else if ("read".equals(type)) {
+            String readCustom = readTextFile(new File(dir, "read_rules.json"));
+            String readDefault = readTextFile(new File(dir, "read_default_rules.json"));
+            String mergedRead = ContentRulesManager.mergeRulesForRuntime(readCustom, readDefault);
+            ContentRulesManager.updateReadRulesFromJson(mergedRead);
+        }
+    }
+
+    /** 从磁盘加载全局开关状态 */
     private static void applyGlobalFlagsFromDisk(File dir) {
         String json = readTextFile(new File(dir, GLOBAL_FLAGS_FILE_NAME));
-        if (json == null || json.isEmpty()) {
-            json = readTextFile(new File(dir, LEGACY_GLOBAL_FLAGS_FILE_NAME));
-        }
+
         if (json == null || json.isEmpty()) return;
         try {
             JSONObject flags = new JSONObject(json);
@@ -254,6 +270,7 @@ public final class ConfigManager {
 
     // ──────────────────────────── 内存 → 磁盘 ────────────────────────────
 
+    /** 保存拦截名单到文件 */
     private static void saveBlocklistFile(String fileName, List<String> pkgs) {
         try {
             ensureConfigDir();
@@ -284,11 +301,13 @@ public final class ConfigManager {
         }
     }
 
+    /** 保存文本文件到配置目录 */
     private static void saveTextFile(String fileName, String content) throws IOException {
         ensureConfigDir();
         saveTextFileAbsolute(new File(CONFIG_DIR, fileName).getAbsolutePath(), content);
     }
 
+    /** 保存文本文件到绝对路径 */
     private static void saveTextFileAbsolute(String absolutePath, String content) {
         try {
             File file = new File(absolutePath);
@@ -306,16 +325,15 @@ public final class ConfigManager {
         }
     }
 
+    /** 确保配置目录存在 */
     private static void ensureConfigDir() throws IOException {
         File dir = new File(CONFIG_DIR);
         if (!dir.exists() && !dir.mkdirs()) {
             throw new IOException("无法创建 " + CONFIG_DIR);
         }
-        dir.setReadable(true, false);
-        dir.setWritable(true, false);
-        dir.setExecutable(true, false);
     }
 
+    /** 从文件读取拦截名单 */
     private static List<String> readBlocklistFile(File file) throws IOException {
         List<String> lines = new ArrayList<>();
         if (!file.exists()) return lines;
@@ -330,6 +348,7 @@ public final class ConfigManager {
         return lines;
     }
 
+    /** 读取文本文件内容 */
     static String readTextFile(File file) {
         if (file == null || !file.exists()) return null;
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {

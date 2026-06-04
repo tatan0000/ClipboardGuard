@@ -80,8 +80,12 @@ public class ContentRulesManager {
 
     // ──────────────────────────── 写入规则查询 ────────────────────────────
 
+    /** 单次扫描的最大文本长度 */
+    private static final int MAX_SCAN_LENGTH = 5000;
+
     /**
      * 检查文本是否匹配写入内容规则。
+     * 长文本会分块扫描，确保敏感内容不会被漏掉。
      * @return 匹配的规则名称，未匹配返回 null
      */
     public static synchronized String matchesWriteContent(String packageName, String text) {
@@ -89,32 +93,49 @@ public class ContentRulesManager {
         if (packageName == null || packageName.isEmpty()) return null;
         if (text == null || text.isEmpty()) return null;
         if (sWriteRulePatterns.isEmpty()) return null;
-        if (text.length() > 5000) return null;
 
-        for (WriteRulePattern rule : sWriteRulePatterns) {
-            if (!rule.enabled || rule.pattern == null) continue;
-            if (!rule.appliesToPackage(packageName)) continue;
-            try {
-                if (rule.pattern.matcher(text).find()) return rule.name;
-            } catch (Exception e) {
-                XLog.e(TAG, "正则匹配异常: " + rule.name);
+        // 长文本分块扫描，每块 MAX_SCAN_LENGTH 字符，重叠 100 字符避免边界漏匹配
+        int textLen = text.length();
+        int chunkSize = MAX_SCAN_LENGTH;
+        int overlap = 100;
+
+        for (int start = 0; start < textLen; start += (chunkSize - overlap)) {
+            int end = Math.min(start + chunkSize, textLen);
+            String chunk = text.substring(start, end);
+
+            for (WriteRulePattern rule : sWriteRulePatterns) {
+                if (!rule.enabled || rule.pattern == null) continue;
+                if (!rule.appliesToPackage(packageName)) continue;
+                try {
+                    if (rule.pattern.matcher(chunk).find()) return rule.name;
+                } catch (Exception e) {
+                    XLog.e(TAG, "正则匹配异常: " + rule.name);
+                }
             }
+
+            // 最后一块已覆盖到文本末尾
+            if (end >= textLen) break;
         }
         return null;
     }
 
+    /** 检查写入规则是否启用 */
     public static synchronized boolean isWriteEnabled() { return sWriteEnabled; }
-    public static synchronized int getWriteEnabledRuleCount() {
-        int cnt = 0;
-        for (WriteRulePattern r : sWriteRulePatterns) if (r.enabled) cnt++;
-        return cnt;
-    }
 
-    public static synchronized boolean hasEnabledWriteRule() {
-        for (WriteRulePattern r : sWriteRulePatterns) if (r.enabled && r.pattern != null) return true;
+    /**
+     * 检查是否有启用的写入规则适用于指定包名。
+     * 适用于规则适用域：当全局有启用的规则但都不覆盖当前包时，
+     * Hook 应回退到弹窗询问（等同于"规则未启用"）。
+     */
+    public static synchronized boolean hasEnabledWriteRuleForPackage(String packageName) {
+        if (packageName == null || packageName.isEmpty()) return false;
+        for (WriteRulePattern r : sWriteRulePatterns) {
+            if (r.enabled && r.pattern != null && r.appliesToPackage(packageName)) return true;
+        }
         return false;
     }
 
+    /** 检查写入规则是否已加载 */
     public static synchronized boolean isWriteLoaded() { return sWriteLoaded; }
 
     // ──────────────────────────── 广播规则更新 ────────────────────────────
@@ -203,18 +224,19 @@ public class ContentRulesManager {
         }
     }
 
+    /** 更新写入规则缓存 */
     public static synchronized void updateWriteRulesFromJson(String json) {
         updateReadWriteRulesFromJson(json, false);
     }
 
+    /** 更新读取规则缓存 */
     public static synchronized void updateReadRulesFromJson(String json) {
         updateReadWriteRulesFromJson(json, true);
     }
 
     /**
      * 合并自定义规则文件与默认规则文件，供 Hook 运行时匹配。
-     * customRulesJson：write_rules.json / read_rules.json（含 enabled + content_rules）
-     * defaultRulesJson：write_default_rules.json / read_default_rules.json（JSONArray，只合并 enabled 项）
+     * 自定义与默认规则均使用统一格式：{ "enabled": ..., "content_rules": [...] }
      */
     public static String mergeRulesForRuntime(String customRulesJson, String defaultRulesJson) {
         try {
@@ -222,6 +244,7 @@ public class ContentRulesManager {
             JSONArray mergedArr = new JSONArray();
             boolean enabled = false;
 
+            // 自定义规则文件的 enabled 是总开关，控制自定义+默认所有规则
             if (customRulesJson != null && !customRulesJson.isEmpty()) {
                 try {
                     JSONObject root = new JSONObject(customRulesJson);
@@ -232,17 +255,20 @@ public class ContentRulesManager {
                             mergedArr.put(arr.getJSONObject(i));
                         }
                     }
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) {}
             }
 
+            // 默认规则文件的 enabled 仅在无自定义规则文件时作为兜底
             if (defaultRulesJson != null && !defaultRulesJson.isEmpty()) {
                 try {
-                    JSONArray defaults = new JSONArray(defaultRulesJson);
-                    for (int i = 0; i < defaults.length(); i++) {
-                        JSONObject rule = defaults.getJSONObject(i);
-                        if (rule.optBoolean("enabled", false)) {
-                            mergedArr.put(rule);
+                    JSONObject root = new JSONObject(defaultRulesJson);
+                    if (customRulesJson == null || customRulesJson.isEmpty()) {
+                        enabled = root.optBoolean("enabled", false);
+                    }
+                    JSONArray arr = root.optJSONArray("content_rules");
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            mergedArr.put(arr.getJSONObject(i));
                         }
                     }
                 } catch (Exception ignored) {}
@@ -259,25 +285,42 @@ public class ContentRulesManager {
 
     // ──────────────────────────── 读取规则查询 ────────────────────────────
 
+    /**
+     * 检查文本是否匹配读取内容规则，返回匹配的规则名称或 null。
+     * 长文本会分块扫描，确保敏感内容不会被漏掉。
+     */
     public static synchronized String matchesReadContent(String packageName, String text) {
         if (!sReadEnabled) return null;
         if (packageName == null || packageName.isEmpty()) return null;
         if (text == null || text.isEmpty()) return null;
         if (sReadRulePatterns.isEmpty()) return null;
-        if (text.length() > 5000) return null;
-        for (ReadRulePattern rule : sReadRulePatterns) {
-            if (!rule.enabled || rule.pattern == null) continue;
-            if (!rule.appliesToPackage(packageName)) continue;
-            try {
-                // 银行卡号容易和快递单号、订单号重叠，正则命中后再用 Luhn 做二次确认。
-                if ("银行卡号".equals(rule.name)) {
-                    if (matchesBankCardContent(rule, text)) return rule.name;
-                    continue;
+
+        // 长文本分块扫描，每块 MAX_SCAN_LENGTH 字符，重叠 100 字符避免边界漏匹配
+        int textLen = text.length();
+        int chunkSize = MAX_SCAN_LENGTH;
+        int overlap = 100;
+
+        for (int start = 0; start < textLen; start += (chunkSize - overlap)) {
+            int end = Math.min(start + chunkSize, textLen);
+            String chunk = text.substring(start, end);
+
+            for (ReadRulePattern rule : sReadRulePatterns) {
+                if (!rule.enabled || rule.pattern == null) continue;
+                if (!rule.appliesToPackage(packageName)) continue;
+                try {
+                    // 银行卡号容易和快递单号、订单号重叠，正则命中后再用 Luhn 做二次确认。
+                    if ("银行卡号".equals(rule.name)) {
+                        if (matchesBankCardContent(rule, chunk)) return rule.name;
+                        continue;
+                    }
+                    if (rule.pattern.matcher(chunk).find()) return rule.name;
+                } catch (Exception e) {
+                    XLog.e(TAG, "正则匹配异常: " + rule.name);
                 }
-                if (rule.pattern.matcher(text).find()) return rule.name;
-            } catch (Exception e) {
-                XLog.e(TAG, "正则匹配异常: " + rule.name);
             }
+
+            // 最后一块已覆盖到文本末尾
+            if (end >= textLen) break;
         }
         return null;
     }
@@ -312,19 +355,23 @@ public class ContentRulesManager {
         return sum % 10 == 0;
     }
 
+    /** 检查读取规则是否启用 */
     public static synchronized boolean isReadEnabled() { return sReadEnabled; }
 
-    public static synchronized int getReadEnabledRuleCount() {
-        int cnt = 0;
-        for (ReadRulePattern r : sReadRulePatterns) if (r.enabled) cnt++;
-        return cnt;
-    }
-
-    public static synchronized boolean hasEnabledReadRule() {
-        for (ReadRulePattern r : sReadRulePatterns) if (r.enabled && r.pattern != null) return true;
+    /**
+     * 检查是否有启用的读取规则适用于指定包名。
+     * 适用于规则适用域：当全局有启用的规则但都不覆盖当前包时，
+     * Hook 应直接拦截（等同于"规则未启用"）。
+     */
+    public static synchronized boolean hasEnabledReadRuleForPackage(String packageName) {
+        if (packageName == null || packageName.isEmpty()) return false;
+        for (ReadRulePattern r : sReadRulePatterns) {
+            if (r.enabled && r.pattern != null && r.appliesToPackage(packageName)) return true;
+        }
         return false;
     }
 
+    /** 检查读取规则是否已加载 */
     public static synchronized boolean isReadLoaded() { return sReadLoaded; }
 
     /** 生成规则摘要日志：名称 + 拦截包列表 + 条数。 */

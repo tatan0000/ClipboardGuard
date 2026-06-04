@@ -31,14 +31,7 @@ public class PermissionCache {
 
     private static BroadcastReceiver sRefreshReceiver;
 
-    public static synchronized void loadWriteBlockSet() {
-        ConfigManager.loadFromDataSystem();
-    }
-
-    public static synchronized void loadReadBlockSet() {
-        ConfigManager.loadFromDataSystem();
-    }
-
+    /** 更新写入拦截名单缓存 */
     public static synchronized void updateFromWriteBlockList(ArrayList<String> blocklist) {
         if (blocklist == null) return;
         sWriteBlockSet.clear();
@@ -47,6 +40,7 @@ public class PermissionCache {
         XLog.d(TAG, "updateFromWriteBlockList: 收到 " + blocklist.size() + " 条数据");
     }
 
+    /** 更新读取拦截名单缓存 */
     public static synchronized void updateFromReadBlockList(ArrayList<String> blocklist) {
         if (blocklist == null) return;
         sReadBlockSet.clear();
@@ -55,11 +49,13 @@ public class PermissionCache {
         XLog.d(TAG, "updateFromReadBlockList: 收到 " + blocklist.size() + " 条数据");
     }
 
+    /** 更新全局开关状态（读取拦截 Toast、LSPosed 日志输出） */
     public static synchronized void updateGlobalFlags(boolean readBlockedToastEnabled, boolean lsposedLogEnabled) {
         sReadBlockedToastEnabled = readBlockedToastEnabled;
         sLsposedLogEnabled = lsposedLogEnabled;
     }
 
+    /** 注册配置变更广播接收器，接收 App 侧的配置同步广播 */
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public static synchronized boolean registerRefreshReceiver(Context context) {
         if (sRefreshReceiver != null) return true;
@@ -69,9 +65,11 @@ public class PermissionCache {
                 @Override
                 public void onReceive(Context ctx, Intent intent) {
                     ConfigManager.applyConfigBroadcast(intent);
-                    // App 打开时推送配置，同时更新模块状态 JSON：
-                    // 确保 Binder onTransact 返回最新状态（涵盖 App 进程重建场景）
-                    ClipboardHook.reportHookStatus();
+                    // 仅 App 打开时（全量同步广播）刷新模块状态 JSON，
+                    // 规则编辑等增量变更不触发，避免无意义磁盘写入。
+                    if (intent.getBooleanExtra(PermissionProvider.EXTRA_REQUEST_STATUS_UPDATE, false)) {
+                        ClipboardHook.reportHookStatus();
+                    }
                 }
             };
 
@@ -138,11 +136,13 @@ public class PermissionCache {
         return !sReadBlockSet.contains(packageName);
     }
 
+    /** 检查写入拦截名单是否已加载 */
     public static synchronized boolean isWriteLoaded() { return sWriteLoaded; }
+    /** 检查读取拦截名单是否已加载 */
     public static synchronized boolean isReadLoaded() { return sReadLoaded; }
+    /** 检查读取拦截 Toast 是否启用 */
     public static boolean isReadBlockedToastEnabled() { return sReadBlockedToastEnabled; }
+    /** 检查 LSPosed 日志输出是否启用 */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean isLsposedLogEnabled() { return sLsposedLogEnabled; }
-    public static synchronized int getWriteBlockSetSize() { return sWriteBlockSet.size(); }
-    public static synchronized int getReadBlockSetSize() { return sReadBlockSet.size(); }
 }
