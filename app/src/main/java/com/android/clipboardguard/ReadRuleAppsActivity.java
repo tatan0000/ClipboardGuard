@@ -28,6 +28,8 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -131,6 +133,16 @@ public class ReadRuleAppsActivity extends AppCompatActivity {
         if (mRuleIndex < 0) {
             finish();
             return;
+        }
+
+        View appBarView = findViewById(R.id.app_bar);
+        if (appBarView != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(appBarView, (v, insets) -> {
+                int statusH = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+                v.setPadding(v.getPaddingLeft(), Math.max(statusH - 8, 0), v.getPaddingRight(), v.getPaddingBottom());
+                return insets;
+            });
+            ViewCompat.requestApplyInsets(appBarView);
         }
 
         applyStatusBarAdaptation();
