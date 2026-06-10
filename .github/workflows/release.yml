@@ -73,16 +73,6 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # ── XposedBridgeAPI jar ──
-      - name: Ensure XposedBridgeAPI jar exists
-        run: |
-          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
-            echo "Downloading XposedBridgeAPI-82.jar..."
-            mkdir -p app/libs
-            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
-              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar"
-          fi
-
       # ── 读取版本信息 ──
       - name: Extract version info
         id: version
