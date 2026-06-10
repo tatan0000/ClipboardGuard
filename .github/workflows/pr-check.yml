@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────
-  # 快速检查：APK 大小、依赖变化、安全扫描
+  # 快速检查：安全扫描、libxposed API 一致性
   # ──────────────────────────────────────────────
   quick-checks:
     name: Quick Checks
@@ -32,7 +32,6 @@ jobs:
         run: |
           echo "Scanning for potential secrets..."
           FOUND=0
-          # 检查常见的硬编码敏感字符串（排除注释行和 strings.xml 的展示用途）
           PATTERNS=(
             'password\s*=\s*"[^"]+'
             'api_key\s*=\s*"[^"]+'
@@ -54,20 +53,35 @@ jobs:
             echo "✅ No obvious hardcoded secrets found."
           fi
 
-      # 检查 XposedBridgeAPI 版本一致性
-      - name: Check XposedBridgeAPI version consistency
+      # 检查 libxposed API 版本一致性（API 102）
+      - name: Check libxposed API version consistency
         run: |
-          JAR_VERSION=$(ls app/libs/XposedBridgeAPI-*.jar 2>/dev/null | grep -oP '\d+' | head -1 || echo "unknown")
-          MANIFEST_VERSION=$(grep 'xposedminversion' app/src/main/AndroidManifest.xml \
-            | grep -oP '\d+' || echo "unknown")
-          echo "Jar version: ${JAR_VERSION}, Manifest minversion: ${MANIFEST_VERSION}"
-          if [ "${JAR_VERSION}" != "unknown" ] && [ "${MANIFEST_VERSION}" != "unknown" ]; then
-            if [ "${JAR_VERSION}" != "${MANIFEST_VERSION}" ]; then
-              echo "::warning::XposedBridgeAPI jar version (${JAR_VERSION}) != xposedminversion (${MANIFEST_VERSION})"
-            else
-              echo "✅ XposedBridgeAPI version consistent: ${JAR_VERSION}"
-            fi
+          echo "Checking libxposed API 102 configuration..."
+
+          # 检查 build.gradle 是否使用了正确的 libxposed 依赖
+          LIBXPOSED_API=$(grep 'io.github.libxposed:api' app/build.gradle | head -1 || echo "")
+          LIBXPOSED_SVC=$(grep 'io.github.libxposed:service' app/build.gradle | head -1 || echo "")
+
+          if [ -n "${LIBXPOSED_API}" ] && [ -n "${LIBXPOSED_SVC}" ]; then
+            echo "✅ libxposed remote dependencies found:"
+            echo "   api: ${LIBXPOSED_API}"
+            echo "   service: ${LIBXPOSED_SVC}"
+          else
+            echo "::warning::libxposed remote dependencies not found in app/build.gradle"
           fi
+
+          # 检查模块配置文件
+          JAVA_INIT="app/src/main/resources/META-INF/xposed/java_init.list"
+          MODULE_PROP="app/src/main/resources/META-INF/xposed/module.prop"
+          SCOPE_LIST="app/src/main/resources/META-INF/xposed/scope.list"
+
+          for f in "${JAVA_INIT}" "${MODULE_PROP}" "${SCOPE_LIST}"; do
+            if [ -f "${f}" ]; then
+              echo "✅ Found: ${f}"
+            else
+              echo "::warning::Missing: ${f}"
+            fi
+          done
 
   # ──────────────────────────────────────────────
   # 编译验证：确保 PR 代码能成功编译
@@ -100,14 +114,7 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Ensure XposedBridgeAPI jar
-        run: |
-          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
-            mkdir -p app/libs
-            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
-              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar" || true
-          fi
-
+      # libxposed API 102 通过 Maven 远程依赖，无需 jar 文件
       - name: Compile Debug (compileDebugJavaWithJavac)
         run: ./gradlew compileDebugJavaWithJavac --stacktrace
 
@@ -121,6 +128,7 @@ jobs:
           name: pr-test-failure-${{ github.event.pull_request.number }}
           path: app/build/reports/tests/
           retention-days: 3
+          if-no-files-found: ignore
 
   # ──────────────────────────────────────────────
   # APK 大小检查：防止无意间引入过大依赖
@@ -154,14 +162,6 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Ensure XposedBridgeAPI jar
-        run: |
-          if [ ! -f "app/libs/XposedBridgeAPI-82.jar" ]; then
-            mkdir -p app/libs
-            curl -fsSL -o app/libs/XposedBridgeAPI-82.jar \
-              "https://github.com/rovo89/XposedBridge/releases/download/art-v82/XposedBridgeApi-82.jar" || true
-          fi
-
       - name: Build Debug APK for size analysis
         run: ./gradlew assembleDebug --stacktrace
 
@@ -171,7 +171,7 @@ jobs:
           APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
           SIZE_BYTES=$(stat -c%s "${APK}")
           SIZE_KB=$((SIZE_BYTES / 1024))
-          SIZE_MB=$(echo "scale=2; ${SIZE_BYTES}/1048576" | bc)
+          SIZE_MB=$(awk "BEGIN {printf \"%.2f\", ${SIZE_BYTES}/1048576}")
           echo "size_bytes=${SIZE_BYTES}" >> $GITHUB_OUTPUT
           echo "size_kb=${SIZE_KB}" >> $GITHUB_OUTPUT
           echo "size_mb=${SIZE_MB}" >> $GITHUB_OUTPUT
