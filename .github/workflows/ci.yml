@@ -1,15 +1,15 @@
 name: CI - Build & Test
 
-# 触发条件：push 到 main/dev 分支，或向这些分支发起 PR
+# 触发条件：push 到 main/dev/main_libxposed 分支，或向这些分支发起 PR
 on:
   push:
-    branches: [ main, dev, develop ]
+    branches: [ main, dev, develop, main_libxposed ]
     paths-ignore:
       - '**.md'
       - '.github/FUNDING.yml'
       - 'docs/**'
   pull_request:
-    branches: [ main, dev, develop ]
+    branches: [ main, dev, develop, main_libxposed ]
     paths-ignore:
       - '**.md'
 
