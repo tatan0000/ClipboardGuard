@@ -13,17 +13,18 @@ import android.widget.Toast;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedInterface;
+import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
+import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam;
 
 /**
  * ClipboardGuard - Xposed 写入 + 读取拦截 Hook
@@ -41,10 +42,13 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * - 开机 Hook 从 /data/system/clipboardguard/ 读文件（带 3 次重试）
  * - App 改配置后发广播，system_server 落盘并刷新内存
  */
-public class ClipboardHook implements IXposedHookLoadPackage {
+public class ClipboardHook extends XposedModule {
 
     private static final String TAG = "ClipboardGuard.Hook";
     private static final String MODULE_PKG = "com.android.clipboardguard";
+
+    /** 模块实例引用，用于调用 XposedInterface 的实例方法（如 getApiVersion()） */
+    private static volatile XposedModule sModuleInstance = null;
 
     // ──────────────────────── 写入端字段 ────────────────────────
 
@@ -145,29 +149,42 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     private static volatile boolean sReadHookInstalled = false;
 
     // ══════════════════════════════════════════════════════
-    //  Xposed 入口
+    //  Xposed 入口（libxposed API 102 生命周期）
     // ══════════════════════════════════════════════════════
 
-    /** Xposed 模块入口：在 system_server 进程中初始化日志、安装 Hook、加载配置 */
+    /**
+     * 模块加载时调用（所有进程）。
+     * 保存模块实例引用，初始化日志。
+     */
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
+    public void onModuleLoaded(ModuleLoadedParam param) {
+        sModuleInstance = this;
+        // 初始化 XLog，使用 API 102 的 log(int, String, String, Throwable) 签名
         try {
-            if ("android".equals(lpparam.packageName)) {
-                try {
-                    XLog.init(XposedBridge.class.getMethod("log", String.class));
-                } catch (NoSuchMethodException e) {
-                    XLog.e(TAG, "获取 XposedBridge.log 方法失败: " + e.getMessage());
-                }
-                hookWriteClipboard(lpparam);
-                hookReadClipboard(lpparam);
-                hookOnTransact(lpparam);
-                // 两个 Hook 都装完才上报激活，避免首页被半成功状态误导。
-                reportHookStatus();
-                loadAllConfigDirect();
-            }
+            XLog.init(this, XposedModule.class.getMethod(
+                    "log", int.class, String.class, String.class, Throwable.class));
+        } catch (NoSuchMethodException e) {
+            android.util.Log.e(TAG, "获取 XposedModule.log 方法失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * system_server 启动时调用（替代旧的 onPackageLoaded + "android" 包名检查）。
+     * 安装所有 Hook 并加载配置。
+     */
+    @Override
+    public void onSystemServerStarting(SystemServerStartingParam param) {
+        try {
+            ClassLoader classLoader = param.getClassLoader();
+            hookWriteClipboard(classLoader);
+            hookReadClipboard(classLoader);
+            hookOnTransact(classLoader);
+            // 两个 Hook 都装完才上报激活，避免首页被半成功状态误导。
+            reportHookStatus();
+            loadAllConfigDirect();
         } catch (Throwable t) {
-            XLog.e(TAG, "handleLoadPackage 异常: " + t.getMessage());
-            XposedBridge.log(t);
+            XLog.e(TAG, "onSystemServerStarting 异常: " + t.getMessage());
+            log(android.util.Log.ERROR, TAG, "onSystemServerStarting 异常", t);
         }
     }
 
@@ -176,7 +193,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     // ══════════════════════════════════════════════════════
 
     /** Hook ClipboardService.setPrimaryClip（写入拦截）。 */
-    private void hookWriteClipboard(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookWriteClipboard(ClassLoader classLoader) {
         String[] candidates = {
                 "com.android.server.clipboard.ClipboardManagerService",
                 "com.android.server.clipboard.ClipboardManagerService$Impl",
@@ -188,11 +205,11 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         };
         for (String className : candidates) {
             try {
-                Class<?> cls = XposedHelpers.findClass(className, lpparam.classLoader);
+                Class<?> cls = Class.forName(className, false, classLoader);
                 for (Method m : cls.getDeclaredMethods()) {
                     if ("setPrimaryClip".equals(m.getName())) {
                         m.setAccessible(true);
-                        XposedBridge.hookMethod(m, new SetPrimaryClipHook());
+                        hook(m).intercept(new SetPrimaryClipHook());
                         XLog.i(TAG, "写入 Hook 成功: " + className);
                         sWriteHookInstalled = true;
 
@@ -231,7 +248,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     }
 
     /** Hook ClipboardService.getPrimaryClip（读取拦截）。 */
-    private void hookReadClipboard(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookReadClipboard(ClassLoader classLoader) {
         String[] candidates = {
                 "com.android.server.clipboard.ClipboardManagerService",
                 "com.android.server.clipboard.ClipboardManagerService$Impl",
@@ -243,11 +260,11 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         };
         for (String className : candidates) {
             try {
-                Class<?> cls = XposedHelpers.findClass(className, lpparam.classLoader);
+                Class<?> cls = Class.forName(className, false, classLoader);
                 for (Method m : cls.getDeclaredMethods()) {
                     if ("getPrimaryClip".equals(m.getName())) {
                         m.setAccessible(true);
-                        XposedBridge.hookMethod(m, new GetPrimaryClipHook());
+                        hook(m).intercept(new GetPrimaryClipHook());
                         XLog.i(TAG, "读取 Hook 成功: " + className);
                         sReadHookInstalled = true;
 
@@ -295,27 +312,21 @@ public class ClipboardHook implements IXposedHookLoadPackage {
      * App 侧通过 ServiceManager.getService("clipboard") + transact(CBGUARD_STATUS)
      * 直连查询，与 Thanox 的 "tv_input" 劫持策略一致。
      */
-    private void hookOnTransact(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookOnTransact(ClassLoader classLoader) {
         try {
-            Class<?> cls = XposedHelpers.findClass(
+            Class<?> cls = Class.forName(
                     "com.android.server.clipboard.ClipboardService$ClipboardImpl",
-                    lpparam.classLoader);
-            XposedHelpers.findAndHookMethod(cls, "onTransact",
-                    int.class, android.os.Parcel.class, android.os.Parcel.class, int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            int code = (int) param.args[0];
-                            if (code == TRANSACTION_CBGUARD_STATUS) {
-                                String json = sModuleStatusJson;
-                                android.os.Parcel reply = (android.os.Parcel) param.args[2];
-                                reply.writeNoException();
-                                reply.writeString(json != null ? json : "{}");
-                                param.setResult(true); // 拦截，不调原 onTransact
-                            }
-                        }
-                    });
-            XLog.i(TAG, "onTransact Hook 成功: ClipboardService$ClipboardImpl");
+                    false, classLoader);
+            // 查找 onTransact 方法
+            for (Method m : cls.getDeclaredMethods()) {
+                if ("onTransact".equals(m.getName())) {
+                    m.setAccessible(true);
+                    hook(m).intercept(new OnTransactHook());
+                    XLog.i(TAG, "onTransact Hook 成功: ClipboardService$ClipboardImpl");
+                    return;
+                }
+            }
+            XLog.w(TAG, "onTransact 方法未找到");
         } catch (Throwable t) {
             XLog.w(TAG, "onTransact Hook 失败: " + t.getMessage());
         }
@@ -328,7 +339,16 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     /** 上报 Hook 状态：写入和读取都安装成功才算模块真正激活。
      *  状态通过 Binder onTransact 直连返回，无文件兜底。 */
     public static void reportHookStatus() {
-        int xposedApi = XposedBridge.getXposedVersion();
+        // 自动检测 Xposed API 版本
+        int xposedApi = 0;
+        XposedModule module = sModuleInstance;
+        if (module != null) {
+            try {
+                xposedApi = module.getApiVersion();
+            } catch (Throwable t) {
+                XLog.w(TAG, "获取 API 版本失败: " + t.getMessage());
+            }
+        }
         boolean active = sWriteHookInstalled && sReadHookInstalled;
         String detail = buildHookStatusDetail();
         XLog.i(TAG, "[Alive] Hook 状态: " + detail
@@ -462,47 +482,48 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     // ══════════════════════════════════════════════════════
 
     /** 写入拦截 Hook：拦截 ClipboardService.setPrimaryClip 调用 */
-    private static class SetPrimaryClipHook extends XC_MethodHook {
+    private static class SetPrimaryClipHook implements XposedInterface.Hooker {
 
         @Override
-        protected void beforeHookedMethod(MethodHookParam param) {
-            if (Boolean.TRUE.equals(sIsBlockingOperation.get())) return;
+        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+            if (Boolean.TRUE.equals(sIsBlockingOperation.get())) return chain.proceed();
             sIsBlockingOperation.set(true);
             try {
-                if (Boolean.TRUE.equals(sInAfterHook.get())) return;
-                if (Boolean.TRUE.equals(sIsClearOperation.get())) return;
+                if (Boolean.TRUE.equals(sInAfterHook.get())) return chain.proceed();
+                if (Boolean.TRUE.equals(sIsClearOperation.get())) return chain.proceed();
 
                 boolean initialized = ensureWriteInitialized();
                 if (!initialized) {
                     XLog.w(TAG, "写入配置未初始化，保守放行");
-                    return;
+                    return chain.proceed();
                 }
 
-                String pkgName = getCallingWritePackageName(param);
+                String pkgName = getCallingWritePackageName(chain);
                 if (pkgName == null || pkgName.isEmpty()) {
                     XLog.w(TAG, "无法获取写入调用者包名，保守放行");
-                    return;
+                    return chain.proceed();
                 }
-                if (isCorePackage(pkgName)) return;
+                if (isCorePackage(pkgName)) return chain.proceed();
 
                 Context ctx = getSystemServerContext();
                 if (ctx == null) {
                     XLog.e(TAG, "写入端获取 Context 失败，保守放行: " + pkgName);
-                    return;
+                    return chain.proceed();
                 }
 
-                Object clipArg = (param.args != null && param.args.length > 0) ? param.args[0] : null;
+                List<Object> args = chain.getArgs();
+                Object clipArg = (args != null && !args.isEmpty()) ? args.get(0) : null;
                 // 完整内容用于规则匹配，预览用于弹窗/日志
                 String fullContent = extractClipFullContent(clipArg);
                 String preview = fullContent.length() > 100 ? fullContent.substring(0, 100) + "…" : fullContent;
 
                 if (PermissionCache.isWriteIgnored(pkgName)) {
                     writeLog(pkgName, "放行", preview);
-                    return;
+                    return chain.proceed();
                 }
                 if (!shouldShowWritePopup(pkgName, fullContent)) {
                     writeLog(pkgName, "放行(内容过滤)", preview);
-                    return;
+                    return chain.proceed();
                 }
 
                 int decision;
@@ -522,16 +543,13 @@ public class ClipboardHook implements IXposedHookLoadPackage {
 
                 writeLog(pkgName, decision == PermissionDecision.PERMISSION_IGNORE ? "放行" : "拦截", preview);
                 if (decision != PermissionDecision.PERMISSION_IGNORE) {
-                    param.setResult(null);
+                    // 拦截：不调用原始方法，直接返回 null
+                    return null;
                 }
+                return chain.proceed();
             } finally {
                 sIsBlockingOperation.remove();
             }
-        }
-
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) {
-            sInAfterHook.remove();
         }
 
         /**
@@ -561,13 +579,14 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         }
 
         /** 获取写入操作调用者的包名 */
-        private String getCallingWritePackageName(MethodHookParam param) {
+        private String getCallingWritePackageName(XposedInterface.Chain chain) {
             try {
                 // 优先从 ClipData 参数中提取 callingPackage
                 // ClipboardService.setPrimaryClip(ClipData, String, String, int, int)
                 // 第二个参数通常是 callingPackage
-                if (param.args != null && param.args.length > 1 && param.args[1] instanceof String) {
-                    String callingPkg = (String) param.args[1];
+                List<Object> args = chain.getArgs();
+                if (args != null && args.size() > 1 && args.get(1) instanceof String) {
+                    String callingPkg = (String) args.get(1);
                     if (callingPkg != null && !callingPkg.isEmpty()) {
                         return callingPkg;
                     }
@@ -658,79 +677,81 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     // ══════════════════════════════════════════════════════
 
     /** 读取拦截 Hook：拦截 ClipboardService.getPrimaryClip 调用 */
-    private static class GetPrimaryClipHook extends XC_MethodHook {
+    private static class GetPrimaryClipHook implements XposedInterface.Hooker {
 
         @Override
-        protected void afterHookedMethod(MethodHookParam param) {
-            if (Boolean.TRUE.equals(sIsReadBlockingOperation.get())) return;
+        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+            // 先调用原始方法获取结果
+            Object result = chain.proceed();
+            
+            if (Boolean.TRUE.equals(sIsReadBlockingOperation.get())) return result;
             sIsReadBlockingOperation.set(true);
             try {
                 if (!ensureReadInitialized()) {
                     XLog.w(TAG, "读取配置未初始化，保守放行");
-                    return;
+                    return result;
                 }
 
-                String pkgName = getCallingReadPackageName(param);
+                String pkgName = getCallingReadPackageName(chain);
                 if (pkgName == null || pkgName.isEmpty()) {
                     XLog.w(TAG, "无法获取读取调用者包名，保守放行");
-                    return;
+                    return result;
                 }
-                if (isCorePackage(pkgName)) return;
-                if (PermissionCache.isReadIgnored(pkgName)) return;
+                if (isCorePackage(pkgName)) return result;
+                if (PermissionCache.isReadIgnored(pkgName)) return result;
 
                 Context ctx = getSystemServerContext();
                 if (ctx == null) {
                     XLog.e(TAG, "读取端获取 Context 失败，保守放行: " + pkgName);
-                    return;
+                    return result;
                 }
 
-                ClipData clipData = (param.getResult() instanceof ClipData) ? (ClipData) param.getResult() : null;
+                ClipData clipData = (result instanceof ClipData) ? (ClipData) result : null;
                 String content = extractClipContent(clipData);
                 String preview = trimPreview(content);
 
                 // 规则完全未启用 → 直接拦截（基础行为）
                 if (!ContentRulesManager.isReadEnabled()) {
                     XLog.i(TAG, "读取规则未启用，直接拦截: " + pkgName);
-                    rejectRead(param, ctx, pkgName, preview,
+                    rejectRead(ctx, pkgName, preview,
                             PermissionCache.isReadBlockedToastEnabled());
-                    return;
+                    return null;
                 }
                 // 规则已启用，但当前包不在任何规则的适用域内 → 放行
                 if (!ContentRulesManager.hasEnabledReadRuleForPackage(pkgName)) {
                     XLog.i(TAG, "读取规则已启用但当前包不在适用域，放行: " + pkgName);
-                    return;
+                    return result;
                 }
 
                 // 规则已启用 → 匹配命中弹窗询问，未命中放行
                 String matchedRule = ContentRulesManager.matchesReadContent(pkgName, content);
                 if (matchedRule == null) {
                     XLog.i(TAG, "读取内容未命中规则，放行: " + pkgName);
-                    return;
+                    return result;
                 }
                 XLog.i(TAG, "读取内容命中规则 [" + matchedRule + "]，弹窗");
 
-                ReadDecisionResult result = getReadDecision(ctx, pkgName, preview, matchedRule);
-                int decision = result.decision;
+                ReadDecisionResult decisionResult = getReadDecision(ctx, pkgName, preview, matchedRule);
+                int decision = decisionResult.decision;
                 if (decision == PermissionDecision.PERMISSION_IGNORE) {
                     writeReadLog(pkgName, "允许读取", preview);
-                    return;
+                    return result;
                 }
-                if (decision == PermissionDecision.PERMISSION_CLEAR && result.shouldClearClipboard) {
+                if (decision == PermissionDecision.PERMISSION_CLEAR && decisionResult.shouldClearClipboard) {
                     clearClipboard(ctx);
                     writeReadLog(pkgName, "拒绝读取并清空剪贴板", preview);
                 } else {
                     writeReadLog(pkgName, "拒绝读取", preview);
                 }
-                param.setResult(null);
+                return null;
             } finally {
                 sIsReadBlockingOperation.remove();
             }
         }
 
         /** 拒绝读取操作，可选显示 Toast 提示 */
-        private void rejectRead(MethodHookParam param, Context ctx, String pkgName,
+        private void rejectRead(Context ctx, String pkgName,
                 String preview, boolean showToast) {
-            param.setResult(null);
             writeReadLog(pkgName, "拒绝读取", preview);
             if (showToast) showReadBlockedToast(ctx, pkgName);
         }
@@ -828,13 +849,14 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         }
 
         /** 获取读取操作调用者的包名 */
-        private String getCallingReadPackageName(MethodHookParam param) {
+        private String getCallingReadPackageName(XposedInterface.Chain chain) {
             try {
                 // 优先从方法参数中提取 callingPackage
                 // ClipboardService.getPrimaryClip(String, String, int, int)
                 // 第一个参数通常是 callingPackage
-                if (param.args != null && param.args.length > 0 && param.args[0] instanceof String) {
-                    String callingPkg = (String) param.args[0];
+                List<Object> args = chain.getArgs();
+                if (args != null && !args.isEmpty() && args.get(0) instanceof String) {
+                    String callingPkg = (String) args.get(0);
                     if (callingPkg != null && !callingPkg.isEmpty()) {
                         return callingPkg;
                     }
@@ -978,19 +1000,22 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     private static Context getSystemServerContext() {
         if (sSystemServerContext != null) return sSystemServerContext;
         try {
-            Class<?> atClass = XposedHelpers.findClass("android.app.ActivityThread", null);
-            Object at = XposedHelpers.callStaticMethod(atClass, "currentActivityThread");
+            Class<?> atClass = Class.forName("android.app.ActivityThread");
+            Method currentThread = atClass.getMethod("currentActivityThread");
+            Object at = currentThread.invoke(null);
             if (at != null) {
                 // 优先用 getSystemContext()（Thanox 方式），回退 getApplication()
                 Context ctx = null;
                 try {
-                    ctx = (Context) XposedHelpers.callMethod(at, "getSystemContext");
+                    Method getSystemContext = atClass.getMethod("getSystemContext");
+                    ctx = (Context) getSystemContext.invoke(at);
                 } catch (Throwable e) {
                     XLog.w(TAG, "[Context] getSystemContext 调用失败: " + e.getMessage());
                 }
                 if (ctx == null) {
                     try {
-                        ctx = (Context) XposedHelpers.callMethod(at, "getApplication");
+                        Method getApplication = atClass.getMethod("getApplication");
+                        ctx = (Context) getApplication.invoke(at);
                     } catch (Throwable e) {
                         XLog.w(TAG, "[Context] getApplication 调用失败: " + e.getMessage());
                     }
@@ -1187,6 +1212,29 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             if (latch != null) {
                 latch.countDown();
             }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  onTransact Hook（用于模块激活状态查询）
+    // ══════════════════════════════════════════════════════
+
+    /** onTransact Hook：拦截自定义事务码返回模块激活状态 JSON */
+    private static class OnTransactHook implements XposedInterface.Hooker {
+        @Override
+        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+            List<Object> args = chain.getArgs();
+            if (args != null && !args.isEmpty()) {
+                int code = (int) args.get(0);
+                if (code == TRANSACTION_CBGUARD_STATUS) {
+                    String json = sModuleStatusJson;
+                    android.os.Parcel reply = (android.os.Parcel) args.get(2);
+                    reply.writeNoException();
+                    reply.writeString(json != null ? json : "{}");
+                    return true; // 拦截，不调原 onTransact
+                }
+            }
+            return chain.proceed();
         }
     }
 }

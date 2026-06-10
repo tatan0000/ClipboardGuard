@@ -85,7 +85,7 @@
             android:permission="com.android.clipboardguard.permission.CONFIG_SYNC"
             tools:ignore="ExportedContentProvider" />
 
-        <!-- ======= Xposed 模块声明 ======= -->
+        <!-- ======= Xposed 模块声明（libxposed API 102） ======= -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
@@ -94,19 +94,7 @@
             android:name="xposeddescription"
             android:value="剪贴板访问管理\n应用读取或写入剪贴板时进行内容匹配、提示与拦截\n严禁倒卖。" />
 
-        <meta-data
-            android:name="xposedminversion"
-            android:value="82" />
-
-        <!--
-            LSPosed 推荐作用域：
-            Hook 目标是 system_server 进程（android 包），
-            激活状态以系统框架 Hook 成功为准，修改作用域后需要重启系统生效
-            使用 @array/xposed_scope 引用 arrays.xml 中的配置
-        -->
-        <meta-data
-            android:name="xposedscope"
-            android:resource="@array/xposed_scope" />
+        <!-- 作用域由 META-INF/xposed/scope.list 定义，不再使用 xposedscope meta-data -->
 
     </application>
 

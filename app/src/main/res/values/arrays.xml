@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- LSPosed 作用域配置 -->
-    <string-array name="xposed_scope">
-        <!-- 系统框架：Hook ClipboardService -->
-        <item>android</item>
-    </string-array>
-
     <!--
         全局系统核心包白名单（参考 Thanox）
         这些包属于系统运行关键组件：
@@ -86,8 +80,9 @@
         <!-- ZUI 联想 -->
         <item>com.zui.incallui</item>
 
-        <!-- Xposed 自身 -->
+        <!-- Xposed / LSPosed 自身 -->
         <item>github.tornaco.xposedmoduletest</item>
+        <item>org.lsposed.manager</item>
         <item>de.robv.android.xposed.installer</item>
 
         <!-- Qualcomm/QTI 组件 -->

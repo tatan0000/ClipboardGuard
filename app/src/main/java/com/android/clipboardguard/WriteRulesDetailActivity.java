@@ -435,31 +435,37 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
     }
 
     private void saveWriteRules() {
-        try {
-            JSONObject root = new JSONObject();
-            root.put("enabled", mWriteRulesEnabled);
-            JSONArray arr = new JSONArray();
-            for (ContentRule rule : mWriteRules) arr.put(rule.toJson());
-            root.put("content_rules", arr);
-            File file = new File(getFilesDir(), "write_rules.json");
-            if (!writeFile(file, root.toString(2))) {
-                XLog.e("ClipboardGuard-Rules", "写入规则保存失败，跳过同步");
-                return;
-            }
+        // 文件 I/O 和广播移到后台线程，避免阻塞主线程导致卡顿
+        mExecutor.execute(() -> {
+            try {
+                JSONObject root = new JSONObject();
+                root.put("enabled", mWriteRulesEnabled);
+                JSONArray arr = new JSONArray();
+                for (ContentRule rule : mWriteRules) arr.put(rule.toJson());
+                root.put("content_rules", arr);
+                File file = new File(getFilesDir(), "write_rules.json");
+                if (!writeFile(file, root.toString(2))) {
+                    XLog.e("ClipboardGuard-Rules", "写入规则保存失败，跳过同步");
+                    return;
+                }
 
-            notifyRulesChanged();
-            XLog.i("ClipboardGuard-Rules", "写入规则已保存并同步，自定义规则数=" + arr.length());
-        } catch (Exception e) {
-            XLog.e("ClipboardGuard-Rules", "写入规则保存异常", e);
-        }
+                notifyRulesChanged();
+                XLog.i("ClipboardGuard-Rules", "写入规则已保存并同步，自定义规则数=" + arr.length());
+            } catch (Exception e) {
+                XLog.e("ClipboardGuard-Rules", "写入规则保存异常", e);
+            }
+        });
     }
 
     /** 用户操作默认规则后保存并广播 */
     private void saveDefaultWriteRules() {
-        if (saveDefaultWriteRulesToFile()) {
-            notifyRulesChanged();
-            XLog.i("ClipboardGuard-Rules", "默认写入规则已保存并同步");
-        }
+        // 文件 I/O 和广播移到后台线程
+        mExecutor.execute(() -> {
+            if (saveDefaultWriteRulesToFile()) {
+                notifyRulesChanged();
+                XLog.i("ClipboardGuard-Rules", "默认写入规则已保存并同步");
+            }
+        });
     }
 
     /** 仅写入文件，不广播（用于首次初始化）。统一使用 { "enabled": ..., "content_rules": [...] } 格式 */

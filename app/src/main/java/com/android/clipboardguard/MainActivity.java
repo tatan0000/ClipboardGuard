@@ -188,7 +188,8 @@ public class MainActivity extends AppCompatActivity {
     private final AtomicInteger mLoadAppsGeneration = new AtomicInteger(0);
     private final AtomicInteger mRefreshPermissionsGeneration = new AtomicInteger(0);
     private volatile boolean mHasLoadedApps = false;
-    private volatile boolean mInitialConfigSyncDone = false;
+    /** 首次配置同步是否已完成（静态变量，跨 Activity 重建保持状态） */
+    private static volatile boolean sInitialConfigSyncDone = false;
     private final Runnable mFabAutoHide = () -> {
         if (mFab != null && mFab.getVisibility() == View.VISIBLE) {
             mFab.animate().alpha(0f).scaleX(0.5f).scaleY(0.5f)
@@ -783,8 +784,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
                 // 首次激活成功，触发配置同步
-                if (!mInitialConfigSyncDone) {
-                    mInitialConfigSyncDone = true;
+                if (!sInitialConfigSyncDone) {
+                    sInitialConfigSyncDone = true;
                     PermissionProvider.requestConfigSync(MainActivity.this);
                 }
                 return;
@@ -819,8 +820,8 @@ public class MainActivity extends AppCompatActivity {
             if (finalActive) {
                 PermissionProvider.sModuleActive = true;
                 // 重试成功，触发配置同步
-                if (!mInitialConfigSyncDone) {
-                    mInitialConfigSyncDone = true;
+                if (!sInitialConfigSyncDone) {
+                    sInitialConfigSyncDone = true;
                     PermissionProvider.requestConfigSync(MainActivity.this);
                 }
             }

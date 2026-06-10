@@ -31,5 +31,5 @@
 -keepnames class com.android.clipboardguard.ReadRulesDetailActivity
 -keepnames class com.android.clipboardguard.PermissionProvider
 
-# Hook 入口继承/使用 Xposed API，compileOnly 依赖在运行时由框架提供。
--dontwarn de.robv.android.xposed.**
+# Hook 入口继承/使用 libxposed API，compileOnly 依赖在运行时由框架提供。
+-dontwarn io.github.libxposed.api.**

@@ -76,6 +76,7 @@ hook系统服务并不那么容易，需要深入了解 Binder 机制、系统�
 - **Magisk**：[https://github.com/topjohnwu/Magisk](https://github.com/topjohnwu/Magisk)
 - **LSPosed**：[https://github.com/LSPosed/LSPosed](https://github.com/LSPosed/LSPosed)
 - **XposedBridge**：[https://github.com/rovo89/XposedBridge/wiki/Development-tutorial](https://github.com/rovo89/XposedBridge/wiki/Development-tutorial)
+- **libxposed API**：[https://github.com/libxposed/api](https://github.com/libxposed/api)
 - **ClipboardManagerHook**：[https://github.com/superxlcr/ClipboardManagerHook](https://github.com/superxlcr/ClipboardManagerHook)
 
 ### 技术文章
