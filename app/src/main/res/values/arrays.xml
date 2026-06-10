@@ -82,7 +82,6 @@
 
         <!-- Xposed / LSPosed 自身 -->
         <item>github.tornaco.xposedmoduletest</item>
-        <item>org.lsposed.manager</item>
         <item>de.robv.android.xposed.installer</item>
 
         <!-- Qualcomm/QTI 组件 -->
