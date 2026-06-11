@@ -432,31 +432,37 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
     }
 
     private void saveReadRules() {
-        try {
-            JSONObject root = new JSONObject();
-            root.put("enabled", mReadRulesEnabled);
-            JSONArray arr = new JSONArray();
-            for (ContentRule rule : mReadRules) arr.put(rule.toJson());
-            root.put("content_rules", arr);
-            File file = new File(getFilesDir(), "read_rules.json");
-            if (!writeFile(file, root.toString(2))) {
-                XLog.e("ClipboardGuard-Rules", "读取规则保存失败，跳过同步");
-                return;
-            }
+        // 文件 I/O 和广播移到后台线程，避免阻塞主线程导致卡顿
+        mExecutor.execute(() -> {
+            try {
+                JSONObject root = new JSONObject();
+                root.put("enabled", mReadRulesEnabled);
+                JSONArray arr = new JSONArray();
+                for (ContentRule rule : mReadRules) arr.put(rule.toJson());
+                root.put("content_rules", arr);
+                File file = new File(getFilesDir(), "read_rules.json");
+                if (!writeFile(file, root.toString(2))) {
+                    XLog.e("ClipboardGuard-Rules", "读取规则保存失败，跳过同步");
+                    return;
+                }
 
-            notifyRulesChanged();
-            XLog.i("ClipboardGuard-Rules", "读取规则已保存并同步，自定义规则数=" + arr.length());
-        } catch (Exception e) {
-            XLog.e("ClipboardGuard-Rules", "读取规则保存异常", e);
-        }
+                notifyRulesChanged();
+                XLog.i("ClipboardGuard-Rules", "读取规则已保存并同步，自定义规则数=" + arr.length());
+            } catch (Exception e) {
+                XLog.e("ClipboardGuard-Rules", "读取规则保存异常", e);
+            }
+        });
     }
 
     /** 用户操作默认规则时调用：写入文件 + 广播 */
     private void saveDefaultReadRules() {
-        if (saveDefaultReadRulesToFile()) {
-            notifyRulesChanged();
-            XLog.i("ClipboardGuard-Rules", "默认读取规则已保存并同步");
-        }
+        // 文件 I/O 和广播移到后台线程
+        mExecutor.execute(() -> {
+            if (saveDefaultReadRulesToFile()) {
+                notifyRulesChanged();
+                XLog.i("ClipboardGuard-Rules", "默认读取规则已保存并同步");
+            }
+        });
     }
 
     /** 仅写入文件，不广播（首次初始化等场景）。统一使用 { "enabled": ..., "content_rules": [...] } 格式 */
