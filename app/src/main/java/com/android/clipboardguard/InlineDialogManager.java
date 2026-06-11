@@ -283,7 +283,7 @@ public class InlineDialogManager {
             tvPreview.setLayoutParams(previewParams);
             tvPreview.setText(contentPreview);
             tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            tvPreview.setTextColor(isDarkMode ? 0xFF888888 : COLOR_TEXT_HINT);
+            tvPreview.setTextColor(isDarkMode ? 0xFFBBBBBB : COLOR_TEXT_SECONDARY);
             tvPreview.setMaxLines(3);
             tvPreview.setEllipsize(android.text.TextUtils.TruncateAt.END);
             tvPreview.setBackground(createPreviewBackground(isDarkMode));
