@@ -29,7 +29,7 @@
 
 本模块基于 LSPosed/Xposed 框架，在 `system_server` 进程中 Hook `ClipboardService` 的 `setPrimaryClip` 和 `getPrimaryClip` 方法，实现对剪贴板写入/读取行为的拦截与管控。
 
-架构分为两个进程、四个层次：
+架构分为两个进程、六个层次：
 
 ```
 ┌────────────────────────────────────────────────────────────┐
