@@ -314,16 +314,16 @@ app/src/main/assets/
 
 ## 15. AndroidManifest 组件清单
 
-| 类型 | 组件 | exported | 说明 |
-|------|------|----------|------|
-| Application | `ClipboardGuardApp` | - | 应用入口 |
-| Activity | `MainActivity` | true | 主界面（LAUNCHER） |
-| Activity | `WriteRulesDetailActivity` | false | 写入规则详情 |
-| Activity | `ReadRulesDetailActivity` | false | 读取规则详情 |
-| Activity | `WriteRuleAppsActivity` | false | 写入规则应用选择 |
-| Activity | `ReadRuleAppsActivity` | false | 读取规则应用选择 |
-| Activity | `AboutModuleActivity` | false | 关于模块 |
-| Provider | `PermissionProvider` | true | 配置存储与同步（签名级权限保护） |
+| 类型          | 组件                         | exported | 说明               |
+|-------------|----------------------------|----------|------------------|
+| Application | `ClipboardGuardApp`        | -        | 应用入口             |
+| Activity    | `MainActivity`             | true     | 主界面（LAUNCHER）    |
+| Activity    | `WriteRulesDetailActivity` | false    | 写入规则详情           |
+| Activity    | `ReadRulesDetailActivity`  | false    | 读取规则详情           |
+| Activity    | `WriteRuleAppsActivity`    | false    | 写入规则应用选择         |
+| Activity    | `ReadRuleAppsActivity`     | false    | 读取规则应用选择         |
+| Activity    | `AboutModuleActivity`      | false    | 关于模块             |
+| Provider    | `PermissionProvider`       | true     | 配置存储与同步（签名级权限保护） |
 
 ---
 
@@ -331,13 +331,13 @@ app/src/main/assets/
 
 ### 依赖项
 
-| 类型 | 依赖 | 版本 |
-|------|------|------|
-| Xposed API | `XposedBridgeAPI-82.jar`（compileOnly） | 82 |
-| AndroidX Activity | `androidx.activity:activity` | 1.9.3 |
-| AndroidX AppCompat | `androidx.appcompat:appcompat` | 1.7.1 |
-| Material | `com.google.android.material:material` | 1.10.0 |
-| SwipeRefresh | `androidx.swiperefreshlayout:swiperefreshlayout` | 1.1.0 |
+| 类型                 | 依赖                                               | 版本     |
+|--------------------|--------------------------------------------------|--------|
+| Xposed API         | `XposedBridgeAPI-82.jar`（compileOnly）            | 82     |
+| AndroidX Activity  | `androidx.activity:activity`                     | 1.9.3  |
+| AndroidX AppCompat | `androidx.appcompat:appcompat`                   | 1.7.1  |
+| Material           | `com.google.android.material:material`           | 1.10.0 |
+| SwipeRefresh       | `androidx.swiperefreshlayout:swiperefreshlayout` | 1.1.0  |
 
 ### 构建配置
 
