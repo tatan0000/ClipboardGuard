@@ -47,7 +47,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     private static final String MODULE_PKG = "com.android.clipboardguard";
 
     // ──────────────────────── 写入端字段 ────────────────────────
-
     private static final long WRITE_DEBOUNCE_MS = 2000;
     static final long DIALOG_WAIT_TIMEOUT_MS = 5_000;
 
@@ -60,7 +59,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     private static final Object sWriteLatchLock = new Object();
 
     /** 防止同一 Binder 线程内递归触发写入 Hook。 */
-    private static final ThreadLocal<Boolean> sInAfterHook = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<Boolean> sIsBlockingOperation = ThreadLocal.withInitial(() -> false);
 
     /** 写入端广播接收器是否已注册（仅热更新）。 */
@@ -70,14 +68,13 @@ public class ClipboardHook implements IXposedHookLoadPackage {
      * 缓存 system_server Context（使用 ActivityThread.getSystemContext()）。
      * 参考 Thanox ThanoxHookImpl 的实现。
      *
-     * <p>静态持有 Context 在 system_server 中是安全的：
+     * 静态持有 Context 在 system_server 中是安全的：
      * system_server 是系统级进程，生命周期与系统一致，不存在 Activity 泄漏风险。
      */
     @SuppressWarnings("StaticFieldLeak")
     private static volatile Context sSystemServerContext;
 
     // ──────────────────────── 读取端字段 ────────────────────────
-
     private static final long READ_DIALOG_DEBOUNCE_MS = 3000;
     private static final long READ_TOAST_DEBOUNCE_MS = 3000;
 
@@ -147,7 +144,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     // ══════════════════════════════════════════════════════
     //  Xposed 入口
     // ══════════════════════════════════════════════════════
-
     /** Xposed 模块入口：在 system_server 进程中初始化日志、安装 Hook、加载配置 */
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -469,8 +465,9 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             if (Boolean.TRUE.equals(sIsBlockingOperation.get())) return;
             sIsBlockingOperation.set(true);
             try {
-                if (Boolean.TRUE.equals(sInAfterHook.get())) return;
                 if (Boolean.TRUE.equals(sIsClearOperation.get())) return;
+                // 惰性清理过期防抖条目，防止 system_server 长期运行后内存泄漏
+                cleanupExpiredDebounceEntries();
 
                 boolean initialized = ensureWriteInitialized();
                 if (!initialized) {
@@ -529,11 +526,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             }
         }
 
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) {
-            sInAfterHook.remove();
-        }
-
         /**
          * 判断是否应该显示写入拦截弹窗（基于规则匹配）。
          * @param pkgName 调用者包名
@@ -566,9 +558,8 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                 // 优先从 ClipData 参数中提取 callingPackage
                 // ClipboardService.setPrimaryClip(ClipData, String, String, int, int)
                 // 第二个参数通常是 callingPackage
-                if (param.args != null && param.args.length > 1 && param.args[1] instanceof String) {
-                    String callingPkg = (String) param.args[1];
-                    if (callingPkg != null && !callingPkg.isEmpty()) {
+                if (param.args != null && param.args.length > 1 && param.args[1] instanceof String callingPkg) {
+                    if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
                 }
@@ -833,9 +824,8 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                 // 优先从方法参数中提取 callingPackage
                 // ClipboardService.getPrimaryClip(String, String, int, int)
                 // 第一个参数通常是 callingPackage
-                if (param.args != null && param.args.length > 0 && param.args[0] instanceof String) {
-                    String callingPkg = (String) param.args[0];
-                    if (callingPkg != null && !callingPkg.isEmpty()) {
+                if (param.args != null && param.args.length > 0 && param.args[0] instanceof String callingPkg) {
+                    if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
                 }
@@ -932,14 +922,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     // ══════════════════════════════════════════════════════
 
     /** 读取决策结果：包含决策值和是否需要清空剪贴板 */
-    private static class ReadDecisionResult {
-        final int decision;
-        final boolean shouldClearClipboard;
-
-        ReadDecisionResult(int decision, boolean shouldClearClipboard) {
-            this.decision = decision;
-            this.shouldClearClipboard = shouldClearClipboard;
-        }
+    private record ReadDecisionResult(int decision, boolean shouldClearClipboard) {
     }
 
     // ══════════════════════════════════════════════════════
@@ -968,12 +951,12 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     /**
      * 获取 system_server 的 Context。
      *
-     * <p>参考 Thanox {@code ThanoxHookImpl.installHooks}：
+     * 参考 Thanox {@code ThanoxHookImpl.installHooks}：
      * system_server 进程中应使用 {@code ActivityThread.getSystemContext()} 而非
      * {@code getApplication()}，前者是系统级 Context，后者在 system_server 中
      * 可能返回 null 或非系统 Context，导致 ContentProvider 查询失败。
      *
-     * <p>不使用永久失败标记：早期调用时系统尚未就绪，重试是合理的。
+     * 不使用永久失败标记：早期调用时系统尚未就绪，重试是合理的。
      */
     private static Context getSystemServerContext() {
         if (sSystemServerContext != null) return sSystemServerContext;
@@ -1029,31 +1012,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
         return "";
     }
 
-    /** 从 ClipData 提取预览文本（最多 100 字符，用于弹窗/日志） */
-    private static String extractClipPreview(Object arg) {
-        if (arg == null) return "";
-        try {
-            ClipData data = (ClipData) arg;
-            if (data.getItemCount() > 0) {
-                ClipData.Item item = data.getItemAt(0);
-                CharSequence text = item.getText();
-                if (text != null && text.length() > 0) {
-                    String s = text.toString().trim();
-                    return s.length() > 100 ? s.substring(0, 100) + "…" : s;
-                }
-                String html = item.getHtmlText();
-                if (html != null && !html.isEmpty()) {
-                    String s = html.replaceAll("<[^>]+>", "").trim();
-                    return s.length() > 100 ? s.substring(0, 100) + "…" : s;
-                }
-                if (item.getUri() != null) return "[图片/文件]";
-            }
-        } catch (Throwable e) {
-            XLog.w(TAG, "提取写入预览失败: " + e.getMessage());
-        }
-        return "(非文本内容)";
-    }
-
     /** 输出写入操作日志（带脱敏） */
     private static void writeLog(String pkgName, String action, String content) {
         if (pkgName == null || pkgName.isEmpty() || "android".equals(pkgName) || "unknown".equals(pkgName))
@@ -1084,7 +1042,7 @@ public class ClipboardHook implements IXposedHookLoadPackage {
     private static final Object sCorePackagesLock = new Object();
     private static volatile HashSet<String> sCorePackages;
 
-    /** 获取核心包白名单（带缓存） */
+    /** 获取核心包白名单（带缓存，失败时也缓存基础白名单避免重复锁竞争） */
     private static HashSet<String> getCorePackages() {
         HashSet<String> cached = sCorePackages;
         if (cached != null) return cached;
@@ -1092,7 +1050,6 @@ public class ClipboardHook implements IXposedHookLoadPackage {
             if (sCorePackages != null) return sCorePackages;
             HashSet<String> packages = new HashSet<>();
             packages.add("android");
-            boolean resourceLoaded = false;
             try {
                 Context ctx = getModuleContext();
                 if (ctx != null) {
@@ -1103,14 +1060,12 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                             packages.add(pkg.trim());
                         }
                     }
-                    resourceLoaded = true;
                 }
             } catch (Throwable e) {
                 XLog.w(TAG, "读取核心白名单资源失败: " + e.getMessage());
             }
-            if (resourceLoaded) {
-                sCorePackages = packages;
-            }
+            // 无论资源是否加载成功都缓存，避免高频调用时重复锁竞争
+            sCorePackages = packages;
             return packages;
         }
     }
@@ -1188,5 +1143,56 @@ public class ClipboardHook implements IXposedHookLoadPackage {
                 latch.countDown();
             }
         }
+    }
+
+    // ──────────────────── 防抖缓存清理（防止内存泄漏） ────────────────────
+
+    /**
+     * 清理过期的防抖缓存条目，防止 system_server 长期运行后内存泄漏。
+     * 超过 10 分钟未访问的条目将被移除。
+     *
+     * 由每次写入/读取拦截时惰性触发，无需定时器。
+     */
+    private static final long DEBOUNCE_CLEANUP_THRESHOLD_MS = 10 * 60 * 1000; // 10 分钟
+    private static volatile long sLastDebounceCleanupTime = 0;
+    private static final long DEBOUNCE_CLEANUP_INTERVAL_MS = 60 * 1000; // 至多每分钟清理一次
+
+    private static void cleanupExpiredDebounceEntries() {
+        long now = System.currentTimeMillis();
+        if (now - sLastDebounceCleanupTime < DEBOUNCE_CLEANUP_INTERVAL_MS) return;
+        sLastDebounceCleanupTime = now;
+
+        int removed = 0;
+        // 写入端
+        synchronized (sWriteDebounceLock) {
+            removed += cleanupMapByAge(sLastWriteDecisionTime, sLastWriteUserDecision, now);
+        }
+        // 读取端
+        synchronized (sReadDebounceLock) {
+            removed += cleanupMapByAge(sLastReadDecisionTime, sLastReadUserDecision, now);
+            removed += cleanupMapByAge(sLastReadDecisionTime, sLastReadClearConsumed, now);
+            removed += cleanupMapByAge(sLastReadToastTime, null, now);
+        }
+        if (removed > 0) {
+            XLog.d(TAG, "防抖缓存清理: 移除 " + removed + " 条过期条目");
+        }
+    }
+
+    /** 清理时间 Map 中超过阈值的条目，并同步清理关联 Map */
+    private static <V> int cleanupMapByAge(Map<String, Long> timeMap,
+            Map<String, V> associatedMap, long now) {
+        int removed = 0;
+        java.util.Iterator<Map.Entry<String, Long>> it = timeMap.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, Long> entry = it.next();
+            if (now - entry.getValue() > DEBOUNCE_CLEANUP_THRESHOLD_MS) {
+                it.remove();
+                if (associatedMap != null) {
+                    associatedMap.remove(entry.getKey());
+                }
+                removed++;
+            }
+        }
+        return removed;
     }
 }

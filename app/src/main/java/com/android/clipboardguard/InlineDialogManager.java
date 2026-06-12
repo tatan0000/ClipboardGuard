@@ -44,7 +44,6 @@ public class InlineDialogManager {
     private static final int COLOR_SURFACE_DARK = 0xFF1C1C1E;
     private static final int COLOR_TEXT_PRIMARY = 0xFF1C1C1E;
     private static final int COLOR_TEXT_SECONDARY = 0xFF636366;
-    private static final int COLOR_TEXT_HINT = 0xFFAEAEB2;
     private static final int COLOR_BTN_ALLOW = 0xFF007AFF;
     private static final int COLOR_BTN_DENY = 0xFFFF3B30;
     private static final int COLOR_PREVIEW_BG = 0xFFF2F2F7;
@@ -460,16 +459,15 @@ public class InlineDialogManager {
 
     /** 关闭当前弹窗，可选是否通知 Hook 侧阻止操作 */
     private void dismissCurrentDialog(String expectedPkgName, boolean notifyBlocked) {
-        if (expectedPkgName != null && !Objects.equals(expectedPkgName, mCurrentPackageName)) {
-            return;
-        }
-
         CountDownTimer timerToCancel;
         View viewToRemove;
         String pkgToNotify;
         String operationToNotify;
 
         synchronized (mLock) {
+            if (expectedPkgName != null && !Objects.equals(expectedPkgName, mCurrentPackageName)) {
+                return;
+            }
             timerToCancel = mCurrentTimer;
             viewToRemove = mCurrentDialogView;
             pkgToNotify = mCurrentPackageName;

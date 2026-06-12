@@ -940,7 +940,7 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             notifyItemRangeChanged(0, getItemCount());
         }
 
-        class ReadRuleViewHolder extends RecyclerView.ViewHolder {
+        static class ReadRuleViewHolder extends RecyclerView.ViewHolder {
             View layoutNormal;
             SwitchCompat switchEnabled;
             TextView tvName, tvPattern;
@@ -979,8 +979,8 @@ public class ReadRulesDetailActivity extends AppCompatActivity {
             case REFRESH_CHANGE:
                 mReadRulesAdapter.notifyItemChanged(pos);
                 break;
-            default:
-                mReadRulesAdapter.notifyDataSetChanged();
+            case REFRESH_FULL:
+                mReadRulesAdapter.notifyItemRangeChanged(0, mReadRulesAdapter.getItemCount());
                 break;
         }
     }

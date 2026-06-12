@@ -215,8 +215,8 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 生命周期与基础初始化 ────────────────────────────
 
-    @Override
     /** Activity 创建：初始化视图、主题、页面、数据加载 */
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         applyThemeNoView();
         super.onCreate(savedInstanceState);
@@ -306,9 +306,12 @@ public class MainActivity extends AppCompatActivity {
         sExecutor.execute(() -> { ensureEmptyJsonFile("read_rules.json"); latch.countDown(); });
         sExecutor.execute(() -> { ensureEmptyJsonFile("write_default_rules.json"); latch.countDown(); });
         sExecutor.execute(() -> { ensureEmptyJsonFile("read_default_rules.json"); latch.countDown(); });
-        // 等待所有文件初始化完成（最多 3 秒）
+        // 等待所有文件初始化完成（最多 5 秒）
         try {
-            latch.await(3, java.util.concurrent.TimeUnit.SECONDS);
+            boolean completed = latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!completed) {
+                XLog.w("ClipboardGuard", "规则文件初始化超时（5秒）");
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             XLog.w("ClipboardGuard", "等待规则文件初始化被中断");
@@ -341,8 +344,8 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    @Override
     /** Activity 恢复：刷新权限状态、同步配置 */
+    @Override
     protected void onResume() {
         super.onResume();
         if (mHasLoadedApps) {
@@ -351,15 +354,15 @@ public class MainActivity extends AppCompatActivity {
         // 配置同步已移至 checkModuleActive() 中，仅首次激活时执行一次
     }
 
-    @Override
     /** Activity 暂停：丢弃未提交的更改（用户需点 FAB 保存） */
+    @Override
     protected void onPause() {
         discardPendingChangesForPage(sCurrentPage);
         super.onPause();
     }
 
-    @Override
     /** Activity 销毁：清理资源 */
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         mHandler.removeCallbacksAndMessages(null);
@@ -386,8 +389,8 @@ public class MainActivity extends AppCompatActivity {
 
     // ──────────────────── 读写页面初始化 ────────────────────────────
 
-    @SuppressLint("ClickableViewAccessibility")
     /** 初始化写入拦截页面（ExpandableListView、搜索、FAB） */
+    @SuppressLint("ClickableViewAccessibility")
     private void initWritePage() {
         mWriteExpandableListView = findViewById(R.id.expandable_list_write);
         mWriteSwipeRefresh = findViewById(R.id.swipe_refresh_write);
@@ -461,8 +464,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     /** 初始化读取拦截页面（ExpandableListView、搜索、FAB） */
+    @SuppressLint("ClickableViewAccessibility")
     private void initReadPage() {
         mReadExpandableListView = findViewById(R.id.expandable_list_read);
         mReadSwipeRefresh = findViewById(R.id.swipe_refresh_read);
@@ -707,6 +710,7 @@ public class MainActivity extends AppCompatActivity {
      * 直接返回 sModuleStatusJson。无需注册新服务，复用已有 clipboard_service SELinux 类型。
      * @return 状态 JSON，Hook 未就绪、Binder 异常时返回 null
      */
+    @SuppressLint("PrivateApi")
     private static String getStatusViaBinder() {
         try {
             Class<?> smClass = Class.forName("android.os.ServiceManager");
@@ -744,8 +748,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    @SuppressLint("SetTextI18n")
     /** 初始化首页（模块状态卡片、设备信息） */
+    @SuppressLint("SetTextI18n")
     private void initHomePage() {
         // 设备信息（都是常量，直接设置）
         if (mTvAndroidVersion != null) mTvAndroidVersion.setText(Build.VERSION.RELEASE);
@@ -756,8 +760,8 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 快速检测模块激活状态，在 showPage 之前提交后台任务，
      * 使用 postAtFrontOfQueue 让回调尽可能在首帧渲染前执行，消除"未激活"闪变。
+     * 通过 Binder IPC 轮询检测模块激活状态（最多 24 次，每次 5 秒）。
      */
-    /** 通过 Binder IPC 轮询检测模块激活状态（最多 24 次，每次 5 秒） */
     private void checkModuleActive() {
         sExecutor.execute(() -> {
             String current = ConfigManager.readCurrentBootId();
@@ -921,8 +925,8 @@ public class MainActivity extends AppCompatActivity {
                 : getSharedPreferences(PREF_NAME, MODE_PRIVATE).getInt(KEY_THEME, THEME_SYSTEM));
     }
 
-    @SuppressLint("SetTextI18n")
     /** 初始化设置页面（主题、开关、备份恢复、关于） */
+    @SuppressLint("SetTextI18n")
     private void setupSettingsPage() {
         setupThemeItem(R.id.item_theme_light,  THEME_LIGHT);
         setupThemeItem(R.id.item_theme_dark,   THEME_DARK);
@@ -1154,7 +1158,9 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                     // 清理临时文件
-                    if (tmpFile.exists()) tmpFile.delete();
+                    if (tmpFile.exists() && !tmpFile.delete()) {
+                        XLog.w("ClipboardGuard", "临时文件删除失败: " + tmpFile.getAbsolutePath());
+                    }
                     restoredCount++;
                 }
                 zip.closeEntry();
@@ -1684,21 +1690,6 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this,
                 readblocked > 0 ? getString(R.string.save_success, readblocked) : getString(R.string.save_no_block),
                 Toast.LENGTH_SHORT).show();
-    }
-
-    // ──────────────────── 规则文件初始化 ────────────────────────────
-
-    @SuppressLint("SdCardPath")
-    /** 初始化规则文件（确保文件存在） */
-    private void initRuleFiles() {
-        // 6 个文件操作用同一线程池并发执行，替代顺序 I/O
-        String filesDir = getFilesDir().getPath();
-        sExecutor.execute(() -> PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt"));
-        sExecutor.execute(() -> PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt"));
-        sExecutor.execute(() -> ensureEmptyJsonFile("write_rules.json"));
-        sExecutor.execute(() -> ensureEmptyJsonFile("read_rules.json"));
-        sExecutor.execute(() -> ensureEmptyJsonFile("write_default_rules.json"));
-        sExecutor.execute(() -> ensureEmptyJsonFile("read_default_rules.json"));
     }
 
     /** 确保 JSON 文件存在，不存在则创建空规则文件 */

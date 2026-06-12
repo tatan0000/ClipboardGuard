@@ -910,7 +910,7 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
         @Override public int getItemCount() { return mRulesList.size(); }
         void refreshSelectionMode() { notifyItemRangeChanged(0, getItemCount()); }
     
-        class WriteRuleViewHolder extends RecyclerView.ViewHolder {
+        static class WriteRuleViewHolder extends RecyclerView.ViewHolder {
             View layoutNormal; SwitchCompat switchEnabled; TextView tvName, tvPattern; View btnEdit, btnDelete, btnApps;
             View layoutSelection; CheckBox cbSelected; TextView tvNameSel, tvPatternSel, tvRuleStatus;
             WriteRuleViewHolder(View itemView) {
@@ -943,8 +943,8 @@ public class WriteRulesDetailActivity extends AppCompatActivity {
             case REFRESH_CHANGE:
                 mWriteRulesAdapter.notifyItemChanged(pos);
                 break;
-            default:
-                mWriteRulesAdapter.notifyDataSetChanged();
+            case REFRESH_FULL:
+                mWriteRulesAdapter.notifyItemRangeChanged(0, mWriteRulesAdapter.getItemCount());
                 break;
         }
     }
