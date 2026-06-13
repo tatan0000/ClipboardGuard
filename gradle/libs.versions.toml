@@ -1,13 +1,13 @@
 [versions]
 agp = "9.1.1"
-api = "102.0.0-SNAPSHOT"
+api = "102.0.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 activity = "1.9.3"
 appcompat = "1.7.1"
 material = "1.10.0"
-service = "102.0.0-SNAPSHOT"
+service = "102.0.0"
 
 [libraries]
 api = { module = "io.github.libxposed:api", version.ref = "api" }

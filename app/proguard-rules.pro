@@ -30,12 +30,17 @@
 -keep class com.android.clipboardguard.ClipboardHook$* { *; }
 
 # 2. Xposed API 类（compileOnly 依赖，运行时由框架提供）
--dontwarn io.github.libxposed.api.**
--keep class io.github.libxposed.api.** { *; }
+#    官方推荐：只保留 XposedModule 子类的构造函数，其余由框架提供
+-dontwarn io.github.libxposed.annotation.**
+-adaptresourcefilecontents META-INF/xposed/java_init.list
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
+    public <init>();
+}
 
 # 3. 保留所有 Hook 回调方法（intercept 方法必须存在）
+#    API 102 签名：intercept(XposedInterface.Chain)
 -keepclassmembers class * implements io.github.libxposed.api.XposedInterface$Hooker {
-    public *** intercept(io.github.libxposed.api.XposedInterface$MethodHookParam);
+    public *** intercept(io.github.libxposed.api.XposedInterface$Chain);
 }
 
 # 4. 反射调用的系统类（ClipboardHook 中使用）
