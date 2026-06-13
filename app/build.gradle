@@ -19,7 +19,7 @@ android {
         applicationId "com.android.clipboardguard"
         minSdk 30
         targetSdk 37
-        versionCode 260611
+        versionCode 260613
         versionName "1.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
