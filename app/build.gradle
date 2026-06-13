@@ -53,6 +53,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    
+    // 明确指定 Java toolchain 版本，确保 CI 使用正确的 JDK
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
     sourceSets {
         main {
             assets {
