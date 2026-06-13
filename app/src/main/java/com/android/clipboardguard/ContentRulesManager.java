@@ -5,6 +5,11 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * ContentRulesManager - 剪贴板内容规则管理器（写入 + 读取）
@@ -17,6 +22,28 @@ import java.util.List;
 public class ContentRulesManager {
 
     private static final String TAG = "ClipboardGuard.ContentRules";
+
+    /**
+     * 单条规则正则匹配的超时时间。
+     * 超过此时间说明正则可能触发了灾难性回溯，跳过该规则以保护 system_server。
+     */
+    private static final long REGEX_MATCH_TIMEOUT_MS = 500;
+
+    /**
+     * 专用单线程执行器，用于正则匹配超时保护。
+     * 使用独立线程是为了不阻塞 Binder 线程池。
+     * 使用 daemon 线程，system_server 退出时自动回收。
+     */
+    private static final ExecutorService sRegexExecutor = createRegexExecutor();
+
+    private static ExecutorService createRegexExecutor() {
+        java.util.concurrent.ThreadFactory factory = r -> {
+            Thread t = new Thread(r, "CBGuard-Regex");
+            t.setDaemon(true);
+            return t;
+        };
+        return Executors.newSingleThreadExecutor(factory);
+    }
 
     // ── 写入规则缓存 ──
     private static final List<WriteRulePattern> sWriteRulePatterns = new ArrayList<>();
@@ -107,7 +134,7 @@ public class ContentRulesManager {
                 if (!rule.enabled || rule.pattern == null) continue;
                 if (!rule.appliesToPackage(packageName)) continue;
                 try {
-                    if (rule.pattern.matcher(chunk).find()) return rule.name;
+                    if (matchesWithTimeout(rule.pattern, chunk, rule.name)) return rule.name;
                 } catch (Exception e) {
                     XLog.e(TAG, "正则匹配异常: " + rule.name);
                 }
@@ -313,7 +340,7 @@ public class ContentRulesManager {
                         if (matchesBankCardContent(rule, chunk)) return rule.name;
                         continue;
                     }
-                    if (rule.pattern.matcher(chunk).find()) return rule.name;
+                    if (matchesWithTimeout(rule.pattern, chunk, rule.name)) return rule.name;
                 } catch (Exception e) {
                     XLog.e(TAG, "正则匹配异常: " + rule.name);
                 }
@@ -326,13 +353,22 @@ public class ContentRulesManager {
     }
 
     private static boolean matchesBankCardContent(ReadRulePattern rule, String text) {
-        java.util.regex.Matcher matcher = rule.pattern.matcher(text);
-        while (matcher.find()) {
-            String candidate = matcher.group();
-            // 允许用户复制带空格或短横分组的卡号，校验前统一还原为纯数字。
-            String digits = candidate.replace(" ", "").replace("-", "");
-            if (digits.length() < 13 || digits.length() > 19) continue;
-            if (isLuhnValid(digits)) return true;
+        java.util.regex.Matcher matcher;
+        try {
+            matcher = rule.pattern.matcher(text);
+        } catch (Exception e) {
+            return false;
+        }
+        try {
+            while (matcher.find()) {
+                String candidate = matcher.group();
+                // 允许用户复制带空格或短横分组的卡号，校验前统一还原为纯数字。
+                String digits = candidate.replace(" ", "").replace("-", "");
+                if (digits.length() < 13 || digits.length() > 19) continue;
+                if (isLuhnValid(digits)) return true;
+            }
+        } catch (Exception e) {
+            XLog.e(TAG, "银行卡号匹配异常: " + rule.name);
         }
         return false;
     }
@@ -353,6 +389,31 @@ public class ContentRulesManager {
             doubleDigit = !doubleDigit;
         }
         return sum % 10 == 0;
+    }
+
+    /**
+     * 带超时保护的正则匹配。
+     * 将 matcher().find() 提交到独立线程执行，超过 REGEX_MATCH_TIMEOUT_MS 未返回则判定超时。
+     *
+     * 超时说明：正则引擎的灾难性回溯是 CPU 密集型操作，{@code Future.cancel()} 无法中断
+     * 正在执行的正则匹配线程。超时后该线程会继续执行直到自然结束或进程退出，
+     * 但调用方已经拿到结果（跳过该规则），不会阻塞 Binder 线程。
+     * daemon 线程在 system_server 退出时自动回收，不会泄漏。
+     */
+    private static boolean matchesWithTimeout(java.util.regex.Pattern pattern, String text, String ruleName) {
+        try {
+            Future<Boolean> future = sRegexExecutor.submit(() -> pattern.matcher(text).find());
+            try {
+                return future.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                future.cancel(false); // 不中断（无法中断正则引擎），仅标记取消
+                XLog.w(TAG, "正则匹配超时（" + REGEX_MATCH_TIMEOUT_MS + "ms），跳过规则: " + ruleName);
+                return false;
+            }
+        } catch (Exception e) {
+            XLog.e(TAG, "正则匹配执行异常: " + ruleName + " -> " + e.getMessage());
+            return false;
+        }
     }
 
     /** 检查读取规则是否启用 */

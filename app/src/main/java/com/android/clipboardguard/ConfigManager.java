@@ -354,8 +354,11 @@ public final class ConfigManager {
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             StringBuilder sb = new StringBuilder();
             String line;
+            boolean first = true;
             while ((line = reader.readLine()) != null) {
+                if (!first) sb.append('\n');
                 sb.append(line);
+                first = false;
             }
             return sb.toString();
         } catch (IOException e) {

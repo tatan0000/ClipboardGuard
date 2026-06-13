@@ -490,7 +490,9 @@ public class PermissionProvider extends ContentProvider {
         try {
             File file = new File(filePath);
             if (file.exists()) {
-                new FileWriter(file).close();
+                try (FileWriter fw = new FileWriter(file)) {
+                    fw.write(""); // 显式写入空内容以清空文件
+                }
             }
         } catch (IOException e) {
             XLog.e(TAG, "clearBlocklistFile 失败: " + filePath + " -> " + e.getMessage());
@@ -644,7 +646,6 @@ public class PermissionProvider extends ContentProvider {
      * setPackage("com.android.clipboardguard")，否则广播永远不会送达。
      * 安全由接收端注册时声明的 PERMISSION_CONFIG_SYNC 签名权限保证。
      */
-    /** 创建配置变更广播 Intent */
     private static Intent createConfigChangedIntent() {
         Intent intent = new Intent(ACTION_CONFIG_CHANGED);
         intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
@@ -847,25 +848,27 @@ public class PermissionProvider extends ContentProvider {
             JSONObject root = new JSONObject(content);
             JSONArray rules = root.optJSONArray("content_rules");
             if (rules == null || rules.length() == 0) return;
-            boolean changed = false;
+            boolean anyChanged = false;
             for (int i = 0; i < rules.length(); i++) {
                 JSONObject rule = rules.getJSONObject(i);
                 if (!rule.has("applicable_packages")) continue;
                 JSONArray oldPkgs = rule.getJSONArray("applicable_packages");
                 JSONArray newPkgs = new JSONArray();
+                boolean ruleChanged = false;
                 for (int j = 0; j < oldPkgs.length(); j++) {
                     String pkg = oldPkgs.getString(j);
                     if (!packages.contains(pkg)) {
                         newPkgs.put(pkg);
                     } else {
-                        changed = true;
+                        ruleChanged = true;
                     }
                 }
-                if (changed) {
+                if (ruleChanged) {
                     rule.put("applicable_packages", newPkgs);
+                    anyChanged = true;
                 }
             }
-            if (changed) {
+            if (anyChanged) {
                 writeTextFile(file, root.toString(2));
                 XLog.i(TAG, "已清理 App 侧 " + fileName + " 适用域: " + packages);
             }
@@ -890,10 +893,6 @@ public class PermissionProvider extends ContentProvider {
         return false;
     }
 
-    /**
-     * 合并自定义规则和默认规则（只包含启用的默认规则）
-     * Hook 侧收到广播后直接使用，规则数 = 自定义规则 + 启用的默认规则
-     */
     /** 检查读取拦截 Toast 是否启用 */
     public static boolean isReadBlockedToastEnabled(Context context) {
         if (context == null) return true;
@@ -945,8 +944,11 @@ public class PermissionProvider extends ContentProvider {
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             StringBuilder sb = new StringBuilder();
             String line;
+            boolean first = true;
             while ((line = reader.readLine()) != null) {
+                if (!first) sb.append('\n');
                 sb.append(line);
+                first = false;
             }
             return sb.toString();
         } catch (IOException e) {

@@ -64,7 +64,6 @@ public class ClipboardHook extends XposedModule {
     private static final Object sWriteLatchLock = new Object();
 
     /** 防止同一 Binder 线程内递归触发写入 Hook。 */
-    private static final ThreadLocal<Boolean> sInAfterHook = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<Boolean> sIsBlockingOperation = ThreadLocal.withInitial(() -> false);
 
     /** 写入端广播接收器是否已注册（仅热更新）。 */
@@ -101,6 +100,15 @@ public class ClipboardHook extends XposedModule {
     private static final ThreadLocal<Boolean> sIsReadBlockingOperation = ThreadLocal.withInitial(() -> false);
     /** 防止清空剪贴板操作递归触发写入 Hook。 */
     private static final ThreadLocal<Boolean> sIsClearOperation = ThreadLocal.withInitial(() -> false);
+
+    // ──────────────────────── 防抖缓存清理 ────────────────────────
+
+    /** 防抖缓存条目过期阈值：超过 10 分钟未访问的条目将被移除 */
+    private static final long DEBOUNCE_CLEANUP_THRESHOLD_MS = 10 * 60 * 1000; // 10 分钟
+    /** 防抖缓存清理间隔：至多每分钟清理一次 */
+    private static final long DEBOUNCE_CLEANUP_INTERVAL_MS = 60 * 1000; // 至多每分钟清理一次
+    /** 上次清理防抖缓存的时间戳 */
+    private static volatile long sLastDebounceCleanupTime = 0;
 
     /** 读取端广播接收器是否已注册（仅热更新）。 */
     private static volatile boolean sReadReceiverRegistered = false;
@@ -489,8 +497,8 @@ public class ClipboardHook extends XposedModule {
             if (Boolean.TRUE.equals(sIsBlockingOperation.get())) return chain.proceed();
             sIsBlockingOperation.set(true);
             try {
-                if (Boolean.TRUE.equals(sInAfterHook.get())) return chain.proceed();
                 if (Boolean.TRUE.equals(sIsClearOperation.get())) return chain.proceed();
+                cleanupExpiredDebounceEntries();
 
                 boolean initialized = ensureWriteInitialized();
                 if (!initialized) {
@@ -585,9 +593,8 @@ public class ClipboardHook extends XposedModule {
                 // ClipboardService.setPrimaryClip(ClipData, String, String, int, int)
                 // 第二个参数通常是 callingPackage
                 List<Object> args = chain.getArgs();
-                if (args != null && args.size() > 1 && args.get(1) instanceof String) {
-                    String callingPkg = (String) args.get(1);
-                    if (callingPkg != null && !callingPkg.isEmpty()) {
+                if (args != null && args.size() > 1 && args.get(1) instanceof String callingPkg) {
+                    if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
                 }
@@ -687,6 +694,7 @@ public class ClipboardHook extends XposedModule {
             if (Boolean.TRUE.equals(sIsReadBlockingOperation.get())) return result;
             sIsReadBlockingOperation.set(true);
             try {
+                cleanupExpiredDebounceEntries();
                 if (!ensureReadInitialized()) {
                     XLog.w(TAG, "读取配置未初始化，保守放行");
                     return result;
@@ -855,9 +863,8 @@ public class ClipboardHook extends XposedModule {
                 // ClipboardService.getPrimaryClip(String, String, int, int)
                 // 第一个参数通常是 callingPackage
                 List<Object> args = chain.getArgs();
-                if (args != null && !args.isEmpty() && args.get(0) instanceof String) {
-                    String callingPkg = (String) args.get(0);
-                    if (callingPkg != null && !callingPkg.isEmpty()) {
+                if (args != null && !args.isEmpty() && args.get(0) instanceof String callingPkg) {
+                    if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
                 }
@@ -954,14 +961,7 @@ public class ClipboardHook extends XposedModule {
     // ══════════════════════════════════════════════════════
 
     /** 读取决策结果：包含决策值和是否需要清空剪贴板 */
-    private static class ReadDecisionResult {
-        final int decision;
-        final boolean shouldClearClipboard;
-
-        ReadDecisionResult(int decision, boolean shouldClearClipboard) {
-            this.decision = decision;
-            this.shouldClearClipboard = shouldClearClipboard;
-        }
+    private record ReadDecisionResult(int decision, boolean shouldClearClipboard) {
     }
 
     // ══════════════════════════════════════════════════════
@@ -1236,5 +1236,54 @@ public class ClipboardHook extends XposedModule {
             }
             return chain.proceed();
         }
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  防抖缓存过期清理
+    // ══════════════════════════════════════════════════════
+
+    /**
+     * 清理过期的防抖缓存条目，防止 system_server 长期运行后内存泄漏。
+     * 超过 10 分钟未访问的条目将被移除。
+     *
+     * 由每次写入/读取拦截时惰性触发，无需定时器。
+     */
+    private static void cleanupExpiredDebounceEntries() {
+        long now = System.currentTimeMillis();
+        if (now - sLastDebounceCleanupTime < DEBOUNCE_CLEANUP_INTERVAL_MS) return;
+        sLastDebounceCleanupTime = now;
+
+        int removed = 0;
+        // 写入端
+        synchronized (sWriteDebounceLock) {
+            removed += cleanupMapByAge(sLastWriteDecisionTime, sLastWriteUserDecision, now);
+        }
+        // 读取端
+        synchronized (sReadDebounceLock) {
+            removed += cleanupMapByAge(sLastReadDecisionTime, sLastReadUserDecision, now);
+            removed += cleanupMapByAge(sLastReadDecisionTime, sLastReadClearConsumed, now);
+            removed += cleanupMapByAge(sLastReadToastTime, null, now);
+        }
+        if (removed > 0) {
+            XLog.d(TAG, "防抖缓存清理: 移除 " + removed + " 条过期条目");
+        }
+    }
+
+    /** 清理时间 Map 中超过阈值的条目，并同步清理关联 Map */
+    private static <V> int cleanupMapByAge(Map<String, Long> timeMap,
+            Map<String, V> associatedMap, long now) {
+        int removed = 0;
+        java.util.Iterator<Map.Entry<String, Long>> it = timeMap.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, Long> entry = it.next();
+            if (now - entry.getValue() > DEBOUNCE_CLEANUP_THRESHOLD_MS) {
+                it.remove();
+                if (associatedMap != null) {
+                    associatedMap.remove(entry.getKey());
+                }
+                removed++;
+            }
+        }
+        return removed;
     }
 }
