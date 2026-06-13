@@ -8,7 +8,10 @@ import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
+import android.annotation.SuppressLint;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -22,9 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedInterface;
-import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
-import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam;
 
 /**
  * ClipboardGuard - Xposed 写入 + 读取拦截 Hook
@@ -165,7 +165,7 @@ public class ClipboardHook extends XposedModule {
      * 保存模块实例引用，初始化日志。
      */
     @Override
-    public void onModuleLoaded(ModuleLoadedParam param) {
+    public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
         sModuleInstance = this;
         // 初始化 XLog，使用 API 102 的 log(int, String, String, Throwable) 签名
         try {
@@ -181,7 +181,7 @@ public class ClipboardHook extends XposedModule {
      * 安装所有 Hook 并加载配置。
      */
     @Override
-    public void onSystemServerStarting(SystemServerStartingParam param) {
+    public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
         try {
             ClassLoader classLoader = param.getClassLoader();
             hookWriteClipboard(classLoader);
@@ -320,6 +320,7 @@ public class ClipboardHook extends XposedModule {
      * App 侧通过 ServiceManager.getService("clipboard") + transact(CBGUARD_STATUS)
      * 直连查询，与 Thanox 的 "tv_input" 劫持策略一致。
      */
+    @SuppressLint("PrivateApi")
     private void hookOnTransact(ClassLoader classLoader) {
         try {
             Class<?> cls = Class.forName(
@@ -493,7 +494,7 @@ public class ClipboardHook extends XposedModule {
     private static class SetPrimaryClipHook implements XposedInterface.Hooker {
 
         @Override
-        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+        public Object intercept(@NonNull XposedInterface.Chain chain) throws Throwable {
             if (Boolean.TRUE.equals(sIsBlockingOperation.get())) return chain.proceed();
             sIsBlockingOperation.set(true);
             try {
@@ -520,7 +521,7 @@ public class ClipboardHook extends XposedModule {
                 }
 
                 List<Object> args = chain.getArgs();
-                Object clipArg = (args != null && !args.isEmpty()) ? args.get(0) : null;
+                Object clipArg = !args.isEmpty() ? args.get(0) : null;
                 // 完整内容用于规则匹配，预览用于弹窗/日志
                 String fullContent = extractClipFullContent(clipArg);
                 String preview = fullContent.length() > 100 ? fullContent.substring(0, 100) + "…" : fullContent;
@@ -593,8 +594,7 @@ public class ClipboardHook extends XposedModule {
                 // ClipboardService.setPrimaryClip(ClipData, String, String, int, int)
                 // 第二个参数通常是 callingPackage
                 List<Object> args = chain.getArgs();
-                if (args != null && args.size() > 1 && args.get(1) instanceof String) {
-                    String callingPkg = (String) args.get(1);
+                if (args.size() > 1 && args.get(1) instanceof String callingPkg) {
                     if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
@@ -688,7 +688,7 @@ public class ClipboardHook extends XposedModule {
     private static class GetPrimaryClipHook implements XposedInterface.Hooker {
 
         @Override
-        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+        public Object intercept(@NonNull XposedInterface.Chain chain) throws Throwable {
             // 先调用原始方法获取结果
             Object result = chain.proceed();
             
@@ -864,8 +864,7 @@ public class ClipboardHook extends XposedModule {
                 // ClipboardService.getPrimaryClip(String, String, int, int)
                 // 第一个参数通常是 callingPackage
                 List<Object> args = chain.getArgs();
-                if (args != null && !args.isEmpty() && args.get(0) instanceof String) {
-                    String callingPkg = (String) args.get(0);
+                if (!args.isEmpty() && args.get(0) instanceof String callingPkg) {
                     if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
@@ -963,6 +962,7 @@ public class ClipboardHook extends XposedModule {
     // ══════════════════════════════════════════════════════
 
     /** 读取决策结果：包含决策值和是否需要清空剪贴板 */
+    @SuppressWarnings("ClassCanBeRecord") // minSdk 30，record 需要 API 33+
     private static class ReadDecisionResult {
         final int decision;
         final boolean shouldClearClipboard;
@@ -1006,6 +1006,7 @@ public class ClipboardHook extends XposedModule {
      *
      * <p>不使用永久失败标记：早期调用时系统尚未就绪，重试是合理的。
      */
+    @SuppressLint("PrivateApi")
     private static Context getSystemServerContext() {
         if (sSystemServerContext != null) return sSystemServerContext;
         try {
@@ -1063,30 +1064,6 @@ public class ClipboardHook extends XposedModule {
         return "";
     }
 
-    /** 从 ClipData 提取预览文本（最多 100 字符，用于弹窗/日志） */
-    private static String extractClipPreview(Object arg) {
-        if (arg == null) return "";
-        try {
-            ClipData data = (ClipData) arg;
-            if (data.getItemCount() > 0) {
-                ClipData.Item item = data.getItemAt(0);
-                CharSequence text = item.getText();
-                if (text != null && text.length() > 0) {
-                    String s = text.toString().trim();
-                    return s.length() > 100 ? s.substring(0, 100) + "…" : s;
-                }
-                String html = item.getHtmlText();
-                if (html != null && !html.isEmpty()) {
-                    String s = html.replaceAll("<[^>]+>", "").trim();
-                    return s.length() > 100 ? s.substring(0, 100) + "…" : s;
-                }
-                if (item.getUri() != null) return "[图片/文件]";
-            }
-        } catch (Throwable e) {
-            XLog.w(TAG, "提取写入预览失败: " + e.getMessage());
-        }
-        return "(非文本内容)";
-    }
 
     /** 输出写入操作日志（带脱敏） */
     private static void writeLog(String pkgName, String action, String content) {
@@ -1118,7 +1095,7 @@ public class ClipboardHook extends XposedModule {
     private static final Object sCorePackagesLock = new Object();
     private static volatile HashSet<String> sCorePackages;
 
-    /** 获取核心包白名单（带缓存） */
+    /** 获取核心包白名单（带缓存，失败时也缓存基础白名单避免重复锁竞争） */
     private static HashSet<String> getCorePackages() {
         HashSet<String> cached = sCorePackages;
         if (cached != null) return cached;
@@ -1126,7 +1103,6 @@ public class ClipboardHook extends XposedModule {
             if (sCorePackages != null) return sCorePackages;
             HashSet<String> packages = new HashSet<>();
             packages.add("android");
-            boolean resourceLoaded = false;
             try {
                 Context ctx = getModuleContext();
                 if (ctx != null) {
@@ -1137,14 +1113,12 @@ public class ClipboardHook extends XposedModule {
                             packages.add(pkg.trim());
                         }
                     }
-                    resourceLoaded = true;
                 }
             } catch (Throwable e) {
                 XLog.w(TAG, "读取核心白名单资源失败: " + e.getMessage());
             }
-            if (resourceLoaded) {
-                sCorePackages = packages;
-            }
+            // 无论资源是否加载成功都缓存，避免高频调用时重复锁竞争
+            sCorePackages = packages;
             return packages;
         }
     }
@@ -1231,9 +1205,9 @@ public class ClipboardHook extends XposedModule {
     /** onTransact Hook：拦截自定义事务码返回模块激活状态 JSON */
     private static class OnTransactHook implements XposedInterface.Hooker {
         @Override
-        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+        public Object intercept(@NonNull XposedInterface.Chain chain) throws Throwable {
             List<Object> args = chain.getArgs();
-            if (args != null && !args.isEmpty()) {
+            if (!args.isEmpty()) {
                 int code = (int) args.get(0);
                 if (code == TRANSACTION_CBGUARD_STATUS) {
                     String json = sModuleStatusJson;
