@@ -593,7 +593,8 @@ public class ClipboardHook extends XposedModule {
                 // ClipboardService.setPrimaryClip(ClipData, String, String, int, int)
                 // 第二个参数通常是 callingPackage
                 List<Object> args = chain.getArgs();
-                if (args != null && args.size() > 1 && args.get(1) instanceof String callingPkg) {
+                if (args != null && args.size() > 1 && args.get(1) instanceof String) {
+                    String callingPkg = (String) args.get(1);
                     if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
@@ -863,7 +864,8 @@ public class ClipboardHook extends XposedModule {
                 // ClipboardService.getPrimaryClip(String, String, int, int)
                 // 第一个参数通常是 callingPackage
                 List<Object> args = chain.getArgs();
-                if (args != null && !args.isEmpty() && args.get(0) instanceof String callingPkg) {
+                if (args != null && !args.isEmpty() && args.get(0) instanceof String) {
+                    String callingPkg = (String) args.get(0);
                     if (!callingPkg.isEmpty()) {
                         return callingPkg;
                     }
@@ -961,7 +963,14 @@ public class ClipboardHook extends XposedModule {
     // ══════════════════════════════════════════════════════
 
     /** 读取决策结果：包含决策值和是否需要清空剪贴板 */
-    private record ReadDecisionResult(int decision, boolean shouldClearClipboard) {
+    private static class ReadDecisionResult {
+        final int decision;
+        final boolean shouldClearClipboard;
+        
+        ReadDecisionResult(int decision, boolean shouldClearClipboard) {
+            this.decision = decision;
+            this.shouldClearClipboard = shouldClearClipboard;
+        }
     }
 
     // ══════════════════════════════════════════════════════
