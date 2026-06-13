@@ -160,7 +160,7 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, Integer> mReadPendingChanges = new HashMap<>();
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
-    private static final ExecutorService sExecutor = Executors.newFixedThreadPool(2, r -> {
+    private static final ExecutorService sExecutor = Executors.newFixedThreadPool(4, r -> {
         Thread t = new Thread(r, "ClipboardGuard-Worker");
         t.setDaemon(true);
         return t;
@@ -296,27 +296,23 @@ public class MainActivity extends AppCompatActivity {
         initHomePage();
         setupBottomNav();
         setupSettingsPage();
-        // 文件 I/O 放到后台，但使用 CountDownLatch 确保完成后再继续
-        // 避免 checkModuleActive() 触发配置同步时规则文件尚未创建
-        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(6);
-        String filesDir = getFilesDir().getPath();
-        sExecutor.execute(() -> { PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt"); latch.countDown(); });
-        sExecutor.execute(() -> { PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt"); latch.countDown(); });
-        sExecutor.execute(() -> { ensureEmptyJsonFile("write_rules.json"); latch.countDown(); });
-        sExecutor.execute(() -> { ensureEmptyJsonFile("read_rules.json"); latch.countDown(); });
-        sExecutor.execute(() -> { ensureEmptyJsonFile("write_default_rules.json"); latch.countDown(); });
-        sExecutor.execute(() -> { ensureEmptyJsonFile("read_default_rules.json"); latch.countDown(); });
-        // 等待所有文件初始化完成（最多 5 秒）
-        try {
-            boolean completed = latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
-            if (!completed) {
-                XLog.w("ClipboardGuard", "规则文件初始化超时（5秒）");
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            XLog.w("ClipboardGuard", "等待规则文件初始化被中断");
-        }
-        loadAppsAsync();
+        // 文件 I/O 放到后台，完成后自动触发 loadAppsAsync
+        // 不阻塞主线程，避免 ANR
+        final String filesDir = getFilesDir().getPath();
+        sExecutor.execute(() -> {
+            PermissionProvider.ensureBlocklistFile(filesDir + "/write_blocklist.txt");
+            PermissionProvider.ensureBlocklistFile(filesDir + "/read_blocklist.txt");
+            ensureEmptyJsonFile("write_rules.json");
+            ensureEmptyJsonFile("read_rules.json");
+            ensureEmptyJsonFile("write_default_rules.json");
+            ensureEmptyJsonFile("read_default_rules.json");
+            // 文件初始化完成后，在主线程触发应用列表加载
+            mHandler.post(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    loadAppsAsync();
+                }
+            });
+        });
     }
 
     /** 初始化备份恢复的 ActivityResultLauncher */
@@ -349,7 +345,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (mHasLoadedApps) {
-            refreshPermissionsAsync();
+            // 延迟到窗口过渡动画结束后再刷新，避免返回时排序+notifyDataSetChanged 阻塞动画导致跳帧
+            mHandler.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    refreshPermissionsAsync();
+                }
+            }, 300);
         }
         // 配置同步已移至 checkModuleActive() 中，仅首次激活时执行一次
     }
